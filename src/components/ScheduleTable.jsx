@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SHIFT_TYPES } from '../types/scheduler.js';
-import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet } from 'lucide-react';
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
 
@@ -14,6 +14,8 @@ export default function ScheduleTable({
   onSelectDay,
   onExportIcs,
   onExportCsv,
+  onRunEngine,
+  onSaveToCloud,
   currentUser,
   shiftTypes = SHIFT_TYPES,
   currentSimulatedDate,
@@ -167,6 +169,31 @@ export default function ScheduleTable({
             ))}
           </div>
 
+          {/* 排班引擎與雲端儲存專屬按鈕 (僅 Manager / Admin 可見) */}
+          {(currentUser?.role === 'Manager' || currentUser?.is_admin) && (
+            <div className="flex items-center space-x-1.5 pl-1 border-l border-slate-300">
+              <button
+                type="button"
+                onClick={() => onRunEngine && onRunEngine()}
+                title="重新啟動啟發式排班引擎，依 7休1 與各站點配額自動求解產生合規班表"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-sm cursor-pointer transition-all active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+                <span>🚀 啟動智慧排班</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSaveToCloud && onSaveToCloud()}
+                title="將當前排定之全館班表寫入並同步至 Google 試算表 (Schedules 頁籤)"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm cursor-pointer transition-all active:scale-95"
+              >
+                <Cloud className="w-3.5 h-3.5 text-white" />
+                <span>☁️ 儲存至 Google 試算表</span>
+              </button>
+            </div>
+          )}
+
           {/* 匯出功能按鈕 */}
           <div className="flex items-center space-x-1.5">
             <button
@@ -183,7 +210,7 @@ export default function ScheduleTable({
               title="匯出全館美化班表 Excel / CSV"
               className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-xs font-bold shadow-2xs cursor-pointer transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
               <span>匯出全館 CSV</span>
             </button>
           </div>

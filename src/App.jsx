@@ -197,9 +197,20 @@ export default function App() {
     return list;
   }, [preferences]);
 
-  // 執行基礎種子排班演算法
+  // 執行基礎種子排班演算法與雲端班表狀態
   const [scheduleVersion, setScheduleVersion] = useState(1);
+  const [cloudScheduleMap, setCloudScheduleMap] = useState(null);
+
   const baseScheduleResult = useMemo(() => {
+    // 若雲端已有真實班表，優先使用雲端班表；否則使用演算法生成之種子班表
+    if (cloudScheduleMap && Object.keys(cloudScheduleMap).length > 0) {
+      return {
+        scheduleMap: cloudScheduleMap,
+        totalDays: currentRules.days_in_month || 30,
+        durationMs: 0
+      };
+    }
+
     return generateSeedSchedule({
       employees: allEmployees,
       stations: allStations,
@@ -208,7 +219,7 @@ export default function App() {
       monthBorders: MOCK_MONTH_BORDERS,
       resignationData
     });
-  }, [allEmployees, allStations, currentRules, engineLeaveRequests, resignationData, scheduleVersion]);
+  }, [cloudScheduleMap, allEmployees, allStations, currentRules, engineLeaveRequests, resignationData, scheduleVersion]);
 
   // 合併種子排班與調班/實勤覆寫層 -> 產出最終生效排班矩陣
   const effectiveScheduleMap = useMemo(() => {
@@ -242,8 +253,46 @@ export default function App() {
   }, [effectiveScheduleMap, allEmployees, allStations, currentRules]);
 
   const handleRunEngine = useCallback(() => {
+    setCloudScheduleMap(null); // 清除雲端鎖定，重新跑演算法
     setScheduleVersion(v => v + 1);
+    alert('🚀 啟發式排班引擎運算完成！已自動根據 7休1 與 9大站點人力配額產生合規最佳化班表。若滿意此結果，請點擊「☁️ 儲存至 Google 試算表」！');
   }, []);
+
+  // 一鍵發布並儲存全月班表至 Google 試算表 (Schedules 頁籤)
+  const handleSaveScheduleToCloud = useCallback(async () => {
+    if (!ApiService.isCloudMode()) {
+      alert('【提示】目前處於本地沙盒模式。請先點擊上方「🟡 本地沙盒」配置 Google Apps Script 網址，即可直連儲存至 Google 試算表！');
+      setIsCloudModalOpen(true);
+      return;
+    }
+
+    const confirmSave = window.confirm(`確定要將【${currentMonth}】全館 ${allEmployees.length} 位同仁的排班結果，發布並寫入 Google 試算表 (Schedules 頁籤) 嗎？`);
+    if (!confirmSave) return;
+
+    try {
+      const res = await ApiService.saveScheduleMatrix(currentMonth, effectiveScheduleMap);
+      if (res && res.success) {
+        alert(`✅ 成功！【${currentMonth}】班表已全量寫入 Google 試算表 Schedules 頁籤（共 ${allEmployees.length} 位人員資料）。`);
+        // 寫入稽核日誌
+        const newLog = {
+          log_id: `LOG_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action_type: 'SCHEDULE_PUBLISHED_TO_CLOUD',
+          operator_id: currentUser ? currentUser.emp_id : 'B111155',
+          operator_name: currentUser ? currentUser.name : '管理員',
+          notes: `主管發布【${currentMonth}】排班表至 Google 試算表雲端資料庫`,
+          before_snapshot: null,
+          after_snapshot: null
+        };
+        setAuditLogs(prev => [newLog, ...prev]);
+      } else {
+        alert(`⚠️ 儲存失敗：${res?.error || '請檢查 Google 試算表連線狀態或稍後再試'}`);
+      }
+    } catch (err) {
+      console.error('儲存排班至雲端失敗:', err);
+      alert(`❌ 儲存時發生錯誤：${err.message}`);
+    }
+  }, [currentMonth, allEmployees.length, effectiveScheduleMap, currentUser]);
 
   const handleToggleResignation = useCallback(() => {
     setIsResignedActive(v => !v);
@@ -706,6 +755,9 @@ export default function App() {
         data.shiftTypes.forEach(st => { shiftsObj[st.code] = st; });
         setShiftTypes(shiftsObj);
       }
+      if (data.scheduleMap && typeof data.scheduleMap === 'object' && Object.keys(data.scheduleMap).length > 0) {
+        setCloudScheduleMap(data.scheduleMap);
+      }
       if (data.swaps && Array.isArray(data.swaps)) {
         setSwapRequests(data.swaps);
       }
@@ -1100,6 +1152,8 @@ export default function App() {
               onSelectDay={setSelectedDay}
               onExportIcs={handleExportMyIcs}
               onExportCsv={handleExportStoreCsv}
+              onRunEngine={handleRunEngine}
+              onSaveToCloud={handleSaveScheduleToCloud}
               currentUser={currentUser}
               shiftTypes={shiftTypes}
               currentSimulatedDate={currentSimulatedDate}
