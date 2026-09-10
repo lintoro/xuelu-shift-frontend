@@ -53,12 +53,16 @@ export default function ActualHoursOverride({
   const reviewableEmployees = useMemo(() => {
     if (!currentUser) return [];
 
+    const isLeader = currentUser?.role === 'Leader';
+    const isManager = currentUser?.role === 'Manager' || !!currentUser?.is_admin;
+    const isAdmin = !!currentUser?.is_admin;
+
     return employees.filter(emp => {
       // 1. 利益迴避原則：嚴格排除操作者本人 (不能自己覆核自己)
       if (emp.emp_id === currentUser.emp_id) return false;
 
-      // 2. 排除自排免審高管 (如豁免排班者)
-      if (emp.is_self_scheduled) return false;
+      // 2. 排除自排免審高管 (若當前操作者為 Admin 且對象為 Manager，則開放進行行政合規備查歸檔)
+      if (emp.is_self_scheduled && !(isAdmin && emp.role === 'Manager')) return false;
 
       if (isLeader) {
         // 3. 組長同組限制：僅能覆核同主屬站點同仁，禁止跳組
@@ -71,7 +75,7 @@ export default function ActualHoursOverride({
       }
 
       if (isManager) {
-        // 5. 營運高管統籌覆核：可向上覆核各站點組長 (Leader) 以及全場 Staff / PT
+        // 5. 營運高管統籌覆核 / Admin 備查：可向上覆核各站點組長 (Leader)、全場 Staff / PT，Admin 可備查 Manager
         if (stationFilter !== 'ALL' && emp.primary_station !== stationFilter) {
           return false;
         }
@@ -291,7 +295,9 @@ export default function ActualHoursOverride({
       isAbsent: isAbsent,
       notes: actualNoteInput || (
         isAbsent 
-          ? '全日未到勤核定' 
+          ? (currentUser?.is_admin && currentEmp?.role === 'Manager' ? '[👑行政合規備查歸檔] 最高主管全日未到勤核定' : '全日未到勤核定') 
+          : currentUser?.is_admin && currentEmp?.role === 'Manager'
+          ? `[👑行政合規備查歸檔] 管理員 ${currentUser?.name || 'Admin'} 檢驗出勤合規：${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h, 差額${hoursDiff >= 0 ? '+' : ''}${hoursDiff}h)`
           : `實勤覆核 ${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h, 差額${hoursDiff >= 0 ? '+' : ''}${hoursDiff}h)`
       ),
       isLaborViolationOverride: false,
@@ -299,6 +305,7 @@ export default function ActualHoursOverride({
       overrideManager: null
     });
 
+    const isManagerArchiving = currentUser?.is_admin && currentEmp?.role === 'Manager';
     const resultNote = isPT
       ? `PT 人員實際到班結算 ${netActualHours} 小時，已累計至本月計薪工時！`
       : hoursDiff > 0
@@ -307,7 +314,11 @@ export default function ActualHoursOverride({
       ? `正職出勤短少 ${hoursDiff} 小時，已依選定方式沖抵假勤！`
       : `出勤工時完全符合原排 (${netActualHours}h)，工時無差額。`;
 
-    setFeedbackMsg(`已成功覆核 ${currentEmp.name} 於 9/${selectedDay} 日實勤！${resultNote}`);
+    if (isManagerArchiving) {
+      setFeedbackMsg(`已完成最高主管 ${currentEmp.name} 於 9/${selectedDay} 之【行政合規備查歸檔】！${resultNote}`);
+    } else {
+      setFeedbackMsg(`已成功覆核 ${currentEmp.name} 於 9/${selectedDay} 日實勤！${resultNote}`);
+    }
     setTimeout(() => setFeedbackMsg(''), 6000);
   };
 
@@ -979,14 +990,26 @@ export default function ActualHoursOverride({
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* 一般儲存按鈕 (在有法規違規、假勤額度不足或無合法覆核對象時鎖死) */}
+            {/* 一般儲存按鈕 (在有法規違規、假勤額度不足或無合法覆核對象時鎖死，Admin 對 Manager 切換為備查歸檔) */}
             <button
               type="submit"
               disabled={hasLaborLawViolations || isDeductionBalanceInsufficient || !currentEmp || reviewableEmployees.length === 0}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer active:scale-95 transition-all"
+              className={`flex items-center space-x-2 px-5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer active:scale-95 transition-all ${
+                currentUser?.is_admin && currentEmp?.role === 'Manager'
+                  ? 'bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 shadow-purple-200'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
             >
-              <Save className="w-4 h-4" />
-              <span>儲存合規實勤覆核</span>
+              {currentUser?.is_admin && currentEmp?.role === 'Manager' ? (
+                <ShieldCheck className="w-4 h-4 text-purple-200" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>
+                {currentUser?.is_admin && currentEmp?.role === 'Manager'
+                  ? '檢驗合規並備查歸檔 (Admin Archive)'
+                  : '儲存合規實勤覆核'}
+              </span>
             </button>
 
             {/* 營運高管專屬：三次確認強制放行按鈕 */}

@@ -109,6 +109,9 @@ export default function ShiftSwapPortal({
       return;
     }
 
+    const isManagerApplicant = currentEmp.role === 'Manager';
+    const initStatus = isManagerApplicant ? 'PENDING_ADMIN_VERIFY' : 'PENDING_FIRST_REVIEW';
+
     if (swapType === 'SELF_RESCHEDULE') {
       const newSwap = {
         swap_id: `SWAP_${Date.now()}`,
@@ -123,14 +126,25 @@ export default function ShiftSwapPortal({
         type: 'SELF_RESCHEDULE',
         reason: reason || '個人行程調整，申請自己休假與上班互調挪休',
         created_at: new Date().toISOString(),
-        status: 'PENDING_FIRST_REVIEW',
-        first_review: {
+        status: initStatus,
+        is_manager_self_declared: isManagerApplicant,
+        first_review: isManagerApplicant ? {
+          reviewer_id: 'SYSTEM',
+          reviewer_name: '免初審 (最高主管自主業務裁定)',
+          status: 'APPROVED',
+          notes: '最高主管親自申報，業務實質裁定'
+        } : {
           reviewer_id: currentEmp.primary_station,
           reviewer_name: `${stationMap[currentEmp.primary_station] || '站點'}組長`,
           status: 'PENDING',
           notes: ''
         },
-        final_review: {
+        final_review: isManagerApplicant ? {
+          reviewer_id: 'ADMIN',
+          reviewer_name: '待系統管理員 (Admin) 行政合規備查',
+          status: 'PENDING',
+          notes: ''
+        } : {
           reviewer_id: 'B111014',
           reviewer_name: '林慶忠 (營運主管)',
           status: 'PENDING',
@@ -140,8 +154,12 @@ export default function ShiftSwapPortal({
 
       onAddSwapRequest(newSwap);
       setReason('');
-      setFeedbackMsg(`已成功發起【個人自調挪休】申請（9/${applicantDay} 改休 ⇄ 9/${targetDay} 改上班），已送交組長初審！`);
-      setTimeout(() => setFeedbackMsg(''), 4000);
+      if (isManagerApplicant) {
+        setFeedbackMsg(`已成功發起【最高主管自主申報】自調挪休，已送交系統管理員 (Admin) 進行行政合規備查歸檔！`);
+      } else {
+        setFeedbackMsg(`已成功發起【個人自調挪休】申請（9/${applicantDay} 改休 ⇄ 9/${targetDay} 改上班），已送交組長初審！`);
+      }
+      setTimeout(() => setFeedbackMsg(''), 5000);
       return;
     }
 
@@ -161,16 +179,27 @@ export default function ShiftSwapPortal({
       type: 'SWAP',
       reason: reason || '個人行程調整申請對調',
       created_at: new Date().toISOString(),
-      status: 'PENDING_FIRST_REVIEW',
+      status: initStatus,
+      is_manager_self_declared: isManagerApplicant,
       is_special_swap: isSpecial,
       special_warnings: precheckResult.specialWarningList || [],
-      first_review: {
+      first_review: isManagerApplicant ? {
+        reviewer_id: 'SYSTEM',
+        reviewer_name: '免初審 (最高主管自主業務裁定)',
+        status: 'APPROVED',
+        notes: '最高主管親自申報，業務實質裁定'
+      } : {
         reviewer_id: currentEmp.primary_station,
         reviewer_name: `${stationMap[currentEmp.primary_station] || '站點'}組長`,
         status: 'PENDING',
         notes: ''
       },
-      final_review: {
+      final_review: isManagerApplicant ? {
+        reviewer_id: 'ADMIN',
+        reviewer_name: '待系統管理員 (Admin) 行政合規備查',
+        status: 'PENDING',
+        notes: ''
+      } : {
         reviewer_id: 'B111014',
         reviewer_name: '林慶忠 (營運主管)',
         status: 'PENDING',
@@ -181,7 +210,11 @@ export default function ShiftSwapPortal({
     onAddSwapRequest(newSwap);
     setReason('');
     const specialNote = isSpecial ? '【⚠️ 跨組/非獨立特例調班】' : '';
-    setFeedbackMsg(`已成功發起${specialNote}與 ${targetEmp?.name} 的雙人對調申請，已進入第一階初審管線！`);
+    if (isManagerApplicant) {
+      setFeedbackMsg(`已成功發起【最高主管自主申報】${specialNote}雙人對調，已送交系統管理員 (Admin) 進行行政合規備查歸檔！`);
+    } else {
+      setFeedbackMsg(`已成功發起${specialNote}與 ${targetEmp?.name} 的雙人對調申請，已進入第一階初審管線！`);
+    }
     setTimeout(() => setFeedbackMsg(''), 5000);
   };
 
@@ -541,23 +574,36 @@ export default function ShiftSwapPortal({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                     <div className="flex items-center space-x-2">
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        isApproved
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : isRejected
-                          ? 'bg-rose-100 text-rose-800'
-                          : isPendingFirst
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-purple-100 text-purple-800'
-                      }`}>
-                        {isApproved ? '已生效' : isRejected ? '已駁回' : isPendingFirst ? '待組長初審' : '待主管終審'}
-                      </span>
+                      {(() => {
+                        const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && !isApproved && !isRejected);
+                        return (
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            isApproved
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isRejected
+                              ? 'bg-rose-100 text-rose-800'
+                              : isPendingAdminVerify
+                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                              : isPendingFirst
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {isApproved ? '已生效' : isRejected ? '已駁回' : isPendingAdminVerify ? '待Admin備查' : isPendingFirst ? '待組長初審' : '待主管終審'}
+                          </span>
+                        );
+                      })()}
 
                       <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                         isSelf ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'
                       }`}>
                         {isSelf ? '個人自調挪休' : '雙人班表對調'}
                       </span>
+
+                      {req.is_manager_self_declared && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-50 text-purple-900 border border-purple-300 flex items-center space-x-1 shadow-2xs">
+                          <span>👑 最高主管自主申報 (待行政合規備查)</span>
+                        </span>
+                      )}
 
                       {req.is_special_swap && (
                         <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
@@ -604,37 +650,100 @@ export default function ShiftSwapPortal({
 
                   {/* 二階管線進度條與審核按鈕 */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-                    <div className="flex items-center space-x-4">
-                      {/* 初審標籤 */}
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-slate-500">初審 (站點組長):</span>
-                        <span className={`font-bold ${
-                          req.first_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'
-                        }`}>
-                          {req.first_review.status === 'APPROVED' ? '✓ 通過' : '審核中'}
-                        </span>
+                    {/* 管線標籤 */}
+                    {req.is_manager_self_declared ? (
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-500">業務決策 (最高主管):</span>
+                          <span className="font-bold text-purple-700">✓ 主管自主申報</span>
+                        </div>
+                        <span>→</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-500">行政備查 (Admin):</span>
+                          <span className={`font-bold ${
+                            isApproved ? 'text-emerald-600' : isRejected ? 'text-rose-600' : 'text-amber-600'
+                          }`}>
+                            {isApproved ? '✓ 已備查歸檔' : isRejected ? '已退回' : '待合規歸檔'}
+                          </span>
+                        </div>
                       </div>
+                    ) : (
+                      <div className="flex items-center space-x-4">
+                        {/* 初審標籤 */}
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-500">初審 (站點組長):</span>
+                          <span className={`font-bold ${
+                            req.first_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'
+                          }`}>
+                            {req.first_review.status === 'APPROVED' ? '✓ 通過' : '審核中'}
+                          </span>
+                        </div>
 
-                      <span>→</span>
+                        <span>→</span>
 
-                      {/* 終審標籤 */}
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-slate-500">終審 (營運高管):</span>
-                        <span className={`font-bold ${
-                          req.final_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-slate-400'
-                        }`}>
-                          {req.final_review.status === 'APPROVED' ? '✓ 核准覆寫' : '待終審'}
-                        </span>
+                        {/* 終審標籤 */}
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-500">終審 (營運高管):</span>
+                          <span className={`font-bold ${
+                            req.final_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-slate-400'
+                          }`}>
+                            {req.final_review.status === 'APPROVED' ? '✓ 核准覆寫' : '待終審'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* 審核操作按鈕：依照主管指示 #013 嚴格落實同組限制、嚴禁跳組、利益迴避與向上覆核 */}
+                    {/* 審核操作按鈕：依照主管指示 #013 & #014 嚴格落實同組限制、利益迴避、向上覆核與 Admin 備查歸檔 */}
                     {(() => {
+                      const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && !isApproved && !isRejected);
                       const isSelfSwap = req.applicant_id === currentEmp?.emp_id || req.target_emp_id === currentEmp?.emp_id;
                       const isLeaderStationMatch = isLeader && (
                         req.applicant_station === currentEmp?.primary_station ||
                         req.target_station === currentEmp?.primary_station
                       );
+
+                      // A. 若為最高主管自主申報 (PENDING_ADMIN_VERIFY)
+                      if (isPendingAdminVerify) {
+                        return (
+                          <div className="flex items-center space-x-2">
+                            {isSelfSwap && (
+                              <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
+                                <Lock className="w-3 h-3 text-amber-600" />
+                                <span>最高主管自身申報迴避（待系統管理員 Admin 備查歸檔）</span>
+                              </span>
+                            )}
+
+                            {!isSelfSwap && isLeader && !isAdmin && (
+                              <span className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-100 border border-slate-200 text-slate-500 font-semibold flex items-center space-x-1">
+                                <Lock className="w-3 h-3 text-slate-400" />
+                                <span>屬最高主管自主申報（由系統管理員 Admin 進行行政備查，組長無權）</span>
+                              </span>
+                            )}
+
+                            {isAdmin && (
+                              <>
+                                <button
+                                  onClick={() => onFinalApprove(req.swap_id, true, { is_admin_archived: true, admin_name: currentEmp.name })}
+                                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-lg text-xs flex items-center space-x-1.5 shadow-sm cursor-pointer active:scale-95 transition-all"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-purple-200" />
+                                  <span>檢驗合規並備查歸檔 (Verify & Archive)</span>
+                                </button>
+
+                                <button
+                                  onClick={() => onFinalApprove(req.swap_id, false, { is_admin_archived: true, admin_name: currentEmp.name })}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer transition-all"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>退回補充說明</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // B. 一般同仁或組長調班單據
                       const canFirst = (isManager || isAdmin) 
                         ? !isSelfSwap 
                         : (isLeader && isLeaderStationMatch && !isSelfSwap);

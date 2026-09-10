@@ -298,9 +298,11 @@ export default function App() {
   }, []);
 
   // 第二階終審核決（核准時自動執行對調，並生成前後雙快照 Audit Log）
-  const handleFinalApprove = useCallback((swapId, isApproved) => {
+  const handleFinalApprove = useCallback((swapId, isApproved, meta = {}) => {
     const req = swapRequests.find(r => r.swap_id === swapId);
     if (!req) return;
+
+    const isAdminArchived = !!meta.is_admin_archived || !!req.is_manager_self_declared;
 
     if (isApproved) {
       const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
@@ -333,13 +335,17 @@ export default function App() {
         afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
         afterSnapshot[req.applicant_id][req.target_day] = newOverrides[req.applicant_id][req.target_day];
 
+        const logNotes = isAdminArchived
+          ? `【最高主管自主申報 · 行政合規備查歸檔】管理員：${currentUser?.name || 'Admin'}，申報主管：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`
+          : `核准個人自調挪休：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`;
+
         const newLog = {
           log_id: `LOG_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          action_type: 'SELF_RESCHEDULE',
+          action_type: isAdminArchived ? 'SHIFT_SWAP_ADMIN_ARCHIVED' : 'SELF_RESCHEDULE',
           operator_id: currentUser ? currentUser.emp_id : 'B111014',
-          operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-          notes: `核准個人自調挪休：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`,
+          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '林慶忠 (營運長)'),
+          notes: logNotes,
           before_snapshot: beforeSnapshot,
           after_snapshot: afterSnapshot
         };
@@ -376,13 +382,17 @@ export default function App() {
         afterSnapshot[req.target_id][req.target_day] = newOverrides[req.target_id][req.target_day];
 
         const specialText = req.is_special_swap ? `【⚠️特例調班核定】事由: ${req.special_warnings?.join('; ') || '無常規支援/缺Solo'}。` : '';
+        const logNotes = isAdminArchived
+          ? `【最高主管自主申報 · 行政合規備查歸檔】管理員：${currentUser?.name || 'Admin'}，申報主管：${req.applicant_name} ⇄ ${req.target_name}`
+          : `${specialText}核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`;
+
         const newLog = {
           log_id: `LOG_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          action_type: req.is_special_swap ? 'SHIFT_SWAP_SPECIAL' : 'SHIFT_SWAP',
+          action_type: isAdminArchived ? 'SHIFT_SWAP_ADMIN_ARCHIVED' : (req.is_special_swap ? 'SHIFT_SWAP_SPECIAL' : 'SHIFT_SWAP'),
           operator_id: currentUser ? currentUser.emp_id : 'B111014',
-          operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-          notes: `${specialText}核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`,
+          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '林慶忠 (營運長)'),
+          notes: logNotes,
           before_snapshot: beforeSnapshot,
           after_snapshot: afterSnapshot
         };

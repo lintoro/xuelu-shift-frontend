@@ -356,6 +356,29 @@
   - `scratch/test_review_hierarchy_and_station_scope.mjs`
 - **目前狀態**：`✅ 已完成修復並通過驗證 (v2.3.0-review-hierarchy-station-scope-done)`
 
+### 📌 [需求 #014] 最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制
+
+- **來源反饋**：主管提出兩大組織內控哲學問題：
+  1. MANAGER 同級中是否還要有最高決策者，不然同為 MANAGER 的申請是否彼此互相審核？
+  2. 行政最高裁決者自身的審核，是否透過 ADMIN 來最後確認？雖然 ADMIN 在業務上不一定是 MANAGER（也許是 STAFF），是否有更周全的制度架構？
+- **現狀分析與痛點**：
+  1. **同級互審之弊**：同級主管交叉審批容易流於形式化人情背書或共謀，且若門市僅有一位營運總監/店長時流程無人可審。
+  2. **下屬審核上司之倫理衝突**：ADMIN（如陳鵬宇，業務身分為 Staff 兼系統管理員）若在業務層級上去「准駁/核准」店長林慶忠的休假或出勤，造成嚴重的職場權責倒置；但若完全不經他人覆核，又違反內控「雙人控制 (Dual Control)」與審計防弊原則。
+- **最佳實踐與架構方案**：
+  1. **確立最高決策者 (General Manager / 店長 / 營運總監)**：掌管全場終審裁決權，組長與同級經理統一向上由最高主管裁決，打破同級互審。
+  2. **最高主管「自主申報 (Self-Declaration)」通道**：最高主管發起調班或加班時，單據標記為 `【最高主管業務裁定 · 待行政合規備查】` (`PENDING_ADMIN_VERIFY`)，免去業務初審與同級審核。
+  3. **ADMIN「檢驗合規並備查歸檔 (Verify & Archive)」機制**：
+     - ADMIN 按鈕正名為 **`【檢驗合規並備查歸檔】`**，職責限縮於形式審查（檢驗勞基法 7 休 1、額度是否充足），不作業務准駁。
+     - 點擊後即時覆寫班表，寫入專屬稽核日誌 `SHIFT_SWAP_ADMIN_ARCHIVED`，標記「行政合規備查員陳鵬宇檢驗合規歸檔」。
+  4. **實勤覆核面板 ADMIN 備查最高主管出勤**：
+     - Admin 可在名單中選取最高主管林慶忠執行合規備查覆核，按鈕切換為 `【檢驗合規並備查歸檔 (Admin Archive)】`，完備雙人控制防弊。
+- **影響範圍評估**：
+  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`
+  - `src/App.jsx`
+  - `src/components/WorkHours/ActualHoursOverride.jsx`
+  - `scratch/test_manager_self_declared_and_admin_verification.mjs`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.4.0-admin-verify-manager-self-declared-done)`
+
 ---
 
 ## 處理歷史與版本控制記錄 (Version & Rollback History)
@@ -377,3 +400,4 @@
 | 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
 | 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
 | 15 | 2026-09-10 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |
+| 16 | 2026-09-10 | 【需求 #014】最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 | `v2.3.0-review-hierarchy-station-scope-done` | `v2.4.0-admin-verify-manager-self-declared-done` | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解職場倫理衝突並落實雙人控制防弊；實勤面板支援 Admin 備查最高主管出勤，單元測試全數通過，npm run build 通過。 |
