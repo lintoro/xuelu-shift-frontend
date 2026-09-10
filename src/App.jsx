@@ -779,6 +779,27 @@ export default function App() {
     }
   }, [currentMonth]);
 
+  // 當處於雲端模式時，頁面載入或切換月份時自動從 Google 試算表拉取最新人事與班表主檔
+  React.useEffect(() => {
+    if (ApiService.isCloudMode()) {
+      handlePullFromCloud().then(success => {
+        if (success) {
+          console.log('[雲端同步] 成功從 Google 試算表載入最新人事主檔與班表資料！');
+        }
+      });
+    }
+  }, [handlePullFromCloud]);
+
+  // 手動從 Google 試算表強制拉取刷新回呼
+  const handleManualRefreshFromCloud = useCallback(async () => {
+    const success = await handlePullFromCloud();
+    if (success) {
+      alert('✅ 已成功從 Google 試算表同步最新資料（人事名冊、權限角色與班表已即時更新）！');
+    } else {
+      alert('⚠️ 同步失敗，請檢查 Google 試算表連線狀態或稍後再試。');
+    }
+  }, [handlePullFromCloud]);
+
   // 一鍵全量同步本地沙盒狀態至 Google 試算表
   const handlePushToCloud = useCallback(async () => {
     try {
@@ -1071,6 +1092,7 @@ export default function App() {
         onOpenChangePin={() => { setIsForcedPinChange(false); setIsChangePinOpen(true); }}
         onLogout={handleLogout}
         onOpenCloudModal={() => setIsCloudModalOpen(true)}
+        onRefreshFromCloud={handleManualRefreshFromCloud}
         isCloudMode={isCloudMode}
         isValid={validation.isValid}
       />

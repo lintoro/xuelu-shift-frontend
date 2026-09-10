@@ -18,22 +18,24 @@ import {
   FileCheck2,
   Cloud,
   CloudCheck,
-  CloudOff
+  CloudOff,
+  RotateCw
 } from 'lucide-react';
 
 export default function Header({ 
   currentUser,
-  currentMonth, 
-  onMonthChange, 
-  workHourModel, 
+  currentMonth,
+  onMonthChange,
+  workHourModel,
   onModelChange,
   activeTab,
   onTabChange,
   onOpenChangePin,
   onLogout,
   onOpenCloudModal,
-  isCloudMode,
-  isValid
+  onRefreshFromCloud,
+  isCloudMode = false,
+  isValid = true
 }) {
   const isManager = currentUser?.role === 'Manager';
   const isAdmin = !!currentUser?.is_admin;
@@ -103,6 +105,19 @@ export default function Header({
             <Cloud className="w-3.5 h-3.5" />
             <span>{isCloudMode ? '雲端同步' : '本地沙盒'}</span>
           </button>
+
+          {/* 雲端手動快速刷新按鈕 */}
+          {isCloudMode && (
+            <button
+              type="button"
+              onClick={onRefreshFromCloud}
+              title="立即從 Google 試算表拉取最新人事名冊、班別與排班資料"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 transition cursor-pointer shadow-2xs active:scale-95"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-indigo-600" />
+              <span>刷新試算表</span>
+            </button>
+          )}
 
           {/* 月份與工時模式 (僅 Manager / Admin 可調整工時模式) */}
           <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200 text-xs">
