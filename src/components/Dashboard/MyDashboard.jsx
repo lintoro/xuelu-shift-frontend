@@ -1,6 +1,7 @@
-import React from 'react';
-import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, ShieldAlert, Sparkles, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, ShieldAlert, Sparkles, User, BookOpen } from 'lucide-react';
 import { SHIFT_TYPES } from '../../types/scheduler.js';
+import LeavePassbookModal from './LeavePassbookModal.jsx';
 
 export default function MyDashboard({
   currentUser,
@@ -9,9 +10,11 @@ export default function MyDashboard({
   leaveBalances,
   swapRequests,
   rules,
+  passbookTransactions = [],
   onExportMyIcs,
   onNavigateTab
 }) {
+  const [isPassbookOpen, setIsPassbookOpen] = useState(false);
   const totalDays = rules.days_in_month || 30;
   const yearMonth = rules.target_year_month || '2026-09';
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
@@ -103,20 +106,40 @@ export default function MyDashboard({
 
         {currentUser.role !== 'PT' ? (
           <>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-xs text-slate-500 font-bold mb-1">週年制法定特休</div>
-              <div className="text-2xl font-black text-amber-600">
-                {balance.annualLeaveDays} <span className="text-xs font-normal text-slate-500">天</span>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs relative group">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs text-slate-500 font-bold">週年制法定特休</div>
+                <button
+                  type="button"
+                  onClick={() => setIsPassbookOpen(true)}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold flex items-center space-x-1 cursor-pointer transition-all shadow-2xs"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  <span>明細存摺</span>
+                </button>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">到職週年前有效</div>
+              <div className="text-2xl font-black text-amber-600">
+                {balance.annualLeaveDays} <span className="text-xs font-normal text-slate-500">天整</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">到職週年前有效 · 純天數管理</div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-xs text-slate-500 font-bold mb-1">可用彈性補休</div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs relative group">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs text-slate-500 font-bold">可用彈性補休</div>
+                <button
+                  type="button"
+                  onClick={() => setIsPassbookOpen(true)}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold flex items-center space-x-1 cursor-pointer transition-all shadow-2xs"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  <span>明細存摺</span>
+                </button>
+              </div>
               <div className="text-2xl font-black text-purple-600">
                 {balance.compTimeHours} <span className="text-xs font-normal text-slate-500">小時</span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">12/31 歸零結算</div>
+              <div className="text-[11px] text-slate-400 mt-1">12/31 歸零結算 · 純時數管理</div>
             </div>
           </>
         ) : (
@@ -209,6 +232,16 @@ export default function MyDashboard({
             ))}
           </div>
         </div>
+      )}
+
+      {/* 個人假勤存摺明細對帳彈窗 */}
+      {isPassbookOpen && (
+        <LeavePassbookModal
+          currentUser={currentUser}
+          balance={balance}
+          transactions={passbookTransactions}
+          onClose={() => setIsPassbookOpen(false)}
+        />
       )}
     </div>
   );

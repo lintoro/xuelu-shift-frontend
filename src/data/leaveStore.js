@@ -76,3 +76,90 @@ export const INITIAL_PT_AVAILABILITY = {
     19: 'UNAVAILABLE'
   }
 };
+
+// 個人化特休與補休存摺明細流水帳 (Leave & Comp Passbook Ledger)
+// 規範：純時數/天數管理，不涉薪資折金；補休12/31歸零不跨年，特休週年制純整數
+export const INITIAL_PASSBOOK_TRANSACTIONS = [
+  // 李俐旻 (B112001) 流水帳
+  {
+    tx_id: 'TX_20260515_01',
+    emp_id: 'B112001',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-05-15',
+    action: 'INCREASE',
+    title: '到職滿週年特休給定 (週年制第5年)',
+    amount: 10,
+    unit: '天',
+    balance_after: 10,
+    ref_no: 'SYS_ANNUAL_2026',
+    notes: '到職日 2021-05-15，年資滿5年給定 10 天整，效期至 2027-05-14'
+  },
+  {
+    tx_id: 'TX_20260710_02',
+    emp_id: 'B112001',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-07-10',
+    action: 'DEDUCT',
+    title: '排班劃休核扣特休',
+    amount: -3,
+    unit: '天',
+    balance_after: 7,
+    ref_no: 'SCH_202607',
+    notes: '7月份排班自選特休劃假 3 天'
+  },
+  {
+    tx_id: 'TX_20260808_03',
+    emp_id: 'B112001',
+    category: 'COMP_TIME',
+    date: '2026-08-08',
+    action: 'INCREASE',
+    title: '父親節檔期現場突發客流延長工時 (核轉補休)',
+    amount: 4,
+    unit: '小時',
+    balance_after: 20,
+    ref_no: 'OT_20260808_01',
+    notes: '經主管核定現場加班 4 小時轉補休，12/31 結算歸零'
+  },
+  {
+    tx_id: 'TX_20260822_04',
+    emp_id: 'B112001',
+    category: 'COMP_TIME',
+    date: '2026-08-22',
+    action: 'DEDUCT',
+    title: '排班抵用補休',
+    amount: -4,
+    unit: '小時',
+    balance_after: 16,
+    ref_no: 'SCH_202608',
+    notes: '8/22 彈性排休抵用補休 4 小時'
+  },
+
+  // 林慶忠 (B111014)
+  {
+    tx_id: 'TX_20260301_01',
+    emp_id: 'B111014',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-03-01',
+    action: 'INCREASE',
+    title: '到職滿週年特休給定 (週年制第6年)',
+    amount: 15,
+    unit: '天',
+    balance_after: 15,
+    ref_no: 'SYS_ANNUAL_2026',
+    notes: '到職日 2020-03-01，滿 6 年給定 15 天整，效期至 2027-02-28'
+  },
+  {
+    tx_id: 'TX_20260815_02',
+    emp_id: 'B111014',
+    category: 'COMP_TIME',
+    date: '2026-08-15',
+    action: 'INCREASE',
+    title: '假日全館專案輪替支援加班',
+    amount: 8,
+    unit: '小時',
+    balance_after: 40,
+    ref_no: 'OT_20260815_02',
+    notes: '全日專案輪替支援核轉補休，效期至 2026/12/31'
+  }
+];
+

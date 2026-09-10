@@ -24,7 +24,8 @@ import {
   INITIAL_LEAVE_BALANCES, 
   INITIAL_DAILY_QUOTAS, 
   INITIAL_PREFERENCES, 
-  INITIAL_PT_AVAILABILITY 
+  INITIAL_PT_AVAILABILITY,
+  INITIAL_PASSBOOK_TRANSACTIONS
 } from './data/leaveStore.js';
 import { INITIAL_SWAP_REQUESTS, INITIAL_AUDIT_LOGS } from './data/swapStore.js';
 import { generateSeedSchedule } from './engine/schedulerEngine.js';
@@ -62,6 +63,7 @@ export default function App() {
   const [ptAvailability, setPtAvailability] = useState(INITIAL_PT_AVAILABILITY);
   const [leaveBalances, setLeaveBalances] = useState(INITIAL_LEAVE_BALANCES);
   const [dailyQuotas, setDailyQuotas] = useState(INITIAL_DAILY_QUOTAS);
+  const [passbookTransactions, setPassbookTransactions] = useState(INITIAL_PASSBOOK_TRANSACTIONS);
 
   // 調班申請清單與不可抹滅稽核日誌 (支援 localStorage 持久化)
   const [swapRequests, setSwapRequests] = useState(INITIAL_SWAP_REQUESTS);
@@ -323,13 +325,15 @@ export default function App() {
     };
     setScheduleOverrides(newOverrides);
 
-    // 正職同仁自動連動補休增減 (需求 #003)
+    // 正職同仁自動連動補休增減與存摺流水紀錄 (需求 #002 & #003)
     if (diffHours && diffHours !== 0) {
       const targetEmp = allEmployees.find(e => e.emp_id === empId);
       if (targetEmp && targetEmp.role !== 'PT') {
+        let updatedComp = 0;
         setLeaveBalances(prev => {
           const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
           const newComp = Math.max(0, (currentBal.compTimeHours || 0) + diffHours);
+          updatedComp = newComp;
           return {
             ...prev,
             [empId]: {
@@ -338,6 +342,23 @@ export default function App() {
             }
           };
         });
+
+        // 自動寫入存摺流水紀錄
+        const isInc = diffHours > 0;
+        const newTx = {
+          tx_id: `TX_${Date.now()}`,
+          emp_id: empId,
+          category: 'COMP_TIME',
+          date: `2026-09-${day < 10 ? '0' + day : day}`,
+          action: isInc ? 'INCREASE' : 'DEDUCT',
+          title: isInc ? `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)` : `主管實勤覆核工時短少 (${diffHours}h 扣減補休)`,
+          amount: diffHours,
+          unit: '小時',
+          balance_after: updatedComp,
+          ref_no: `OVERRIDE_9${day}`,
+          notes: notes || '門市現場實勤覆核差額自動連動存摺'
+        };
+        setPassbookTransactions(prev => [newTx, ...prev]);
       }
     }
 
@@ -556,6 +577,7 @@ export default function App() {
             leaveBalances={leaveBalances}
             swapRequests={swapRequests}
             rules={currentRules}
+            passbookTransactions={passbookTransactions}
             onExportMyIcs={handleExportMyIcs}
             onNavigateTab={setActiveTab}
           />
