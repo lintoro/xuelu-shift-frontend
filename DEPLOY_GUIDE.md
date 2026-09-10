@@ -114,10 +114,88 @@
 
 #### 📌 情境 C：外網與同仁手機存取（前端靜態發布）
 - **適用時機**：地端開發完成，欲開放門市全體同仁於手機、平板登入系統劃休與調班。
-- **操作流程**：
-  1. 在地端終端機執行生產建置：
-     ```bash
-     npm run build
-     ```
-  2. 將產生的 `dist/` 目錄託管於免費用戶端空間（例如：GitHub Pages、Cloudflare Pages 或 Vercel）。
-  3. 同仁僅需連至該公網網址，即可直接與後端 Google Sheets 雲端連線，達成真正 $0 主機維護成本之門市營運系統。
+- **操作方式**：請參閱下方「第五章：前端雲端發布與 CI/CD 自動化建置部署（GitHub + Vercel SOP）」。
+
+---
+
+## 五、 前端雲端發布與 CI/CD 自動化建置部署（GitHub + Vercel 完整 SOP）
+
+本系統前端現已全面接入現代化 **GitHub + Vercel CI/CD 自動化發布流水線**，同仁手機與平板可 24 小時免開電腦隨時存取，本地代碼只要推送到 GitHub，30 秒內全自動編譯發布上線。
+
+### 1. GitHub 遠端儲存庫建立與首次推送
+
+1. **在 GitHub 建立 Repository**：
+   - 登入 [GitHub](https://github.com/) ➜ 點選右上角「+」➜「New repository」。
+   - **Repository name**：輸入 `xuelu-shift-frontend`。
+   - **Visibility**：可設為 Public 或 Private。
+   - ⚠️ **重要**：**不要勾選** README、.gitignore 或 License（保持完全空白）。
+2. **本地綁定與推送到遠端**：
+   ```powershell
+   cd c:\Github\ReactApp\xuelu-shift-frontend
+   git remote add origin https://github.com/lintoro/xuelu-shift-frontend.git
+   git branch -M main
+   git push -u origin main
+   ```
+   *若彈出 Windows 憑證授權視窗，選擇「Sign in with your browser」完成登入授權即可。*
+
+---
+
+### 2. Vercel 免費雲端託管與一鍵部署流程
+
+1. **註冊/登入 Vercel**：
+   - 前往 [Vercel 官網](https://vercel.com/signup)，點擊 **「Continue with GitHub」** 授權登入。
+   - 方案選擇：**`I'm working on personal projects (Hobby)`**（完全免費、無使用期限、無須綁定信用卡）。
+   - 若詢問 2FA 雙重認證，可點擊「Skip securing my account」跳過。
+2. **匯入現有倉庫 (Import Project)**：
+   - 進入 Vercel Dashboard 首頁，點擊右上角 **「Add New...」 $\rightarrow$ 「Project」**。
+   - 在左側「Import Git Repository」清單中，找到 **`lintoro/xuelu-shift-frontend`**，點擊其右側的 **「Import」**。
+3. **確認設定並發布**：
+   - **Framework Preset**：Vercel 自動識別為 **`Vite`**（維持預設）。
+   - **Root Directory**：`./`（維持預設）。
+   - 直接點擊最下方藍色 **「Deploy」** 按鈕！
+4. **取得專屬 HTTPS 線上網址**：
+   - 約 30～45 秒打包編譯完成後，點擊「Continue to Dashboard」。
+   - 在專案頂部 **「DOMAINS」** 即可獲得專屬公網網址（例如：`https://xuelu-shift-frontend.vercel.app`）。
+
+---
+
+### 3. SPA 路由重寫設定 (`vercel.json`)
+
+為了防止使用者在瀏覽器子路徑重新整理時出現 404 錯誤，專案根目錄已建立並維護 `vercel.json`：
+```json
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+---
+
+### 4. 日常開發與一鍵 CI/CD 自動發布 SOP
+
+未來本地有任何代碼修改（修復 Bug、微調排班規則或界面優化），**完全不需要手動打包上傳**，只要執行標準 Git 三部曲：
+
+```powershell
+cd c:\Github\ReactApp\xuelu-shift-frontend
+git add .
+git commit -m "feat: 說明本次更新內容"
+git push origin main
+```
+
+- **自動化流水線 (CI/CD)**：GitHub 收到 Push 後會自動觸發 Vercel Webhook，Vercel 在 30 秒內自動完成雲端 `npm run build` 並無縫熱更新。
+- 全體同仁只要重新整理瀏覽器即可享有最新版功能！
+
+---
+
+### 5. 手機與平板 PWA 體驗（免開電腦 24 小時在線）
+
+1. **同仁手機開啟**：使用 iPhone Safari 或 Android Chrome 開啟 Vercel 正式網址。
+2. **加入主畫面 (Add to Home Screen)**：
+   - iOS：點擊瀏覽器底部分享按鈕 $\rightarrow$ 選擇 **「加入主畫面」**。
+   - Android：點擊右上角三點選單 $\rightarrow$ 選擇 **「安裝應用程式」** 或 **「加到主畫面」**。
+3. 手機桌面上將呈現「雪鹿排班」獨立 App 圖示，點擊即可全螢幕原生體驗，隨時隨地查看班表、申請調班與簽署國假同意書！
+
