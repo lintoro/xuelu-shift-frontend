@@ -30,7 +30,8 @@ export default function ActualHoursOverride({
   stations,
   scheduleMap,
   onOverrideHours,
-  currentUser
+  currentUser,
+  leaveBalances = {}
 }) {
   // 業務設定：當前系統營運當日 (9 月 10 日)
   const TODAY_DAY = 10;
@@ -82,6 +83,12 @@ export default function ActualHoursOverride({
   const scheduledShift = scheduleMap[currentEmp?.emp_id]?.[selectedDay];
   const scheduledHours = scheduledShift?.work_hours || 0;
   const isPT = currentEmp?.role === 'PT';
+
+  // 取得同仁假勤存摺額度 (特休天數換算為 8 小時/天)
+  const empLeaveBalance = leaveBalances[selectedEmpId] || { annualLeaveDays: 0, compTimeHours: 0 };
+  const availableCompTimeHours = empLeaveBalance.compTimeHours || 0;
+  const availableAnnualLeaveDays = empLeaveBalance.annualLeaveDays || 0;
+  const availableAnnualLeaveHours = availableAnnualLeaveDays * 8;
 
   // 時間字串轉小數小時 (如 "08:30" -> 8.5)
   const timeToDecimal = (tStr) => {
@@ -183,6 +190,12 @@ export default function ActualHoursOverride({
 
   // 工時差額 (淨實勤 - 原排定)
   const hoursDiff = isAbsent ? (0 - scheduledHours) : (netActualHours - scheduledHours);
+  const neededHours = Math.abs(hoursDiff);
+
+  // 假勤折抵額度檢核 (補休不足或特休不足時跳異常並鎖定儲存)
+  const isCompTimeInsufficient = !isPT && hoursDiff < 0 && deductionType === 'COMP_TIME' && availableCompTimeHours < neededHours;
+  const isAnnualLeaveInsufficient = !isPT && hoursDiff < 0 && deductionType === 'ANNUAL_LEAVE' && availableAnnualLeaveHours < neededHours;
+  const isDeductionBalanceInsufficient = isCompTimeInsufficient || isAnnualLeaveInsufficient;
 
   // 一般正常覆核送出
   const handleSaveNormalOverride = (e) => {
@@ -190,6 +203,12 @@ export default function ActualHoursOverride({
 
     if (hasLaborLawViolations) {
       setFeedbackMsg('剛性阻擋：本筆勤務存在違反勞動基準法之情事，普通送出已鎖定！依規定需由營運高管進行三次確認實況核定。');
+      setTimeout(() => setFeedbackMsg(''), 5000);
+      return;
+    }
+
+    if (isDeductionBalanceInsufficient) {
+      setFeedbackMsg(`假勤額度不足：${currentEmp.name} 可用${deductionType === 'COMP_TIME' ? '補休' : '特休'}額度不足以折抵短少 ${neededHours} 小時！請改選事假(扣全薪)或病假(扣半薪)。`);
       setTimeout(() => setFeedbackMsg(''), 5000);
       return;
     }
@@ -543,79 +562,236 @@ export default function ActualHoursOverride({
           </div>
         )}
 
-        {/* 正職工時短少/臨時請假沖抵方式 (需求 #006 方案 A) */}
+        {/* 正職工時短少/臨時請假沖抵方式 (需求 #006 & #011 假勤額度不足檢驗與 4 大假別擴充) */}
         {hoursDiff < 0 && !isPT && (
-          <div className="p-3.5 rounded-xl bg-purple-50/80 border border-purple-200 mb-4 text-xs">
-            <div className="flex items-center space-x-2 mb-2">
-              <Sparkles className="w-4 h-4 text-purple-700" />
-              <h4 className="font-bold text-purple-900">
-                正職實勤短少 {Math.abs(hoursDiff)} 小時 · 臨時請假/差額沖抵方式
-              </h4>
+          <div className="p-4 rounded-xl bg-purple-50/80 border border-purple-200 mb-4 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-purple-700" />
+                <h4 className="font-bold text-purple-900">
+                  正職實勤短少 {neededHours} 小時 · 請假折抵與計薪沖抵方式
+                </h4>
+              </div>
+              <div className="flex items-center space-x-3 text-[11px]">
+                <span className="text-slate-600">
+                  同仁可用補休：<strong className={availableCompTimeHours < neededHours ? 'text-rose-600 font-bold' : 'text-purple-700 font-bold'}>{availableCompTimeHours}h</strong>
+                </span>
+                <span className="text-slate-400">|</span>
+                <span className="text-slate-600">
+                  同仁可用特休：<strong className={availableAnnualLeaveHours < neededHours ? 'text-rose-600 font-bold' : 'text-amber-700 font-bold'}>{availableAnnualLeaveDays}天 ({availableAnnualLeaveHours}h)</strong>
+                </span>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
+
+            {/* 4 大請假折抵選項卡片 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {/* 選項 1: 扣抵彈性補休 (全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
                 deductionType === 'COMP_TIME' 
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-2xs' 
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-purple-50/50'
+                  ? isCompTimeInsufficient 
+                    ? 'bg-rose-50 border-rose-500 shadow-xs'
+                    : 'bg-purple-600 text-white border-purple-600 shadow-2xs' 
+                  : isCompTimeInsufficient
+                    ? 'bg-rose-50/40 text-slate-700 border-rose-200 hover:border-rose-300'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-purple-300'
               }`}>
-                <div className="flex items-center space-x-1.5 font-bold">
-                  <input
-                    type="radio"
-                    name="deductionType"
-                    value="COMP_TIME"
-                    checked={deductionType === 'COMP_TIME'}
-                    onChange={(e) => setDeductionType(e.target.value)}
-                    className="sr-only"
-                  />
-                  <span>扣抵彈性補休 (-{Math.abs(hoursDiff)}h)</span>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="COMP_TIME"
+                        checked={deductionType === 'COMP_TIME'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'COMP_TIME' && !isCompTimeInsufficient ? 'text-white' : 'text-slate-800'}>
+                        扣抵彈性補休
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'COMP_TIME' && !isCompTimeInsufficient 
+                        ? 'bg-purple-800 text-purple-100' 
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      全薪 (不扣薪)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'COMP_TIME' && !isCompTimeInsufficient ? 'text-purple-100' : 'text-slate-600'}`}>
+                    扣抵時數：-{neededHours} 小時
+                  </div>
                 </div>
-                <span className={`text-[10px] mt-1 ${deductionType === 'COMP_TIME' ? 'text-purple-100' : 'text-slate-500'}`}>
-                  自同仁可用補休時數扣減流水
-                </span>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'COMP_TIME' && !isCompTimeInsufficient ? 'text-purple-200' : 'text-slate-500'}>
+                    存摺餘額：{availableCompTimeHours} 小時
+                  </div>
+                  {isCompTimeInsufficient && (
+                    <div className="text-rose-600 font-bold mt-0.5">
+                      ⚠️ 額度不足 (缺 {neededHours - availableCompTimeHours}h)
+                    </div>
+                  )}
+                </div>
               </label>
 
-              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
+              {/* 選項 2: 扣抵法定特休 (全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
                 deductionType === 'ANNUAL_LEAVE' 
-                  ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' 
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-amber-50/50'
+                  ? isAnnualLeaveInsufficient 
+                    ? 'bg-rose-50 border-rose-500 shadow-xs'
+                    : 'bg-amber-600 text-white border-amber-600 shadow-2xs' 
+                  : isAnnualLeaveInsufficient
+                    ? 'bg-rose-50/40 text-slate-700 border-rose-200 hover:border-rose-300'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-amber-300'
               }`}>
-                <div className="flex items-center space-x-1.5 font-bold">
-                  <input
-                    type="radio"
-                    name="deductionType"
-                    value="ANNUAL_LEAVE"
-                    checked={deductionType === 'ANNUAL_LEAVE'}
-                    onChange={(e) => setDeductionType(e.target.value)}
-                    className="sr-only"
-                  />
-                  <span>扣抵法定特休 (-{Math.abs(hoursDiff)}h)</span>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="ANNUAL_LEAVE"
+                        checked={deductionType === 'ANNUAL_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'ANNUAL_LEAVE' && !isAnnualLeaveInsufficient ? 'text-white' : 'text-slate-800'}>
+                        扣抵法定特休
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'ANNUAL_LEAVE' && !isAnnualLeaveInsufficient 
+                        ? 'bg-amber-800 text-amber-100' 
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      全薪 (不扣薪)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'ANNUAL_LEAVE' && !isAnnualLeaveInsufficient ? 'text-amber-100' : 'text-slate-600'}`}>
+                    沖抵時數：-{neededHours}h (折{(neededHours / 8).toFixed(1)}天)
+                  </div>
                 </div>
-                <span className={`text-[10px] mt-1 ${deductionType === 'ANNUAL_LEAVE' ? 'text-amber-100' : 'text-slate-500'}`}>
-                  以小時沖抵法定特休存摺
-                </span>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'ANNUAL_LEAVE' && !isAnnualLeaveInsufficient ? 'text-amber-200' : 'text-slate-500'}>
+                    存摺餘額：{availableAnnualLeaveDays}天 ({availableAnnualLeaveHours}h)
+                  </div>
+                  {isAnnualLeaveInsufficient && (
+                    <div className="text-rose-600 font-bold mt-0.5">
+                      ⚠️ 額度不足 (缺 {(neededHours - availableAnnualLeaveHours).toFixed(1)}h)
+                    </div>
+                  )}
+                </div>
               </label>
 
-              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
-                deductionType === 'UNPAID' 
-                  ? 'bg-slate-700 text-white border-slate-700 shadow-2xs' 
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              {/* 選項 3: 事假 (其它) (扣全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'PERSONAL_LEAVE' 
+                  ? 'bg-slate-800 text-white border-slate-800 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
               }`}>
-                <div className="flex items-center space-x-1.5 font-bold">
-                  <input
-                    type="radio"
-                    name="deductionType"
-                    value="UNPAID"
-                    checked={deductionType === 'UNPAID'}
-                    onChange={(e) => setDeductionType(e.target.value)}
-                    className="sr-only"
-                  />
-                  <span>事假/純工時短少</span>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="PERSONAL_LEAVE"
+                        checked={deductionType === 'PERSONAL_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'PERSONAL_LEAVE' ? 'text-white' : 'text-slate-800'}>
+                        事假 (其它)
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'PERSONAL_LEAVE' 
+                        ? 'bg-rose-900 text-rose-100' 
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      扣全薪 (無津貼)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'PERSONAL_LEAVE' ? 'text-slate-200' : 'text-slate-600'}`}>
+                    短少出勤：-{neededHours} 小時
+                  </div>
                 </div>
-                <span className={`text-[10px] mt-1 ${deductionType === 'UNPAID' ? 'text-slate-200' : 'text-slate-500'}`}>
-                  不扣假勤存摺，僅作差額紀錄
-                </span>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'PERSONAL_LEAVE' ? 'text-slate-300' : 'text-slate-500'}>
+                    不扣假勤存摺 · 無額度限制
+                  </div>
+                  <div className={`text-[9px] mt-0.5 ${deductionType === 'PERSONAL_LEAVE' ? 'text-slate-300' : 'text-slate-400'}`}>
+                    依勞基法事假期間不給付工資
+                  </div>
+                </div>
+              </label>
+
+              {/* 選項 4: 病假 (照顧假) (扣半薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'SICK_LEAVE' 
+                  ? 'bg-blue-700 text-white border-blue-700 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="SICK_LEAVE"
+                        checked={deductionType === 'SICK_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'SICK_LEAVE' ? 'text-white' : 'text-slate-800'}>
+                        病假 (照顧假)
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'SICK_LEAVE' 
+                        ? 'bg-blue-900 text-blue-100' 
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      扣半薪 (發50%)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'SICK_LEAVE' ? 'text-blue-100' : 'text-slate-600'}`}>
+                    短少出勤：-{neededHours} 小時
+                  </div>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'SICK_LEAVE' ? 'text-blue-200' : 'text-slate-500'}>
+                    不扣假勤存摺 · 無額度限制
+                  </div>
+                  <div className={`text-[9px] mt-0.5 ${deductionType === 'SICK_LEAVE' ? 'text-blue-200' : 'text-slate-400'}`}>
+                    依請假規則普通病假折半發薪
+                  </div>
+                </div>
               </label>
             </div>
+
+            {/* 額度不足異常紅底警示卡 */}
+            {isDeductionBalanceInsufficient && (
+              <div className="mt-3 p-3.5 rounded-xl bg-rose-50 border-2 border-rose-400 text-rose-950 text-xs flex items-start space-x-2.5 shadow-xs animate-shake">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-black text-rose-900 flex items-center space-x-1.5">
+                    <span>🚨 假勤折抵額度不足異常 · 普通儲存已剛性鎖定！</span>
+                  </div>
+                  <div className="mt-1 text-rose-800 leading-relaxed">
+                    同仁 <strong>{currentEmp.name}</strong> 欲以<strong>{deductionType === 'COMP_TIME' ? '彈性補休' : '法定特休'}</strong>折抵未到勤短少 <strong>{neededHours} 小時</strong>，但當前可用額度僅 <strong>{deductionType === 'COMP_TIME' ? `${availableCompTimeHours} 小時` : `${availableAnnualLeaveDays} 天 (${availableAnnualLeaveHours} 小時)`}</strong>，短缺 <strong>{deductionType === 'COMP_TIME' ? (neededHours - availableCompTimeHours) : (neededHours - availableAnnualLeaveHours).toFixed(1)} 小時</strong>！
+                    <br />
+                    <span className="font-semibold text-rose-900 mt-1 block">
+                      ⚠️ 依勞動法規禁止存摺透支為負數。請改選<strong>「事假 (其它，扣全薪)」</strong>或<strong>「病假 (照顧假，扣半薪)」</strong>；或由該同仁先行出勤累積延長工時後再行補抵。
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -639,19 +815,24 @@ export default function ActualHoursOverride({
                 <AlertCircle className="w-4 h-4 text-rose-600" />
                 <span>偵測到違反《勞基法》規範！普通儲存已關閉。</span>
               </span>
+            ) : isDeductionBalanceInsufficient ? (
+              <span className="text-rose-600 font-bold flex items-center space-x-1">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>假勤可用額度不足，無法沖抵！請切換折抵假別或改選事假/病假。</span>
+              </span>
             ) : (
               <span className="text-emerald-700 font-medium flex items-center space-x-1">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>工時與休息符合勞動基準法規範。</span>
+                <span>工時與假勤折抵額度符合規範。</span>
               </span>
             )}
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* 一般儲存按鈕 (在有法規違規時鎖死) */}
+            {/* 一般儲存按鈕 (在有法規違規或假勤額度不足時鎖死) */}
             <button
               type="submit"
-              disabled={hasLaborLawViolations}
+              disabled={hasLaborLawViolations || isDeductionBalanceInsufficient}
               className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer active:scale-95 transition-all"
             >
               <Save className="w-4 h-4" />

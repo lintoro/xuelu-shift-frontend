@@ -489,17 +489,29 @@ export default function App() {
             };
             setPassbookTransactions(prev => [newTx, ...prev]);
           } else if (deductionType === 'ANNUAL_LEAVE') {
-            // 特休小時沖抵
+            // 特休小時沖抵 (8小時折算1天)
+            const daysDeducted = Math.abs(diffHours) / 8;
+            let updatedAnnualDays = 0;
+            setLeaveBalances(prev => {
+              const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
+              const newDays = Math.max(0, Number(((currentBal.annualLeaveDays || 0) - daysDeducted).toFixed(2)));
+              updatedAnnualDays = newDays;
+              return {
+                ...prev,
+                [empId]: { ...currentBal, annualLeaveDays: newDays }
+              };
+            });
+
             const newTx = {
               tx_id: `TX_${Date.now()}`,
               emp_id: empId,
               category: 'ANNUAL_LEAVE',
               date: `2026-09-${day < 10 ? '0' + day : day}`,
               action: 'DEDUCT',
-              title: `臨時請假小時扣抵法定特休 (${diffHours}h)`,
+              title: `臨時請假扣抵法定特休 (${diffHours}h · 沖抵 -${daysDeducted}天)`,
               amount: diffHours,
               unit: '小時',
-              balance_after: leaveBalances[empId]?.annualLeaveDays || 0,
+              balance_after: updatedAnnualDays,
               ref_no: `OVERRIDE_9${day}`,
               notes: notes || '門市現場實勤短少，以小時沖抵法定特休'
             };
@@ -515,7 +527,12 @@ export default function App() {
 
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
     const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
-    const deductText = diffHours < 0 ? ` [沖抵方式: ${deductionType === 'COMP_TIME' ? '扣補休' : deductionType === 'ANNUAL_LEAVE' ? '扣特休' : '事假未補'}]` : '';
+    const deductText = diffHours < 0 ? ` [沖抵方式: ${
+      deductionType === 'COMP_TIME' ? '扣補休(全薪)' :
+      deductionType === 'ANNUAL_LEAVE' ? '扣特休(全薪)' :
+      deductionType === 'SICK_LEAVE' ? '病假/照顧假(扣半薪)' :
+      '事假(扣全薪)'
+    }]` : '';
     
     const logNotes = isLaborViolationOverride
       ? `【⚠️營運高管強制核定超時違規勤務】${empName} (9/${day}) 淨實勤 ${actualHours}h。核定高管: ${currentUser?.name || '林慶忠'}。違規事項: ${laborViolations.join('; ')}。現場事由: ${overrideManager?.emergency_reason || ''}`
@@ -1001,6 +1018,7 @@ export default function App() {
             scheduleMap={effectiveScheduleMap}
             onOverrideHours={handleOverrideHours}
             currentUser={currentUser}
+            leaveBalances={leaveBalances}
           />
         )}
 

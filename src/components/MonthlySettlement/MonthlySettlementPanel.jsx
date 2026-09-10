@@ -47,6 +47,10 @@ export default function MonthlySettlementPanel({
     let actualOffDays = 0;
     let totalWorkHours = 0;
     let overtimeDiffHours = 0;
+    let compTimeDeductHours = 0;
+    let annualLeaveDeductHours = 0;
+    let personalLeaveHours = 0;
+    let sickLeaveHours = 0;
     const violationList = [];
 
     for (let d = 1; d <= totalDays; d++) {
@@ -60,6 +64,22 @@ export default function MonthlySettlementPanel({
         }
       } else {
         actualOffDays++;
+      }
+
+      // 統計請假折抵明細 (區分扣全薪/扣半薪/全薪存摺)
+      if (s && s.actual_diff_hours < 0) {
+        const diffAbs = Math.abs(s.actual_diff_hours);
+        const dtype = s.actual_deduction_type;
+        if (dtype === 'PERSONAL_LEAVE') {
+          personalLeaveHours += diffAbs;
+        } else if (dtype === 'SICK_LEAVE') {
+          sickLeaveHours += diffAbs;
+        } else if (dtype === 'ANNUAL_LEAVE') {
+          annualLeaveDeductHours += diffAbs;
+        } else {
+          // COMP_TIME 或預設
+          compTimeDeductHours += diffAbs;
+        }
       }
 
       if (s && s.is_labor_violation_override) {
@@ -86,6 +106,10 @@ export default function MonthlySettlementPanel({
       actualOffDays,
       totalWorkHours,
       overtimeDiffHours,
+      compTimeDeductHours,
+      annualLeaveDeductHours,
+      personalLeaveHours,
+      sickLeaveHours,
       mySwapsCount,
       isSigned,
       signedAt,
@@ -105,9 +129,9 @@ export default function MonthlySettlementPanel({
     setTimeout(() => setFeedbackMsg(''), 5000);
   };
 
-  // 匯出 CSV 清冊 (含法規合規與違規強制核實加註提醒)
+  // 匯出 CSV 清冊 (含法規合規與主管強制核實加註提醒，以及事假扣全薪/病假扣半薪明細)
   const handleExportCsv = () => {
-    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,延長加班與差額時數(依法計發加班費或意願換補休),線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
+    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,延長加班與差額時數(依法計發加班費或意願換補休),事假折抵(扣全薪),病假與照顧假(扣半薪),補休折抵(全薪),特休折抵(全薪),線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
     staffSummaries.forEach(s => {
       let violationNote = '法定合規出勤';
       if (s.violationCount > 0) {
@@ -116,7 +140,7 @@ export default function MonthlySettlementPanel({
         ).join('; ');
         violationNote = `⚠️ 存在 ${s.violationCount} 筆主管強制核實超時違規勤務: ${details}`;
       }
-      csvContent += `"${s.emp.emp_id}","${s.emp.name}","${s.emp.role}","${stationMap[s.emp.primary_station] || s.emp.primary_station}","${s.actualWorkDays}","${s.actualOffDays}","${s.totalWorkHours}","${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours}","${s.mySwapsCount}","${violationNote}","${s.isSigned ? '已確認' : '待簽認'}","${s.signedAt || '-'}"\n`;
+      csvContent += `"${s.emp.emp_id}","${s.emp.name}","${s.emp.role}","${stationMap[s.emp.primary_station] || s.emp.primary_station}","${s.actualWorkDays}","${s.actualOffDays}","${s.totalWorkHours}","${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours}","${s.personalLeaveHours > 0 ? `${s.personalLeaveHours}h` : '0h'}","${s.sickLeaveHours > 0 ? `${s.sickLeaveHours}h` : '0h'}","${s.compTimeDeductHours > 0 ? `${s.compTimeDeductHours}h` : '0h'}","${s.annualLeaveDeductHours > 0 ? `${s.annualLeaveDeductHours}h` : '0h'}","${s.mySwapsCount}","${violationNote}","${s.isSigned ? '已確認' : '待簽認'}","${s.signedAt || '-'}"\n`;
     });
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -258,13 +282,16 @@ export default function MonthlySettlementPanel({
                 <th className="p-2.5 font-bold text-right" title="正職延長工時認列：依法以計發加班費為法定原則；同仁亦得依自主意願轉入補休存摺">
                   加班/差額時數
                 </th>
+                <th className="p-2.5 font-bold text-center" title="事假(扣全薪)、病假(扣半薪)、補休或特休沖抵時數">
+                  請假扣抵明細
+                </th>
                 <th className="p-2.5 font-bold text-center">調動次數</th>
                 <th className="p-2.5 font-bold text-center">法規合規與主管加註</th>
                 <th className="p-2.5 font-bold text-center">月底簽認狀態</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, mySwapsCount, isSigned, signedAt, violationCount, violationList }) => {
+              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, compTimeDeductHours, annualLeaveDeductHours, personalLeaveHours, sickLeaveHours, mySwapsCount, isSigned, signedAt, violationCount, violationList }) => {
                 const isPT = emp.role === 'PT';
                 return (
                   <tr key={emp.emp_id} className="hover:bg-slate-50 transition-colors">
@@ -303,6 +330,34 @@ export default function MonthlySettlementPanel({
                         <span className={overtimeDiffHours > 0 ? 'text-emerald-600' : overtimeDiffHours < 0 ? 'text-rose-600' : 'text-slate-400'}>
                           {overtimeDiffHours > 0 ? `+${overtimeDiffHours}h` : overtimeDiffHours < 0 ? `${overtimeDiffHours}h` : '0h'}
                         </span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-center font-mono text-[11px]">
+                      {personalLeaveHours > 0 || sickLeaveHours > 0 || compTimeDeductHours > 0 || annualLeaveDeductHours > 0 ? (
+                        <div className="flex flex-col space-y-0.5 items-center">
+                          {personalLeaveHours > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                              事假 {personalLeaveHours}h (扣全薪)
+                            </span>
+                          )}
+                          {sickLeaveHours > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                              病假 {sickLeaveHours}h (扣半薪)
+                            </span>
+                          )}
+                          {compTimeDeductHours > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 font-bold border border-purple-200">
+                              補休 {compTimeDeductHours}h
+                            </span>
+                          )}
+                          {annualLeaveDeductHours > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-bold border border-amber-200">
+                              特休 {annualLeaveDeductHours}h
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">-</span>
                       )}
                     </td>
                     <td className="p-2.5 text-center font-mono text-slate-500">
