@@ -80,13 +80,29 @@ export default function MyDashboard({
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onNavigateTab && onNavigateTab('SWAPS')}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-purple-500/30 hover:bg-purple-500/50 border border-purple-300/40 text-white font-bold text-xs backdrop-blur-xs transition-all cursor-pointer active:scale-95 shadow-xs"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-purple-200" />
+              <span>🔄 申請個人自調挪休</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab && onNavigateTab('SWAPS')}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 border border-white/30 text-white font-bold text-xs backdrop-blur-xs transition-all cursor-pointer active:scale-95 shadow-xs"
+            >
+              <User className="w-3.5 h-3.5 text-white" />
+              <span>👥 與同事對調班表</span>
+            </button>
+
             <button
               onClick={onExportMyIcs}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white text-indigo-700 font-extrabold text-xs shadow-md hover:bg-indigo-50 transition-all cursor-pointer active:scale-95"
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white text-indigo-700 font-extrabold text-xs shadow-md hover:bg-indigo-50 transition-all cursor-pointer active:scale-95"
             >
-              <Download className="w-4 h-4 text-indigo-600" />
-              <span>匯出我的手機日曆 (.ics)</span>
+              <Download className="w-3.5 h-3.5 text-indigo-600" />
+              <span>手機日曆 (.ics)</span>
             </button>
           </div>
         </div>
@@ -262,6 +278,14 @@ export default function MyDashboard({
                 <div className="text-[9px] truncate opacity-90">
                   {isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}
                 </div>
+
+                {shift?.is_labor_violation_override && (
+                  <div className="mt-1">
+                    <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[8px] block shadow-2xs">
+                      ⚠️ 特准實勤 {shift.actual_hours}h
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -277,21 +301,27 @@ export default function MyDashboard({
           </div>
 
           <div className="space-y-2">
-            {mySwaps.map(req => (
-              <div key={req.swap_id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center text-xs">
-                <div>
-                  <span className="font-bold text-slate-800">
-                    與 {req.target_name} 換班 (9/{req.applicant_day} ⇄ 9/{req.target_day})
+            {mySwaps.map(req => {
+              const isSelf = req.type === 'SELF_RESCHEDULE';
+              return (
+                <div key={req.swap_id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center text-xs">
+                  <div>
+                    <span className={`font-bold ${isSelf ? 'text-purple-900' : 'text-slate-800'}`}>
+                      {isSelf 
+                        ? `【🔄 個人自調挪休】9/${req.applicant_day} 改休 ⇄ 9/${req.target_day} 改到班 (${req.target_shift}班)`
+                        : `【👥 雙人對調】與 ${req.target_name} 換班 (9/${req.applicant_day} ⇄ 9/${req.target_day})`
+                      }
+                    </span>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{req.reason}</p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${
+                    req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {req.status === 'APPROVED' ? '✓ 已生效' : '二階審核中'}
                   </span>
-                  <p className="text-slate-500 text-[11px] mt-0.5">{req.reason}</p>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${
-                  req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {req.status === 'APPROVED' ? '✓ 已生效' : '二階審核中'}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

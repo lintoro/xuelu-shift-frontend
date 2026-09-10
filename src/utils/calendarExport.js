@@ -129,13 +129,65 @@ export function exportScheduleToCsv({
       } else {
         workDays++;
         const stName = stationMap[shift.station_id] || shift.station_id;
-        row.push(`${shift.shift_type}(${stName})`);
+        let cellText = `${shift.shift_type}(${stName})`;
+        if (shift.is_labor_violation_override) {
+          cellText += ` [⚠️超時違規(實${shift.actual_hours}h)]`;
+        }
+        row.push(cellText);
       }
     }
 
     row.push(workDays, offDays);
     rows.push(row);
   });
+
+  // 勞基法法規稽核與主管強制核實加註提醒專區 (需求加註)
+  const violationOverrides = [];
+  employees.forEach(emp => {
+    for (let d = 1; d <= totalDays; d++) {
+      const shift = scheduleMap[emp.emp_id]?.[d];
+      if (shift && shift.is_labor_violation_override) {
+        violationOverrides.push({
+          emp,
+          day: d,
+          shift
+        });
+      }
+    }
+  });
+
+  if (violationOverrides.length > 0) {
+    rows.push([]);
+    rows.push(['【⚠️ 勞基法工時超時違規加註提醒 (營運高管現場實況強制核定放行專區)】']);
+    rows.push([
+      '出勤日期',
+      '工號',
+      '同仁姓名',
+      '角色',
+      '主屬站點',
+      '原排班別',
+      '實勤工時',
+      '違規條款與事實',
+      '核定高管',
+      '現場緊急突發事由與核定時間'
+    ]);
+    violationOverrides.forEach(v => {
+      const vios = (v.shift.labor_violations || []).join('; ') || '單日工時或休息時間未達勞基法規範';
+      const mgr = v.shift.override_manager || {};
+      rows.push([
+        `9月${v.day}日`,
+        v.emp.emp_id,
+        v.emp.name,
+        v.emp.role === 'Leader' ? '組長' : v.emp.role === 'PT' ? 'PT' : '正職',
+        stationMap[v.emp.primary_station] || v.emp.primary_station,
+        v.shift.shift_type || 'OFF',
+        `${v.shift.actual_hours} 小時`,
+        vios,
+        `${mgr.name || '營運高管'} (${mgr.emp_id || 'B111014'})`,
+        `${mgr.emergency_reason || '現場突發緊急調度'} [核定時間: ${mgr.confirmed_at ? new Date(mgr.confirmed_at).toLocaleString('zh-TW') : '2026-09-10'}]`
+      ]);
+    });
+  }
 
   // 加入 BOM (\uFEFF) 防範 Excel 繁體中文亂碼
   const csvString = '\uFEFF' + rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\r\n');

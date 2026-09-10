@@ -390,8 +390,21 @@ export default function App() {
     }));
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
-  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，需求 #006 方案 A)
-  const handleOverrideHours = useCallback(({ empId, day, actualHours, startTime, endTime, breakHours, diffHours, deductionType = 'COMP_TIME', notes }) => {
+  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，支援高管違規強制核實)
+  const handleOverrideHours = useCallback(({ 
+    empId, 
+    day, 
+    actualHours, 
+    startTime, 
+    endTime, 
+    breakHours, 
+    diffHours, 
+    deductionType = 'COMP_TIME', 
+    notes,
+    isLaborViolationOverride = false,
+    laborViolations = [],
+    overrideManager = null
+  }) => {
     const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
 
     const newOverrides = { ...scheduleOverrides };
@@ -405,7 +418,10 @@ export default function App() {
       actual_break_hours: breakHours,
       actual_diff_hours: diffHours,
       actual_deduction_type: deductionType,
-      actual_notes: notes
+      actual_notes: notes,
+      is_labor_violation_override: isLaborViolationOverride,
+      labor_violations: laborViolations,
+      override_manager: overrideManager
     };
     setScheduleOverrides(newOverrides);
 
@@ -434,7 +450,9 @@ export default function App() {
             category: 'COMP_TIME',
             date: `2026-09-${day < 10 ? '0' + day : day}`,
             action: 'INCREASE',
-            title: `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)`,
+            title: isLaborViolationOverride 
+              ? `高管強制核定超時出勤 (+${diffHours}h 核轉補休)`
+              : `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)`,
             amount: diffHours,
             unit: '小時',
             balance_after: updatedComp,
@@ -498,13 +516,18 @@ export default function App() {
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
     const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
     const deductText = diffHours < 0 ? ` [沖抵方式: ${deductionType === 'COMP_TIME' ? '扣補休' : deductionType === 'ANNUAL_LEAVE' ? '扣特休' : '事假未補'}]` : '';
+    
+    const logNotes = isLaborViolationOverride
+      ? `【⚠️營運高管強制核定超時違規勤務】${empName} (9/${day}) 淨實勤 ${actualHours}h。核定高管: ${currentUser?.name || '林慶忠'}。違規事項: ${laborViolations.join('; ')}。現場事由: ${overrideManager?.emergency_reason || ''}`
+      : `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}${deductText}`;
+
     const newLog = {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
-      action_type: 'HOURS_OVERRIDE',
+      action_type: isLaborViolationOverride ? 'HOURS_OVERRIDE_VIOLATION' : 'HOURS_OVERRIDE',
       operator_id: currentUser ? currentUser.emp_id : 'B111014',
       operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-      notes: `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}${deductText}`,
+      notes: logNotes,
       before_snapshot: beforeSnapshot,
       after_snapshot: afterSnapshot
     };
@@ -977,6 +1000,7 @@ export default function App() {
             stations={allStations}
             scheduleMap={effectiveScheduleMap}
             onOverrideHours={handleOverrideHours}
+            currentUser={currentUser}
           />
         )}
 

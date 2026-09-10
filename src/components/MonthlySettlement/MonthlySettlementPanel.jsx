@@ -6,11 +6,12 @@ import {
   Download, 
   Send, 
   AlertCircle, 
+  AlertTriangle,
   Users, 
   ShieldCheck, 
-  Calendar,
-  Sparkles,
-  FileSpreadsheet
+  Calendar, 
+  Sparkles, 
+  FileSpreadsheet 
 } from 'lucide-react';
 import { isWorkingShift } from '../../types/scheduler.js';
 
@@ -46,6 +47,7 @@ export default function MonthlySettlementPanel({
     let actualOffDays = 0;
     let totalWorkHours = 0;
     let overtimeDiffHours = 0;
+    const violationList = [];
 
     for (let d = 1; d <= totalDays; d++) {
       const s = myShifts[d];
@@ -58,6 +60,15 @@ export default function MonthlySettlementPanel({
         }
       } else {
         actualOffDays++;
+      }
+
+      if (s && s.is_labor_violation_override) {
+        violationList.push({
+          day: d,
+          actualHours: s.actual_hours,
+          violations: s.labor_violations || [],
+          manager: s.override_manager || {}
+        });
       }
     }
 
@@ -77,7 +88,9 @@ export default function MonthlySettlementPanel({
       overtimeDiffHours,
       mySwapsCount,
       isSigned,
-      signedAt
+      signedAt,
+      violationCount: violationList.length,
+      violationList
     };
   });
 
@@ -92,11 +105,18 @@ export default function MonthlySettlementPanel({
     setTimeout(() => setFeedbackMsg(''), 5000);
   };
 
-  // 匯出 CSV 清冊
+  // 匯出 CSV 清冊 (含法規合規與違規強制核實加註提醒)
   const handleExportCsv = () => {
-    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,補休增減時數,線上調動次數,月底簽認狀態,簽認時間戳記\n';
+    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,補休增減時數,線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
     staffSummaries.forEach(s => {
-      csvContent += `${s.emp.emp_id},${s.emp.name},${s.emp.role},${stationMap[s.emp.primary_station] || s.emp.primary_station},${s.actualWorkDays},${s.actualOffDays},${s.totalWorkHours},${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours},${s.mySwapsCount},${s.isSigned ? '已確認' : '待簽認'},${s.signedAt || '-'}\n`;
+      let violationNote = '法定合規出勤';
+      if (s.violationCount > 0) {
+        const details = s.violationList.map(v => 
+          `[9/${v.day} 實勤${v.actualHours}h超標: 經營運高管 ${v.manager?.name || '林慶忠'} 強制核定 (事由: ${v.manager?.emergency_reason || '現場緊急調度'})]`
+        ).join('; ');
+        violationNote = `⚠️ 存在 ${s.violationCount} 筆主管強制核實超時違規勤務: ${details}`;
+      }
+      csvContent += `"${s.emp.emp_id}","${s.emp.name}","${s.emp.role}","${stationMap[s.emp.primary_station] || s.emp.primary_station}","${s.actualWorkDays}","${s.actualOffDays}","${s.totalWorkHours}","${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours}","${s.mySwapsCount}","${violationNote}","${s.isSigned ? '已確認' : '待簽認'}","${s.signedAt || '-'}"\n`;
     });
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -237,16 +257,24 @@ export default function MonthlySettlementPanel({
                 <th className="p-2.5 font-bold text-right">實勤總工時</th>
                 <th className="p-2.5 font-bold text-right">補休增減</th>
                 <th className="p-2.5 font-bold text-center">調動次數</th>
+                <th className="p-2.5 font-bold text-center">法規合規與主管加註</th>
                 <th className="p-2.5 font-bold text-center">月底簽認狀態</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, mySwapsCount, isSigned, signedAt }) => {
+              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, mySwapsCount, isSigned, signedAt, violationCount, violationList }) => {
                 const isPT = emp.role === 'PT';
                 return (
                   <tr key={emp.emp_id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-2.5 font-mono font-bold text-slate-900">{emp.emp_id}</td>
-                    <td className="p-2.5 font-bold text-slate-800">{emp.name}</td>
+                    <td className="p-2.5 font-bold text-slate-800 flex items-center space-x-1.5">
+                      <span>{emp.name}</span>
+                      {violationCount > 0 && (
+                        <span className="p-0.5 rounded bg-rose-100 text-rose-700" title={`本月含 ${violationCount} 筆高管特准超時違規出勤`}>
+                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2.5">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         isPT ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
@@ -282,6 +310,21 @@ export default function MonthlySettlementPanel({
                         </span>
                       ) : (
                         '-'
+                      )}
+                    </td>
+                    <td className="p-2.5 text-center">
+                      {violationCount > 0 ? (
+                        <span 
+                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px] cursor-help shadow-2xs"
+                          title={violationList.map(v => `9/${v.day} 實勤${v.actualHours}h超標 (核定高管: ${v.manager?.name || '林慶忠'} · 事由: ${v.manager?.emergency_reason || '緊急搶修支援'})`).join('\n')}
+                        >
+                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                          <span>⚠️ 特准超時 ({violationCount}天)</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px] font-medium">
+                          ✓ 法定合規
+                        </span>
                       )}
                     </td>
                     <td className="p-2.5 text-center">
