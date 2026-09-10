@@ -15,7 +15,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { precheckSwapCompliance } from '../../data/swapStore.js';
-import { SHIFT_TYPES } from '../../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
 
 export default function ShiftSwapPortal({
   employees,
@@ -26,7 +26,8 @@ export default function ShiftSwapPortal({
   onAddSwapRequest,
   onFirstReview,
   onFinalApprove,
-  currentEmpId
+  currentEmpId,
+  shiftTypes = SHIFT_TYPES
 }) {
   const currentEmp = employees.find(e => e.emp_id === currentEmpId) || employees[0];
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
@@ -362,10 +363,13 @@ export default function ShiftSwapPortal({
                       onChange={(e) => setTargetShiftCode(e.target.value)}
                       className="w-full bg-white border border-indigo-300 rounded-lg p-2 text-xs font-bold cursor-pointer text-indigo-700"
                     >
-                      <option value="A">A班 (早班 08:30-17:30)</option>
-                      <option value="B">B班 (常規 10:00-19:00)</option>
-                      <option value="C">C班 (晚班 13:30-22:30)</option>
-                      <option value="D">D班 (假日機動 11:00-20:00)</option>
+                      {Object.values(shiftTypes || SHIFT_TYPES)
+                        .filter(s => isWorkingShift(s.code))
+                        .map(s => (
+                          <option key={s.code} value={s.code}>
+                            {s.code}班 ({s.name} {s.startTime}-{s.endTime})
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>

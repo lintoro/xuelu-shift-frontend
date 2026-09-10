@@ -44,8 +44,9 @@ export default function Header({
     { id: 'SWAPS', label: '調班二階審核', icon: ArrowLeftRight, show: true },
     { id: 'HOURS_OVERRIDE', label: '實勤覆核', icon: Clock, show: isManager || isLeader },
     { id: 'MONTHLY_SETTLEMENT', label: '月底考勤結算', icon: FileCheck2, show: isManager || isAdmin },
-    // 核心決策：人事管理與 120 天平帳僅限營運高階 Manager，Admin 嚴格無人事權！
+    // 核心決策：人事管理、班別規劃與 120 天平帳僅限營運高階 Manager，Admin 嚴格無人事與班別規劃權！
     { id: 'PERSONNEL', label: '人事管理', icon: Users, show: isManager },
+    { id: 'SHIFT_SETTINGS', label: '班別主檔', icon: Clock, show: isManager },
     { id: 'HOLIDAY_TRANSFER', label: '120天平帳', icon: Scale, show: isManager },
     { id: 'FAIRNESS', label: '公平性與AI', icon: BarChart3, show: isManager || isAdmin },
     { id: 'AUDIT_LOGS', label: '稽核回滾', icon: History, show: isManager || isAdmin }

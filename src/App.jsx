@@ -19,7 +19,9 @@ import LoginView from './components/Auth/LoginView.jsx';
 import ChangePasswordModal from './components/Auth/ChangePasswordModal.jsx';
 import MyDashboard from './components/Dashboard/MyDashboard.jsx';
 import MonthlySettlementPanel from './components/MonthlySettlement/MonthlySettlementPanel.jsx';
+import ShiftMasterManagement from './components/Admin/ShiftMasterManagement.jsx';
 
+import { DEFAULT_SHIFT_TYPES } from './types/scheduler.js';
 import { STATIONS, EMPLOYEES, DEFAULT_MONTHLY_RULES, MOCK_MONTH_BORDERS } from './data/mockMasterData.js';
 import { 
   INITIAL_LEAVE_BALANCES, 
@@ -93,6 +95,24 @@ export default function App() {
       console.warn('localStorage save failed', e);
     }
   }, [auditLogs]);
+
+  // 營業班別動態主檔 (需求 #008 Manager 專屬規劃與自訂維護)
+  const [shiftTypes, setShiftTypes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_shift_types_v1');
+      return saved ? JSON.parse(saved) : DEFAULT_SHIFT_TYPES;
+    } catch {
+      return DEFAULT_SHIFT_TYPES;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('xuelu_shift_types_v1', JSON.stringify(shiftTypes));
+    } catch (e) {
+      console.warn('localStorage save failed', e);
+    }
+  }, [shiftTypes]);
 
   // 調班/手動覆寫層 (Schedule Overrides)
   const [scheduleOverrides, setScheduleOverrides] = useState({});
@@ -546,6 +566,76 @@ export default function App() {
     setAllStations(prev => prev.map(st => st.station_id === stationId ? { ...st, leader_emp_id: newLeaderId } : st));
   }, []);
 
+  // 營業班別主檔管理回呼 (需求 #008 Manager 專屬規劃與稽核日誌連動)
+  const handleSaveShiftType = useCallback((newShift) => {
+    const beforeState = JSON.parse(JSON.stringify(shiftTypes));
+    setShiftTypes(prev => ({
+      ...prev,
+      [newShift.code]: newShift
+    }));
+
+    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+    const isNew = !shiftTypes[newShift.code];
+
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: isNew ? 'CREATE_SHIFT_TYPE' : 'UPDATE_SHIFT_TYPE',
+      operator_id: operatorId,
+      operator_name: operatorName,
+      notes: `主管【${operatorName}】${isNew ? '新增' : '更新'}營業班別【${newShift.code} - ${newShift.name}】(${newShift.startTime}~${newShift.endTime}，實勤 ${newShift.workHours}h)`,
+      before_snapshot: beforeState,
+      after_snapshot: { ...shiftTypes, [newShift.code]: newShift }
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [shiftTypes, currentUser]);
+
+  const handleDeleteShiftType = useCallback((shiftCode) => {
+    const beforeState = JSON.parse(JSON.stringify(shiftTypes));
+    setShiftTypes(prev => {
+      const copy = { ...prev };
+      delete copy[shiftCode];
+      return copy;
+    });
+
+    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'DELETE_SHIFT_TYPE',
+      operator_id: operatorId,
+      operator_name: operatorName,
+      notes: `主管【${operatorName}】刪除營業自訂班別【${shiftCode}】`,
+      before_snapshot: beforeState,
+      after_snapshot: null
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [shiftTypes, currentUser]);
+
+  const handleResetShiftTypes = useCallback(() => {
+    const beforeState = JSON.parse(JSON.stringify(shiftTypes));
+    localStorage.removeItem('xuelu_shift_types_v1');
+    setShiftTypes(DEFAULT_SHIFT_TYPES);
+
+    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'RESET_SHIFT_TYPES',
+      operator_id: operatorId,
+      operator_name: operatorName,
+      notes: `主管【${operatorName}】重設營業班別主檔回原廠出廠設定`,
+      before_snapshot: beforeState,
+      after_snapshot: DEFAULT_SHIFT_TYPES
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [shiftTypes, currentUser]);
+
   // 一鍵歷史回滾
   const handleRollback = useCallback((targetLogId) => {
     const targetLog = auditLogs.find(l => l.log_id === targetLogId);
@@ -753,6 +843,8 @@ export default function App() {
             <AnomalyAlertBanner
               validation={validation}
               stations={allStations}
+              employees={allEmployees}
+              currentUser={currentUser}
               selectedDay={selectedDay}
               onSelectDay={setSelectedDay}
             />
@@ -773,6 +865,8 @@ export default function App() {
               onSelectDay={setSelectedDay}
               onExportIcs={handleExportMyIcs}
               onExportCsv={handleExportStoreCsv}
+              currentUser={currentUser}
+              shiftTypes={shiftTypes}
             />
 
             <CompliancePanel
@@ -848,6 +942,7 @@ export default function App() {
             onFirstReview={handleFirstReview}
             onFinalApprove={handleFinalApprove}
             currentEmpId={currentUser.emp_id}
+            shiftTypes={shiftTypes}
           />
         )}
 
@@ -869,6 +964,17 @@ export default function App() {
             onUpdateEmployee={handleUpdateEmployee}
             onAddEmployee={handleAddEmployee}
             onUpdateStationLeader={handleUpdateStationLeader}
+          />
+        )}
+
+        {/* TAB 6-2: 營業班別主檔動態維護 (需求 #008 Manager 專屬規劃) */}
+        {activeTab === 'SHIFT_SETTINGS' && (
+          <ShiftMasterManagement
+            shiftTypes={shiftTypes}
+            onSaveShiftType={handleSaveShiftType}
+            onDeleteShiftType={handleDeleteShiftType}
+            onResetShiftTypes={handleResetShiftTypes}
+            currentUser={currentUser}
           />
         )}
 

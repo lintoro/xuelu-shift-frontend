@@ -1,7 +1,7 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發進度、現況盤點與維運交接報告 (PROGRESS.md)
 
-> **專案版本**：V2.5 正式完工驗收暨雲端上線準備版（最新標籤：`v1.7.0-issue006-done`）  
+> **專案版本**：V2.6 正式完工驗收暨雲端上線準備版（最新標籤：`v1.8.0-issues007-008-done`）  
 > **更新日期**：2026-09-10  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
 
@@ -35,6 +35,9 @@
 - [x] **輪班間隔檢核**：嚴格落實 C 班至次日 A 班等班距 $\ge 11$ 小時之合規性判定。
 - [x] **站點三級燈號監控**：🟢 綠燈（正常）、🟡 黃燈（機動支援覆蓋）、🔴 紅燈（嚴重空窗強制阻擋）。
 - [x] **排班種子引擎演算法重構 (`schedulerEngine.js`)**：落實主屬專責保底、MRV 最緊縮站點優先派工、PT solo 防呆與在勤正職機動馳援機制。
+- [x] **組長視野隔離與組別聚焦 (需求 #007)**：
+  - 組長登入時，異常提醒看板 (`AnomalyAlertBanner.jsx`) 自動過濾僅顯示管轄站點事件，避免被其他無關站點洗版；本組若全數合規，呈現專屬綠色「本組排班合規無異常」狀態卡。
+  - 排班大表 (`ScheduleTable.jsx`) 增設「站點篩選」下拉選單，組長登入時自動預設聚焦鎖定本組，免去上下翻找。
 - [x] **異常顯示提醒看板 (`AnomalyAlertBanner.jsx`)**：當極限條件下人力吃緊時，保底輸出最佳班表，並以頂部互動式橫幅即時提示空窗站點與調度建議。
 - [x] **大表表頭與警示雙向平滑滾動**：點擊異常橫幅日期一鍵平滑滾動定位至排班大表對應欄位並產生視覺高亮動畫。
 
@@ -63,6 +66,10 @@
   - 新增/編輯同仁彈窗支援「跨組支援清單 (`supported_stations`)」動態核取方塊。
   - 清潔組特別單位雙向隔離：主屬清潔組者僅能選清潔組（不支援外組）；主屬外組者清潔組全面反灰禁用（禁止外人支援）。
   - 排班引擎底層加入派工互鎖判定。
+- [x] **動態班別主檔管理與全系統連動 (需求 #008, `ShiftMasterManagement.jsx`)**：
+  - 權限架構明確歸屬 `Manager`（營運處長/店長）直接主導規劃，兼顧商場大檔期與特定活動自訂新班別（如 E 班、F 班）之現場營業調度彈性，IT/Admin 提供基礎維護與預設範本載入。
+  - 獨立元件 `ShiftMasterManagement.jsx`，支援班別代碼、名稱、起訖時段、休息時間、淨工時自動計算、8 款色彩徽章選取、勞基法 35 條休息防呆判定（工作跨度滿 6 小時提醒未滿 30 分鐘休息）。
+  - 動態班別狀態機與全系統連動（排班大表、調班申請門戶、實勤覆核等均自動載入最新班別選項）。
 - [x] **考勤月底結算機制與實勤雙確認閉環 (`MonthlySettlementPanel.jsx`)**：
   - 第一階段前月預排確認 + 第二階段當月月底實勤二次定稿簽認閉環體系。
   - 主管端一鍵發布出勤定稿通知，實時追蹤全員簽認進度條，支援匯出對帳 CSV 清冊。
@@ -102,6 +109,7 @@
 | 6 | `v1.5.0-issue002-done` | **【需求 #002】** 工作台特休/補休存摺明細 | 週年制特休純天數、12/31 補休歸零純時數、雙分頁存摺、覆核差額流水記錄 | 通過 |
 | 7 | `v1.6.0-issue004-done` | **【需求 #004】** 考勤月底結算雙確認閉環 | 月底結算面板、全員電子簽認、清冊 CSV 匯出、工作台到班核認卡片 | 通過 |
 | 8 | `v1.7.0-issue006-done` | **【需求 #006】** 特休與補休排定功能 (方案 A) | 劃休門戶新增 AL/CT 假別排定與存摺即時扣抵；主管實勤短少支援扣補休/特休時數沖抵 | 通過 |
+| 9 | `v1.8.0-issues007-008-done` | **【需求 #007 & #008】** 組長視野隔離 + Manager 動態班別主檔 | 組長異常視野隔離、大表本組自動聚焦、ShiftMasterManagement 班別自訂與全系統連動 | 通過 |
 
 ---
 
@@ -110,12 +118,15 @@
 後續接手人員或主管接續維運時，請遵循下列指引：
 
 ### 1. 核心代碼結構地圖
-* **前端入口與狀態總控**：[`src/App.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/App.jsx)（動態狀態機、調班終審覆寫、實勤覆核差額連動存摺、月底簽認回呼）。
-* **導覽選單**：[`src/components/Header.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Header.jsx)（整合「月底考勤結算」Tab 與各角色可見性）。
+* **前端入口與狀態總控**：[`src/App.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/App.jsx)（動態狀態機、調班終審覆寫、實勤覆核差額連動存摺、班別主檔持久化、月底簽認回呼）。
+* **導覽選單**：[`src/components/Header.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Header.jsx)（整合「月底考勤結算」、「班別主檔管理」Tab 與各角色可見性）。
 * **個人工作台與假勤存摺**：
   * 主面板：[`src/components/Dashboard/MyDashboard.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Dashboard/MyDashboard.jsx)（個人數據卡片、月底定稿二次簽署對帳卡）。
   * 假勤存摺彈窗：[`src/components/Dashboard/LeavePassbookModal.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Dashboard/LeavePassbookModal.jsx)（特休/補休雙分頁與流水記錄）。
-* **調班二階審查**：[`src/components/ShiftSwap/ShiftSwapPortal.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/ShiftSwap/ShiftSwapPortal.jsx)（雙人對調、找人代班、個人自調挪休）。
+* **排班大表與組別聚焦**：[`src/components/ScheduleTable.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/ScheduleTable.jsx)（站點過濾下拉選單、組長預設自動聚焦本組）。
+* **組長異常過濾**：[`src/components/AnomalyAlertBanner.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/AnomalyAlertBanner.jsx)（組長視野隔離、無異常綠色卡片）。
+* **班別主檔管理**：[`src/components/Admin/ShiftMasterManagement.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Admin/ShiftMasterManagement.jsx)（Manager 動態新增/編輯/停用班別、工時試算與色彩自訂）。
+* **調班二階審查**：[`src/components/ShiftSwap/ShiftSwapPortal.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/ShiftSwap/ShiftSwapPortal.jsx)（雙人對調、找人代班、個人自調挪休、動態班別支援）。
 * **主管實勤覆核**：[`src/components/WorkHours/ActualHoursOverride.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/WorkHours/ActualHoursOverride.jsx)（時間選單、休息選單、勞基法 35 條警示、未來日期鎖定）。
 * **考勤月底結算**：[`src/components/MonthlySettlement/MonthlySettlementPanel.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/MonthlySettlement/MonthlySettlementPanel.jsx)（發布確認、全員簽認進度、CSV 匯出）。
 * **人事管理**：[`src/components/Admin/PersonnelManagement.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Admin/PersonnelManagement.jsx)（支援清單多選、清潔組雙向隔離）。

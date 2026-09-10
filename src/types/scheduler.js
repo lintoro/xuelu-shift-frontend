@@ -1,6 +1,6 @@
 // src/types/scheduler.js
 
-export const SHIFT_TYPES = {
+export const DEFAULT_SHIFT_TYPES = {
   A: {
     code: 'A',
     name: '早班',
@@ -90,6 +90,10 @@ export const SHIFT_TYPES = {
     description: '加班核轉彈性補償休假 (全日 8h)'
   }
 };
+
+// 保持與既有靜態模組之 100% 完全相容
+export const SHIFT_TYPES = DEFAULT_SHIFT_TYPES;
+
 
 /**
  * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休、非補休)

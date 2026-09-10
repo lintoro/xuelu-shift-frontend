@@ -1,29 +1,82 @@
 import React, { useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ArrowRight, ShieldAlert, Users, Sparkles } from 'lucide-react';
+import { 
+  AlertCircle, 
+  AlertTriangle, 
+  CheckCircle2, 
+  ChevronDown, 
+  ChevronUp, 
+  ArrowRight, 
+  ShieldAlert, 
+  Sparkles,
+  Filter,
+  Layers
+} from 'lucide-react';
 
 /**
  * 異常顯示提醒介面 (Anomaly & Shortage Alert Banner)
- * 當排班引擎因人力極化、同組同休或極端假設而無法完全滿足站點最低門檻時：
- * 1. 依然保留並呈現最佳「基本班表」。
- * 2. 於排班總表上方常駐顯眼、專業、可互動的異常預警看板。
- * 3. 清晰列出缺工日期、站點、缺工人數與調度建議，並支援一鍵點擊定位至該日。
+ * 支援需求 #007：組長視野隔離與組別聚焦機制
+ * 1. 站點組長 (Leader)：視野自動隔離，僅顯示本組管轄站點之缺工與組員法規異常；本組無異常時顯示綠色合規標章。
+ * 2. 營運主管 (Manager) / Admin：預設顯示全館 9 大站點總覽，並提供站點快速切換選單。
+ * 3. 異常日期快速索引，點擊平滑滾動定位至該日。
  */
 export default function AnomalyAlertBanner({
   validation,
-  stations,
+  stations = [],
+  employees = [],
+  currentUser,
   selectedDay,
   onSelectDay
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // 判斷當前使用者角色與所屬站點
+  const isLeader = currentUser?.role === 'Leader';
+  const myLeaderStation = isLeader 
+    ? (stations.find(s => s.leader_emp_id === currentUser?.emp_id) || 
+       stations.find(s => s.station_id === currentUser?.primary_station) || 
+       stations[0])
+    : null;
+
+  // 站點過濾狀態 (Leader 固定為本站，Manager/Admin 預設 ALL 且可自由下拉切換)
+  const [managerStationFilter, setManagerStationFilter] = useState('ALL');
+
+  const effectiveStationFilter = isLeader 
+    ? (myLeaderStation?.station_id || 'ALL')
+    : managerStationFilter;
+
   if (!validation) return null;
 
-  const { criticalCount = 0, warningCount = 0, issues = [] } = validation;
-  const hasIssues = criticalCount > 0 || warningCount > 0;
+  const { issues = [] } = validation;
 
-  // 按日期分組異常事件
+  // 依選取的站點過濾異常事件
+  const filteredIssues = issues.filter(issue => {
+    if (effectiveStationFilter === 'ALL') return true;
+
+    // 1. 站點專責缺工或缺少 C 班
+    if (issue.station_id === effectiveStationFilter) return true;
+
+    // 2. 個人法規違規 (連續上班、間隔不足)，比對同仁主屬站點
+    if (issue.emp_id) {
+      const emp = employees.find(e => e.emp_id === issue.emp_id);
+      if (emp && emp.primary_station === effectiveStationFilter) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+
+  const criticalCount = filteredIssues.filter(i => i.severity === 'CRITICAL').length;
+  const warningCount = filteredIssues.filter(i => i.severity === 'WARNING').length;
+  const hasIssues = filteredIssues.length > 0;
+
+  // 取得當前檢視站點名稱
+  const currentStationObj = stations.find(s => s.station_id === effectiveStationFilter);
+  const currentStationName = currentStationObj ? currentStationObj.station_name : '全館';
+
+  // 按日期分組過濾後的異常事件
   const groupedIssues = {};
-  issues.forEach(issue => {
+  filteredIssues.forEach(issue => {
     const day = issue.day || 1;
     if (!groupedIssues[day]) {
       groupedIssues[day] = [];
@@ -33,26 +86,52 @@ export default function AnomalyAlertBanner({
 
   const sortedDays = Object.keys(groupedIssues).map(Number).sort((a, b) => a - b);
 
-  // 若完全無異常，呈現優雅合規綠色徽章卡
+  // 若當前選取範圍完全無異常，呈現優雅合規綠色徽章卡
   if (!hasIssues) {
     return (
-      <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 mb-6 flex items-center justify-between shadow-xs">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+      <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fade-in">
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-emerald-950">全館排班合規驗證通過</span>
+              <span className="text-xs font-bold text-emerald-950">
+                {isLeader ? `🎉 【${currentStationName}】排班合規驗證通過` : `【${currentStationName}】排班合規驗證通過`}
+              </span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px] font-black">
                 100% 合規
               </span>
             </div>
             <p className="text-[11px] text-emerald-800 mt-0.5">
-              9 大站點人力門檻、獨立顧站 (can_solo) 資格與勞基法工時限制均全數達標，無任何缺工警報。
+              {isLeader 
+                ? `組長管轄之【${currentStationName}】站點人力門檻、獨立顧站 (can_solo) 資格與組員勞基法工時限制均全數達標，本組無缺工空窗。`
+                : effectiveStationFilter === 'ALL'
+                ? '9 大站點人力門檻、獨立顧站 (can_solo) 資格與勞基法工時限制均全數達標，無任何缺工警報。'
+                : `【${currentStationName}】站點各日出勤人數完全符合平日/週末門檻，無缺工空窗。`}
             </p>
           </div>
         </div>
+
+        {/* 高管站點切換下拉 */}
+        {!isLeader && (
+          <div className="flex items-center space-x-1.5 bg-white/80 border border-emerald-300 rounded-lg px-2.5 py-1 text-xs">
+            <Filter className="w-3.5 h-3.5 text-emerald-700" />
+            <span className="text-[11px] text-emerald-800 font-medium">切換檢視站點：</span>
+            <select
+              value={managerStationFilter}
+              onChange={(e) => setManagerStationFilter(e.target.value)}
+              className="bg-transparent text-xs font-bold text-emerald-950 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">全館 9 大營業站點 (總覽)</option>
+              {stations.map(st => (
+                <option key={st.station_id} value={st.station_id}>
+                  {st.station_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     );
   }
@@ -76,7 +155,7 @@ export default function AnomalyAlertBanner({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-white tracking-wide">
-                排班異常提醒與人力缺口警示看板
+                {isLeader ? `【${currentStationName}】排班異常提醒與人力缺口警示看板` : `【${currentStationName}】排班異常提醒與人力缺口警示看板`}
               </h3>
               <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black shadow-xs">
                 {criticalCount} 處空窗
@@ -87,23 +166,46 @@ export default function AnomalyAlertBanner({
                 </span>
               )}
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/15">
-                極限邊界測試模式
+                {isLeader ? '組長本組聚焦視野' : '營運全域調度模式'}
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              系統已為您產出最佳「基本班表」。由於目前測試情境採用極限緊繃假設（如週末零裕度、技能孤島），以下日期尚有人力缺口需主管介入或調派兼職支援。
+              {isLeader 
+                ? `系統已為【${currentStationName}】過濾出專屬異常事件。以下日期尚有人力缺口需組長協調組員或申請跨組兼職支援。`
+                : '系統已為您產出最佳「基本班表」。由於目前測試情境採用極限緊繃假設，以下日期尚有人力缺口需主管介入調度。'}
             </p>
           </div>
         </div>
 
-        {/* 展開/收合控制 */}
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-semibold text-slate-200 transition-all cursor-pointer"
-        >
-          <span>{isExpanded ? '收合清單' : '查看異常詳細清單'}</span>
-          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
+        {/* 右側控制：高管站點篩選與展開收合按鈕 */}
+        <div className="flex items-center space-x-2">
+          {!isLeader && (
+            <div className="flex items-center space-x-1.5 bg-black/40 border border-white/20 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
+              <Filter className="w-3.5 h-3.5 text-slate-300" />
+              <select
+                value={managerStationFilter}
+                onChange={(e) => setManagerStationFilter(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
+              >
+                <option value="ALL" className="bg-slate-800 text-white">全館 9 大站點 (總覽)</option>
+                {stations.map(st => (
+                  <option key={st.station_id} value={st.station_id} className="bg-slate-800 text-white">
+                    {st.station_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 展開/收合控制 */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-semibold text-slate-200 transition-all cursor-pointer"
+          >
+            <span>{isExpanded ? '收合清單' : '查看異常詳細清單'}</span>
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* 展開之每日異常詳細清單 */}
@@ -161,7 +263,7 @@ export default function AnomalyAlertBanner({
                         )}
                         <div className="leading-tight truncate">
                           <span className="font-semibold text-slate-300 mr-1">
-                            [{issue.station_name || issue.station_id || '站點'}]
+                            [{issue.station_name || (issue.emp_name ? `${issue.emp_name}` : '站點')}]
                           </span>
                           <span className={issue.severity === 'CRITICAL' ? 'text-rose-300' : 'text-amber-200'}>
                             {issue.message}
@@ -180,7 +282,10 @@ export default function AnomalyAlertBanner({
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>主管調度建議</strong>：點擊上方卡片定位日期後，可在下方排班總表利用「調班申請」手動指定機動支援，或於人事名冊調整可支援站點以消除空窗。
+                <strong>{isLeader ? `【${currentStationName}】組長調度建議` : '主管調度建議'}</strong>：
+                {isLeader 
+                  ? '點擊上方卡片定位日期後，可於下方排班總表協調本組同仁，或於「調班二階審核」門戶申請跨組兼職同仁支援本站。'
+                  : '點擊上方卡片定位日期後，可在下方排班總表利用「調班申請」手動指定機動支援，或於人事名冊調整可支援站點以消除空窗。'}
               </span>
             </div>
           </div>
