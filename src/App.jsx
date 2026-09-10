@@ -264,8 +264,8 @@ export default function App() {
     }));
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
-  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照)
-  const handleOverrideHours = useCallback(({ empId, day, actualHours, notes }) => {
+  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休連動)
+  const handleOverrideHours = useCallback(({ empId, day, actualHours, startTime, endTime, breakHours, diffHours, notes }) => {
     const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
 
     const newOverrides = { ...scheduleOverrides };
@@ -274,22 +274,45 @@ export default function App() {
     newOverrides[empId][day] = {
       ...cur,
       actual_hours: actualHours,
+      actual_start_time: startTime,
+      actual_end_time: endTime,
+      actual_break_hours: breakHours,
+      actual_diff_hours: diffHours,
       actual_notes: notes
     };
     setScheduleOverrides(newOverrides);
+
+    // 正職同仁自動連動補休增減 (需求 #003)
+    if (diffHours && diffHours !== 0) {
+      const targetEmp = allEmployees.find(e => e.emp_id === empId);
+      if (targetEmp && targetEmp.role !== 'PT') {
+        setLeaveBalances(prev => {
+          const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
+          const newComp = Math.max(0, (currentBal.compTimeHours || 0) + diffHours);
+          return {
+            ...prev,
+            [empId]: {
+              ...currentBal,
+              compTimeHours: newComp
+            }
+          };
+        });
+      }
+    }
 
     const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
     if (!afterSnapshot[empId]) afterSnapshot[empId] = {};
     afterSnapshot[empId][day] = newOverrides[empId][day];
 
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
+    const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
     const newLog = {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
       action_type: 'HOURS_OVERRIDE',
       operator_id: currentUser ? currentUser.emp_id : 'B111014',
       operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-      notes: `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時`,
+      notes: `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}`,
       before_snapshot: beforeSnapshot,
       after_snapshot: afterSnapshot
     };
