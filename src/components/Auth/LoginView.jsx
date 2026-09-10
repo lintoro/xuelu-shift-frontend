@@ -24,6 +24,25 @@ export default function LoginView({
   const [showDemoCard, setShowDemoCard] = useState(false);
   const [eggToast, setEggToast] = useState('');
 
+  // 動態角色測試沙盒狀態
+  const [sandboxRoleTab, setSandboxRoleTab] = useState('ADMIN_MANAGER');
+  const [selectedSandboxEmpId, setSelectedSandboxEmpId] = useState('B111155');
+
+  // 依身分篩選同仁名冊
+  const getFilteredSandboxEmployees = (tabId) => {
+    switch (tabId) {
+      case 'ADMIN_MANAGER':
+        return employees.filter(e => e.role === 'Manager' || e.is_admin);
+      case 'LEADER':
+        return employees.filter(e => e.role === 'Leader');
+      case 'PT':
+        return employees.filter(e => e.role === 'PT');
+      case 'STAFF':
+      default:
+        return employees.filter(e => e.role === 'Staff' && !e.is_admin);
+    }
+  };
+
   const handleLogoClick = () => {
     const nextCount = logoClicks + 1;
     if (nextCount >= 5) {
@@ -253,13 +272,13 @@ export default function LoginView({
           </form>
         </div>
 
-        {/* 連點 5 次 Logo 解鎖之管理員彩蛋面版 */}
+        {/* 連點 5 次 Logo 解鎖之動態角色沙盒切換矩陣 (Dynamic Role Sandbox) */}
         {showDemoCard && (
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-amber-500/40 text-white animate-fadeIn mb-4">
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl p-4 border border-amber-500/50 text-white animate-fadeIn mb-4 shadow-2xl">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-300">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>開發管理除錯專用：雙軌解耦一鍵切換卡</span>
+                <span>動態角色測試沙盒 (Dynamic Role Sandbox)</span>
               </div>
               {onResetDemoData && (
                 <button
@@ -272,86 +291,110 @@ export default function LoginView({
               )}
             </div>
             <p className="text-[11px] text-slate-300 mb-3 leading-relaxed">
-              此面板已隱藏為管理員彩蛋（連點 5 次 Logo 展開或收合），門市同仁日常介面已 100% 純淨留白。
+              即時連動 Google 試算表在職員工名冊（共 {employees.length} 人）。可切換身分視角並選取任意同仁一鍵模擬登入：
             </p>
 
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              {/* 角色 1: 營運高階主管 兼 系統管理員 (ADMIN MANAGER) */}
-              <button
-                onClick={() => handleQuickLogin('B111155')}
-                className="w-full p-2.5 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-between text-left transition-colors cursor-pointer border border-purple-400/40"
-              >
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-white text-sm">陳鵬宇 (B111155)</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-600 text-white font-black tracking-wide">ADMIN MANAGER</span>
-                  </div>
-                  <span className="text-[11px] text-purple-200 block mt-0.5">
-                    業務角色: Manager (營運高管) · 掌管人事/國假調移/排班終審
-                  </span>
-                </div>
-                <span className="text-[11px] px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold shrink-0">Admin 登入</span>
-              </button>
-
-              {/* 角色 2: 正職同仁 兼 系統管理員 (ADMIN STAFF) */}
-              <button
-                onClick={() => handleQuickLogin('B111014')}
-                className="w-full p-2.5 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-between text-left transition-colors cursor-pointer border border-indigo-400/40"
-              >
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-white text-sm">林慶忠 (B111014)</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 text-white font-black tracking-wide">ADMIN STAFF</span>
-                  </div>
-                  <span className="text-[11px] text-indigo-200 block mt-0.5">
-                    業務角色: Staff (正職同仁) · 數據總控與回滾 (技術維護/無高管終審權)
-                  </span>
-                </div>
-                <span className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shrink-0">Admin 登入</span>
-              </button>
-
-              {/* 角色 3: 站點組長 (Leader) */}
-              <button
-                onClick={() => handleQuickLogin('B112001')}
-                className="w-full p-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <span className="font-bold text-white">李俐旻 (B112001)</span>
-                  <span className="text-[10px] text-blue-300 block">
-                    業務角色: Leader (服務台組長) · 站點每日出勤燈號與初審
-                  </span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/40 text-blue-200 font-semibold">登入</span>
-              </button>
-
-              {/* 角色 4: 一般正職 (Staff) */}
-              <button
-                onClick={() => handleQuickLogin('B113089')}
-                className="w-full p-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <span className="font-bold text-white">張舒扉 (B113089)</span>
-                  <span className="text-[10px] text-emerald-300 block">
-                    業務角色: Staff (服務台正職) · 我的專屬工作台與自選劃休
-                  </span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/40 text-emerald-200 font-semibold">登入</span>
-              </button>
-
-              {/* 角色 5: 計時同仁 (PT) */}
-              <button
-                onClick={() => handleQuickLogin('A202601')}
-                className="w-full p-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <span className="font-bold text-white">陳盈如(PT) (A202601)</span>
-                  <span className="text-[10px] text-amber-300 block">
-                    業務角色: PT (計時人員) · 雙軌報班與時薪總工時存摺
-                  </span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/40 text-amber-200 font-semibold">登入</span>
-              </button>
+            {/* 身分分類 Tab */}
+            <div className="grid grid-cols-4 gap-1 bg-slate-800/80 p-1 rounded-xl mb-3 text-xs">
+              {[
+                { id: 'ADMIN_MANAGER', label: '高管/Admin', badge: 'Manager' },
+                { id: 'LEADER', label: '站點組長', badge: 'Leader' },
+                { id: 'STAFF', label: '正職同仁', badge: 'Staff' },
+                { id: 'PT', label: '計時同仁', badge: 'PT' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSandboxRoleTab(tab.id);
+                    // 切換 tab 時自動選取該群組第一位
+                    const first = getFilteredSandboxEmployees(tab.id)[0];
+                    if (first) setSelectedSandboxEmpId(first.emp_id);
+                  }}
+                  className={`py-1.5 px-1 rounded-lg text-center font-bold text-[11px] transition-all cursor-pointer ${
+                    sandboxRoleTab === tab.id
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
+
+            {/* 動態人員選單與一鍵登入區 */}
+            {(() => {
+              const filteredList = getFilteredSandboxEmployees(sandboxRoleTab);
+              const selectedEmp = employees.find(e => e.emp_id === selectedSandboxEmpId) || filteredList[0];
+
+              return (
+                <div className="space-y-3">
+                  {/* 人員下拉選單 */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                      選擇測試人員 (該身分在職共 {filteredList.length} 位)：
+                    </label>
+                    <select
+                      value={selectedEmp?.emp_id || ''}
+                      onChange={(e) => setSelectedSandboxEmpId(e.target.value)}
+                      className="w-full py-2 px-3 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {filteredList.map(emp => (
+                        <option key={emp.emp_id} value={emp.emp_id} className="bg-slate-800 text-white">
+                          [{emp.emp_id}] {emp.name} · {emp.primary_station} {emp.can_solo ? '★Solo' : ''} {emp.is_admin ? '(Admin)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 選定同仁之屬性卡片預覽 */}
+                  {selectedEmp && (
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-extrabold text-white text-xs">{selectedEmp.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300 font-bold">
+                            {selectedEmp.emp_id}
+                          </span>
+                          {selectedEmp.is_admin && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400 text-amber-950 font-black">
+                              Admin
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          selectedEmp.role === 'Manager' ? 'bg-purple-900/60 text-purple-300 border border-purple-500/40' :
+                          selectedEmp.role === 'Leader' ? 'bg-blue-900/60 text-blue-300 border border-blue-500/40' :
+                          selectedEmp.role === 'PT' ? 'bg-amber-900/60 text-amber-300 border border-amber-500/40' :
+                          'bg-emerald-900/60 text-emerald-300 border border-emerald-500/40'
+                        }`}>
+                          {selectedEmp.role === 'Manager' ? '營運高管' : selectedEmp.role === 'Leader' ? '站點組長' : selectedEmp.role === 'PT' ? '計時同仁' : '正職同仁'}
+                        </span>
+                      </div>
+                      <p className="text-slate-300 text-[10px]">
+                        主屬站點: <span className="font-semibold text-white">{selectedEmp.primary_station}</span>
+                        {selectedEmp.can_solo && ' · 具備獨立顧站 (can_solo)'}
+                      </p>
+                      {selectedEmp.supported_stations && selectedEmp.supported_stations.length > 0 && (
+                        <p className="text-slate-400 text-[10px] truncate">
+                          可支援站點: {selectedEmp.supported_stations.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 一鍵以該同仁身分登入按鈕 */}
+                  <button
+                    type="button"
+                    onClick={() => selectedEmp && handleQuickLogin(selectedEmp.emp_id)}
+                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                    <span>以【{selectedEmp?.name}】身分一鍵登入系統 →</span>
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
