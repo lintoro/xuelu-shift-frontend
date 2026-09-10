@@ -41,7 +41,7 @@ export default function Header({
     { id: 'SCHEDULE', label: '排班總表', icon: LayoutGrid, show: true },
     { id: 'LEAVE_PORTAL', label: isPT ? '意向報班' : '志願劃休', icon: HeartHandshake, show: !isManager || isPT },
     { id: 'CONFLICTS', label: '衝突透視', icon: Eye, show: isManager || isAdmin },
-    { id: 'SWAPS', label: '調班二階審核', icon: ArrowLeftRight, show: true },
+    { id: 'SWAPS', label: (isManager || isLeader || isAdmin) ? '調班二階審核' : '線上調班申請', icon: ArrowLeftRight, show: !isPT },
     { id: 'HOURS_OVERRIDE', label: '實勤覆核', icon: Clock, show: isManager || isLeader },
     { id: 'MONTHLY_SETTLEMENT', label: '月底考勤結算', icon: FileCheck2, show: isManager || isAdmin },
     // 核心決策：人事管理、班別規劃與 120 天平帳僅限營運高階 Manager，Admin 嚴格無人事與班別規劃權！

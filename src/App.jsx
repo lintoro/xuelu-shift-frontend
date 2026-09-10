@@ -792,6 +792,15 @@ export default function App() {
     );
   }
 
+  // 業務角色權限判定
+  const isManager = currentUser.role === 'Manager';
+  const isAdmin = !!currentUser.is_admin;
+  const isLeader = currentUser.role === 'Leader';
+  const isStaff = currentUser.role === 'Staff';
+  const isPT = currentUser.role === 'PT';
+  // 是否具備全館或站點排班調度權（Manager/Admin 具備全域調度權，Leader 具備本組調度權；PT 與 Staff 無調班調度權）
+  const canManageShifts = isManager || isAdmin || isLeader;
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* 頂部導航 */}
@@ -831,30 +840,41 @@ export default function App() {
         {/* TAB 1: 全館排班總表 (Schedule Matrix) */}
         {activeTab === 'SCHEDULE' && (
           <>
-            <EngineDebugger
-              onRunEngine={handleRunEngine}
-              metrics={scheduleResult}
-              validation={validation}
-              rules={currentRules}
-              isResignedActive={isResignedActive}
-              onToggleResignation={handleToggleResignation}
-            />
+            {/* 僅高階主管 Manager 或 系統管理員 Admin 可檢視與操作演算法引擎除錯 */}
+            {(isManager || isAdmin) && (
+              <EngineDebugger
+                onRunEngine={handleRunEngine}
+                metrics={scheduleResult}
+                validation={validation}
+                rules={currentRules}
+                isResignedActive={isResignedActive}
+                onToggleResignation={handleToggleResignation}
+              />
+            )}
 
-            <AnomalyAlertBanner
-              validation={validation}
-              stations={allStations}
-              employees={allEmployees}
-              currentUser={currentUser}
-              selectedDay={selectedDay}
-              onSelectDay={setSelectedDay}
-            />
+            {/* 僅具備排班調度權限之主管 (Manager/Admin 全館，Leader 本組) 顯示排班異常提醒與人力缺口警示看板 */}
+            {/* 需求 #009：PT 與 STAFF 無調班調度權，嚴禁在此面板呈現任何排班異常提醒 */}
+            {canManageShifts && (
+              <AnomalyAlertBanner
+                validation={validation}
+                stations={allStations}
+                employees={allEmployees}
+                currentUser={currentUser}
+                selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
+              />
+            )}
 
-            <StationStatusOverview
-              stations={allStations}
-              validation={validation}
-              selectedDay={selectedDay}
-            />
+            {/* 僅具備排班調度權限者顯示 9 大站點人力三級燈號即時檢驗 */}
+            {canManageShifts && (
+              <StationStatusOverview
+                stations={allStations}
+                validation={validation}
+                selectedDay={selectedDay}
+              />
+            )}
 
+            {/* 出勤排班大表：全員可見（PT 與 STAFF 聚焦純淨班表，無異常警示干擾） */}
             <ScheduleTable
               scheduleResult={scheduleResult}
               validation={validation}
@@ -869,10 +889,13 @@ export default function App() {
               shiftTypes={shiftTypes}
             />
 
-            <CompliancePanel
-              validation={validation}
-              rules={currentRules}
-            />
+            {/* 勞基法合規證明書：僅主管與組長檢視法規審查細項 */}
+            {canManageShifts && (
+              <CompliancePanel
+                validation={validation}
+                rules={currentRules}
+              />
+            )}
           </>
         )}
 
@@ -942,6 +965,7 @@ export default function App() {
             onFirstReview={handleFirstReview}
             onFinalApprove={handleFinalApprove}
             currentEmpId={currentUser.emp_id}
+            currentUser={currentUser}
             shiftTypes={shiftTypes}
           />
         )}

@@ -30,7 +30,15 @@ export default function AnomalyAlertBanner({
   const [isExpanded, setIsExpanded] = useState(true);
 
   // 判斷當前使用者角色與所屬站點
+  const isManager = currentUser?.role === 'Manager';
+  const isAdmin = !!currentUser?.is_admin;
   const isLeader = currentUser?.role === 'Leader';
+
+  // 需求 #009 業務防呆：PT 與 STAFF 無排班/調配調班權限，嚴格不顯示任何排班異常提醒與人力缺口警示看板
+  if (!isManager && !isAdmin && !isLeader) {
+    return null;
+  }
+
   const myLeaderStation = isLeader 
     ? (stations.find(s => s.leader_emp_id === currentUser?.emp_id) || 
        stations.find(s => s.station_id === currentUser?.primary_station) || 

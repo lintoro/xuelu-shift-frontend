@@ -27,10 +27,18 @@ export default function ShiftSwapPortal({
   onFirstReview,
   onFinalApprove,
   currentEmpId,
+  currentUser,
   shiftTypes = SHIFT_TYPES
 }) {
-  const currentEmp = employees.find(e => e.emp_id === currentEmpId) || employees[0];
+  const currentEmp = currentUser || employees.find(e => e.emp_id === currentEmpId) || employees[0];
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
+
+  // 審核權限判定：組長初審 (Leader/Manager/Admin)、高管終審 (Manager/Admin)；一般 Staff / PT 僅有填報權，無審核核准權
+  const isManager = currentEmp?.role === 'Manager';
+  const isAdmin = !!currentEmp?.is_admin;
+  const isLeader = currentEmp?.role === 'Leader';
+  const canFirstReview = isLeader || isManager || isAdmin;
+  const canFinalApprove = isManager || isAdmin;
 
   // 申請模式：SWAP (雙人對調) 或 SELF_RESCHEDULE (個人自調挪休)
   const [swapType, setSwapType] = useState('SWAP');
@@ -561,9 +569,9 @@ export default function ShiftSwapPortal({
                       </div>
                     </div>
 
-                    {/* 審核操作按鈕 */}
+                    {/* 審核操作按鈕：僅具審核權限之組長或主管可操作，一般 Staff / PT 僅檢視進度 */}
                     <div className="flex items-center space-x-2">
-                      {isPendingFirst && (
+                      {isPendingFirst && canFirstReview && (
                         <button
                           onClick={() => onFirstReview(req.swap_id, true)}
                           className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95"
@@ -573,7 +581,7 @@ export default function ShiftSwapPortal({
                         </button>
                       )}
 
-                      {isPendingFinal && (
+                      {isPendingFinal && canFinalApprove && (
                         <button
                           onClick={() => onFinalApprove(req.swap_id, true)}
                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95"
@@ -583,7 +591,7 @@ export default function ShiftSwapPortal({
                         </button>
                       )}
 
-                      {(isPendingFirst || isPendingFinal) && (
+                      {((isPendingFirst && canFirstReview) || (isPendingFinal && canFinalApprove)) && (
                         <button
                           onClick={() => isPendingFirst ? onFirstReview(req.swap_id, false) : onFinalApprove(req.swap_id, false)}
                           className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer"
