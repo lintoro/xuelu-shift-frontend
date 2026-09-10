@@ -107,7 +107,7 @@ export default function MonthlySettlementPanel({
 
   // 匯出 CSV 清冊 (含法規合規與違規強制核實加註提醒)
   const handleExportCsv = () => {
-    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,補休增減時數,線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
+    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,延長加班與差額時數(依法計發加班費或意願換補休),線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
     staffSummaries.forEach(s => {
       let violationNote = '法定合規出勤';
       if (s.violationCount > 0) {
@@ -255,7 +255,9 @@ export default function MonthlySettlementPanel({
                 <th className="p-2.5 font-bold text-center">實到天數</th>
                 <th className="p-2.5 font-bold text-center">排休天數</th>
                 <th className="p-2.5 font-bold text-right">實勤總工時</th>
-                <th className="p-2.5 font-bold text-right">補休增減</th>
+                <th className="p-2.5 font-bold text-right" title="正職延長工時認列：依法以計發加班費為法定原則；同仁亦得依自主意願轉入補休存摺">
+                  加班/差額時數
+                </th>
                 <th className="p-2.5 font-bold text-center">調動次數</th>
                 <th className="p-2.5 font-bold text-center">法規合規與主管加註</th>
                 <th className="p-2.5 font-bold text-center">月底簽認狀態</th>

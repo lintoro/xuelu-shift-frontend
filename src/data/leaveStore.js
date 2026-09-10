@@ -113,12 +113,12 @@ export const INITIAL_PASSBOOK_TRANSACTIONS = [
     category: 'COMP_TIME',
     date: '2026-08-08',
     action: 'INCREASE',
-    title: '父親節檔期現場突發客流延長工時 (核轉補休)',
+    title: '父親節檔期現場突發客流延長工時 (依意願轉補休)',
     amount: 4,
     unit: '小時',
     balance_after: 20,
     ref_no: 'OT_20260808_01',
-    notes: '經主管核定現場加班 4 小時轉補休，12/31 結算歸零'
+    notes: '同仁自主意願申請將現場加班 4 小時轉入補休存摺，12/31 結算歸零'
   },
   {
     tx_id: 'TX_20260822_04',
@@ -159,7 +159,7 @@ export const INITIAL_PASSBOOK_TRANSACTIONS = [
     unit: '小時',
     balance_after: 40,
     ref_no: 'OT_20260815_02',
-    notes: '全日專案輪替支援核轉補休，效期至 2026/12/31'
+    notes: '全日專案輪替支援，經同仁意願選擇轉補休，效期至 2026/12/31'
   }
 ];
 

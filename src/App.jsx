@@ -451,13 +451,13 @@ export default function App() {
             date: `2026-09-${day < 10 ? '0' + day : day}`,
             action: 'INCREASE',
             title: isLaborViolationOverride 
-              ? `高管強制核定超時出勤 (+${diffHours}h 核轉補休)`
-              : `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)`,
+              ? `高管強制核定超時出勤 (+${diffHours}h 延長工時認列/意願補休)`
+              : `主管實勤覆核延長工時 (+${diffHours}h 延長工時認列/意願補休)`,
             amount: diffHours,
             unit: '小時',
             balance_after: updatedComp,
             ref_no: `OVERRIDE_9${day}`,
-            notes: notes || '門市現場實勤覆核差額自動連動存摺'
+            notes: notes || '門市現場實勤覆核延長工時，依法核算加班費或依同仁意願轉入補休'
           };
           setPassbookTransactions(prev => [newTx, ...prev]);
         } else {

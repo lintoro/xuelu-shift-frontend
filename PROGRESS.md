@@ -1,7 +1,7 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發進度、現況盤點與維運交接報告 (PROGRESS.md)
 
-> **專案版本**：V2.8 正式完工驗收暨雲端上線準備版（最新標籤：`v2.0.0-hours-override-triple-done`）  
+> **專案版本**：V2.8.1 正式完工驗收暨雲端上線準備版（最新標籤：`v2.0.1-overtime-pay-first-done`）  
 > **更新日期**：2026-09-10  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
 

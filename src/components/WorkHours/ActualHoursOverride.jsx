@@ -221,15 +221,15 @@ export default function ActualHoursOverride({
     });
 
     const resultNote = isPT
-      ? `PT 人員實際到班結算 ${netActualHours} 小時，已累計至本月總工時！`
+      ? `PT 人員實際到班結算 ${netActualHours} 小時，已累計至本月計薪工時！`
       : hoursDiff > 0
-      ? `正職加班增額 +${hoursDiff} 小時，已自動為 ${currentEmp.name} 累計補休！`
+      ? `正職加班核定 +${hoursDiff} 小時，已正式認列延長工時（依法列入加班費核算，或由同仁依自主意願申請換取補休）！`
       : hoursDiff < 0
-      ? `正職出勤短少 ${hoursDiff} 小時，已自動扣減補休！`
-      : `出勤工時完全符合原排 (${netActualHours}h)，補休無變動。`;
+      ? `正職出勤短少 ${hoursDiff} 小時，已依選定方式沖抵假勤！`
+      : `出勤工時完全符合原排 (${netActualHours}h)，工時無差額。`;
 
     setFeedbackMsg(`已成功覆核 ${currentEmp.name} 於 9/${selectedDay} 日實勤！${resultNote}`);
-    setTimeout(() => setFeedbackMsg(''), 5000);
+    setTimeout(() => setFeedbackMsg(''), 6000);
   };
 
   // 開啟營運高管三度確認彈窗
@@ -289,7 +289,7 @@ export default function ActualHoursOverride({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            核心決策 13 & 最新勞動基準法第 32/35 條檢核 · 高管三次確認強制放行 · 報表加註提醒連動
+            核心決策 13 & 勞基法 24/32/35 條合規：打卡起訖精確覆核 · 加班工時依法計發/意願換補休 · 高管三次確認強制放行 · 報表加註提醒連動
           </p>
         </div>
 
@@ -518,7 +518,12 @@ export default function ActualHoursOverride({
                   <span className={`font-bold font-mono text-sm ${
                     hoursDiff > 0 ? 'text-emerald-600' : hoursDiff < 0 ? 'text-rose-600' : 'text-slate-600'
                   }`}>
-                    {hoursDiff > 0 ? `+${hoursDiff} 小時 (自動增加補休)` : hoursDiff < 0 ? `${hoursDiff} 小時 (扣減補休)` : '0 小時 (相符)'}
+                    {hoursDiff > 0 ? `+${hoursDiff} 小時 (核定加班 · 依法列加班費/意願換補休)` : hoursDiff < 0 ? `${hoursDiff} 小時 (出勤短少 · 依選擇沖抵)` : '0 小時 (相符)'}
+                  </span>
+                )}
+                {hoursDiff > 0 && !isPT && (
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    ※ 依《勞基法》第 24/32-1 條規定，延長工時以核給加班費為法定原則；同仁亦得依個人意願選擇轉入補休存摺。
                   </span>
                 )}
               </div>
