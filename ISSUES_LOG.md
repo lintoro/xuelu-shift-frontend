@@ -487,6 +487,70 @@
   3. 全系統程式碼、登入彩蛋卡、操作日誌 fallback、超時授權核定與測試腳本全數對齊。
 - **目前狀態**：`✅ 已完成修復並通過驗證 (v2.7.1-admin-roles-aligned-done)`
 
+### 📌 [需求 #019] 登入後畫面全域白屏（Runtime Error）之根因定位、物件防呆與全域 ErrorBoundary 容錯機制
+
+- **來源反饋**：主管於登入後報告系統出現「一片雪白」，無論正常登入或除錯模式皆無法進入。
+- **現狀與痛點分析**：
+  1. **型別不匹配引爆渲染崩潰**：系統前期將班別擴充為 `{shift_type, station_id, work_hours, ...}` 物件，但在 `holidayTransferStore.js` 中直接以字串比對 `shift !== 'OFF'`，並將整個物件賦值給 `shiftCode` 當作 JSX 文字渲染，觸發 React 致命錯誤：`Objects are not valid as a React child`。
+  2. **物件屬性未初始化**：`swapStore.js` 在執行虛擬排班模擬時，若傳入之 `scheduleMap` 為空，未先建立員工字典即存取 `simMap[applicantId][targetDay]`，引發 `Cannot set properties of undefined`。
+  3. **缺乏渲染錯誤邊界**：React SPA 若未掛載 `ErrorBoundary`，任何單一子組件的未捕捉例外皆會導致整棵 DOM 樹卸載，呈現一片雪白，無法供使用者或工程師快速獲取錯誤診斷資訊。
+- **最佳實踐與架構方案**：
+  1. **型別比對防呆**：全面改用 `typeof shift === 'object' ? shift?.shift_type : shift` 提取純字串班別代碼。
+  2. **安全物件初始化**：在虛擬排班運算前確保 `simMap[applicantId] = {}` 與 `simMap[targetId] = {}`。
+  3. **加裝全域 ErrorBoundary 保護機制**：在 `src/main.jsx` 根部掛載 `src/components/ErrorBoundary.jsx`，攔截所有未捕捉異常，呈現深色專業診斷看板（含 Component Stack 堆疊）並提供「🔄 清除快取並重新載入」按鈕，徹底消滅全頁白屏現象。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.8.0-error-boundary-runtime-fixed)`
+
+### 📌 [需求 #020] 前後端雙向連動斷層（Google 試算表改角色無效、雲端班表無從儲存）之自動拉取與手動刷新機制
+
+- **來源反饋**：主管於 Google 試算表手動修改員工角色（Staff ➜ Manager），但在前端網頁上重新整理後名冊與角色依然維持舊狀態；且試算表 `Schedules` 頁籤為空，前端不知如何發布班表。
+- **現狀與痛點分析**：
+  1. **前端啟動只讀快取**：`App.jsx` 在組件初始化時僅從 `localStorage` 快取讀取 `allEmployees`，內部的 `handlePullFromCloud` 函式只有定義卻從未在組件掛載 (`componentDidMount`) 時主動呼叫。
+  2. **缺乏雲端班表儲存通道**：前端算好最佳班表後，未在出勤總表提供直觀的發布按鈕，導致 Google 試算表的 `Schedules` 永遠為空，造成使用者誤以為資料庫未連線。
+- **最佳實踐與架構方案**：
+  1. **掛載時自動拉取 (Auto-Pull on Mount)**：在 `App.jsx` 加入 `useEffect`，只要偵測到處於雲端連線模式，一開啟系統或切換月份即自動向 Google Apps Script 發送 `schedule.getInitialData`，將試算表最新人事名冊與班表更新至前端。
+  2. **頂部導航新增手動「🔄 刷新試算表」按鈕**：主管在 Google 試算表修改任何欄位後，按一下按鈕 1 秒內即時更新，免重新登入。
+  3. **排班總表新增主管專屬「🚀 啟動智慧排班」與「☁️ 儲存至 Google 試算表」按鈕**：
+     - 點擊「🚀 啟動智慧排班」：0.5 秒重新依 7 休 1 與站點配額求解最佳班表。
+     - 點擊「☁️ 儲存至 Google 試算表」：一鍵呼叫 `ApiService.saveScheduleMatrix`，將 37 位同仁整月班表整批寫入試算表 `Schedules` 工作表！
+  4. **後端相容性保證**：經比對 `Code.gs` 後端已完整支援 `schedule.saveSchedule`，本項優化**完全不需修改或重新部署 Google Apps Script**。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.9.0-cloud-sync-buttons-done)`
+
+### 📌 [需求 #021] 系統免開本機 24 小時線上化：GitHub 版本控制與 Vercel 雲端 CI/CD 自動化建置部署流程
+
+- **來源反饋**：主管詢問系統是否必須個人電腦一直開著才能運作，希望能隨時隨地透過手機、平板或任意電腦連上系統。
+- **現狀與痛點分析**：
+  - 系統先前僅於本機 `http://localhost:3000` 透過 Vite 運行，電腦關機或離開區網門市人員即無法登入操作。
+  - 後端 Google Sheets 雖然 24 小時在線，但前端 SPA 缺乏公網雲端託管平台。
+- **最佳實踐與架構方案**：
+  1. **GitHub 雲端倉庫建立與託管**：
+     - 建立遠端儲存庫 `https://github.com/lintoro/xuelu-shift-frontend.git`。
+     - 透過 Windows Git Credential Manager 授權將所有核心模組與修復紀錄推送到 `main` 分支。
+  2. **Vercel 現代化無伺服器託管與 CI/CD 管道**：
+     - 新增 `vercel.json` 配置單頁應用路由重寫（`rewrites` 導向 `/index.html`，防止重新整理 404）。
+     - 使用 GitHub 帳號登入 Vercel，匯入倉庫一鍵部署（Hobby 免費方案）。
+     - 實現現代化 **Git Push 自動觸發 CI/CD 發布**：未來本地只要執行 `git push origin main`，Vercel 在 30 秒內自動在雲端打包編譯並更新上線。
+     - 獲得專屬 HTTPS 正式網址，支援手機 Safari / Chrome「加入主畫面」，化身獨立 App 隨時隨地免開電腦運作。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v3.0.0-github-vercel-cicd-deployed)`
+
+### 📌 [需求 #022] 登入除錯彩蛋重構升級：動態角色沙盒切換矩陣（四身分分類、連動 Google 試算表 37 位在職名冊、即時屬性卡、一鍵模擬登入）
+
+- **來源反饋**：主管提出登入測試彩蛋卡片（連點 5 次 Logo）原本寫死固定人員，但門市人員會更替升遷，希望能支援動態切換不同身分測試者，從各種角色視角進行驗收。
+- **現狀與痛點分析**：
+  - 原彩蛋面板內嵌 5 筆固定名單，一旦試算表名冊調整（如升遷組長、改名字、新進同仁），彩蛋面板即脫節無法使用，且無法涵蓋所有 9 大站點組長。
+- **最佳實踐與架構方案**：
+  1. **頂部 4 大身分分頁切換 (Role Tabs)**：
+     - 👑 **高管/Admin**（自動過濾 Manager 角色或具備 Admin 權限者）
+     - 🛡️ **站點組長 (Leader)**（動態列出名冊中所有營業站點組長）
+     - 👤 **正職同仁 (Staff)**（自動篩選所有在職一般正職）
+     - ⏱️ **計時同仁 (PT)**（動態呈現所有計時夥伴）
+  2. **動態人員選擇下拉選單 (Dynamic Dropdown)**：
+     - 100% 動態連動傳入之在職同仁名冊（共 37 人），下拉選單即時標註 `[工號] 姓名 · 主屬站點 ★Solo (Admin)`。
+  3. **選定同仁屬性卡片即時預覽 (Persona Info Card)**：
+     - 選定同仁後，卡片即時展示其主屬站點、是否具備獨立顧站 (can_solo) 與跨組支援清單。
+  4. **一鍵快速免密模擬登入**：
+     - 點擊「以【同仁姓名】身分一鍵登入系統」，免輸密碼直接切換至該同仁真實視角，完美驗收其工作台、班表大表與權限隔離。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v3.1.0-dynamic-role-sandbox-done)`
+
 ---
 
 ## 處理歷史與版本控制記錄 (Version & Rollback History)
@@ -513,3 +577,8 @@
 | 18 | 2026-09-10 | 【需求 #016】排班全月時限生命週期四階段推進器與主管時限控制面板 | `v2.5.0-swap-deadline-guard-done` | `v2.6.0-timeline-lifecycle-done` | 建立劃休截止、排班審查定稿、每日實勤覆核與月底雙簽認四階段推進器，支援時間機器情境模擬，單元測試全數通過，npm run build 通過。 |
 | 19 | 2026-09-10 | 【需求 #017】登入正式化、國定假日調移平帳與服務業免雙薪出勤同意閉環 | `v2.6.0-timeline-lifecycle-done` | `v2.7.0-holiday-consent-done` | 登入工號記住/留白/彩蛋收納；全年度國假動態加總平帳；國假出勤同仁同意書電子簽認與結算清冊免雙薪法律憑據，自動化測試通過，npm run build 通過。 |
 | 20 | 2026-09-10 | 【需求 #018】核心角色定位校正 (林慶忠為 ADMIN STAFF，陳鵬宇為 ADMIN MANAGER) | `v2.7.0-holiday-consent-done` | `v2.7.1-admin-roles-aligned-done` | 校正陳鵬宇為 ADMIN MANAGER (營運高管/終審)，林慶忠為 ADMIN STAFF (正職/數據維護)，全系統彩蛋、日誌、授權全面對齊，自動化測試與 build 通過。 |
+| 21 | 2026-09-11 | 【需求 #019】登入後畫面全域白屏 (Runtime Error) 追查、型別防呆加固與 ErrorBoundary 容錯機制 | `v2.7.1-admin-roles-aligned-done` | `v2.8.0-error-boundary-runtime-fixed` | 修正 swapStore 與 holidayTransferStore 物件比對與未初始化，加掛全域 ErrorBoundary 防止整頁白屏，提供堆疊診斷與快取重置，npm run build 通過。 |
+| 22 | 2026-09-11 | 【需求 #020】前後端雙向連動斷層 (Google試算表改角色無效、班表無從發布) 之自動拉取與儲存通道 | `v2.8.0-error-boundary-runtime-fixed` | `v2.9.0-cloud-sync-buttons-done` | App 掛載時自動從 GAS 拉取最新人事名冊與班表，頂部新增「刷新試算表」，排班表新增「啟動智慧排班」與「儲存至Google試算表」，npm run build 通過。 |
+| 23 | 2026-09-11 | 【需求 #021】系統免開本機 24 小時線上化：GitHub 儲存庫建立與 Vercel 雲端 CI/CD 自動化建置部署 | `v2.9.0-cloud-sync-buttons-done` | `v3.0.0-github-vercel-cicd-deployed` | 綁定 GitHub 倉庫 (lintoro/xuelu-shift-frontend)，新增 vercel.json SPA 路由配置，Vercel 一鍵部署上線，支援 Git Push 30 秒自動發布與手機 PWA。 |
+| 24 | 2026-09-11 | 【需求 #022】登入除錯彩蛋重構升級：動態角色沙盒切換矩陣 (四身分切換、連動試算表37人名冊、一鍵模擬登入) | `v3.0.0-github-vercel-cicd-deployed` | `v3.1.0-dynamic-role-sandbox-done` | 彩蛋升級為高管/組長/正職/PT 4分頁，動態連動試算表名冊與站點標籤，支援屬性卡即時預覽與一鍵免密切換身分登入，npm run build 通過。 |
+
