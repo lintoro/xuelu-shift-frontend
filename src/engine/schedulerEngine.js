@@ -77,12 +77,18 @@ export function generateSeedSchedule({
   approvedRequests.forEach(req => {
     const { emp_id, day, leave_type } = req;
     if (scheduleMap[emp_id] && !scheduleMap[emp_id][day]) {
+      const shiftCode = (leave_type === 'AL' || leave_type === '特休') 
+        ? 'AL' 
+        : (leave_type === 'CT' || leave_type === '補休') 
+        ? 'CT' 
+        : 'OFF';
+
       scheduleMap[emp_id][day] = {
-        shift_type: 'OFF',
+        shift_type: shiftCode,
         station_id: null,
         work_hours: 0,
         is_support: false,
-        note: leave_type || '自選休假'
+        note: shiftCode === 'AL' ? '排定特休 (AL)' : shiftCode === 'CT' ? '排定補休 (CT)' : (leave_type || '自選休假')
       };
     }
   });

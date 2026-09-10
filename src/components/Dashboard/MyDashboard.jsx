@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle } from 'lucide-react';
-import { SHIFT_TYPES } from '../../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 
 export default function MyDashboard({
@@ -33,12 +33,12 @@ export default function MyDashboard({
   const myShiftsList = [];
   for (let d = 1; d <= totalDays; d++) {
     const shift = mySchedule[d];
-    if (shift?.shift_type && shift.shift_type !== 'OFF' && shift.shift_type !== 'TERM_OFF') {
+    if (isWorkingShift(shift?.shift_type)) {
       myWorkDays++;
       const hrs = shift.actual_hours !== undefined ? shift.actual_hours : shift.work_hours || 8;
       myTotalHours += hrs;
       myShiftsList.push({ day: d, shift, shiftInfo: SHIFT_TYPES[shift.shift_type] });
-    } else if (shift?.shift_type === 'OFF') {
+    } else if (shift?.shift_type) {
       myOffDays++;
     }
   }

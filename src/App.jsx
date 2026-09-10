@@ -185,11 +185,69 @@ export default function App() {
   }, []);
 
   const handleSavePreferences = useCallback((empId, updatedPrefsForEmp) => {
+    // 比對特休與補休排定變動 (需求 #006 方案 A)
+    const prevMyPrefs = preferences.filter(p => p.emp_id === empId && p.priority === 1);
+    const newMyPrefs = updatedPrefsForEmp.filter(p => p.priority === 1);
+
+    const prevAlDays = prevMyPrefs.filter(p => p.leave_type === 'AL').length;
+    const newAlDays = newMyPrefs.filter(p => p.leave_type === 'AL').length;
+    const alDiff = newAlDays - prevAlDays;
+
+    const prevCtCount = prevMyPrefs.filter(p => p.leave_type === 'CT').length;
+    const newCtCount = newMyPrefs.filter(p => p.leave_type === 'CT').length;
+    const ctHoursDiff = (newCtCount - prevCtCount) * 8;
+
+    if (alDiff !== 0 || ctHoursDiff !== 0) {
+      setLeaveBalances(prev => {
+        const cur = prev[empId] || { annualLeaveDays: 0, compTimeHours: 0 };
+        return {
+          ...prev,
+          [empId]: {
+            ...cur,
+            annualLeaveDays: Math.max(0, cur.annualLeaveDays - alDiff),
+            compTimeHours: Math.max(0, cur.compTimeHours - ctHoursDiff)
+          }
+        };
+      });
+
+      if (alDiff > 0) {
+        setPassbookTransactions(prev => [{
+          tx_id: `TX_${Date.now()}_AL`,
+          emp_id: empId,
+          category: 'ANNUAL_LEAVE',
+          date: '2026-09-01',
+          action: 'DEDUCT',
+          title: `預排班表排定法定特休 (-${alDiff} 天)`,
+          amount: -alDiff,
+          unit: '天',
+          balance_after: Math.max(0, (leaveBalances[empId]?.annualLeaveDays || 0) - alDiff),
+          ref_no: 'LEAVE_PREF_AL',
+          notes: '月前志願序劃休預先排定法定特休全日'
+        }, ...prev]);
+      }
+
+      if (ctHoursDiff > 0) {
+        setPassbookTransactions(prev => [{
+          tx_id: `TX_${Date.now()}_CT`,
+          emp_id: empId,
+          category: 'COMP_TIME',
+          date: '2026-09-01',
+          action: 'DEDUCT',
+          title: `預排班表排定彈性補休 (-${ctHoursDiff} 小時)`,
+          amount: -ctHoursDiff,
+          unit: '小時',
+          balance_after: Math.max(0, (leaveBalances[empId]?.compTimeHours || 0) - ctHoursDiff),
+          ref_no: 'LEAVE_PREF_CT',
+          notes: '月前志願序劃休預先排定彈性補休全日(8h)'
+        }, ...prev]);
+      }
+    }
+
     setPreferences(prev => {
       const otherEmpPrefs = prev.filter(p => p.emp_id !== empId);
       return [...otherEmpPrefs, ...updatedPrefsForEmp];
     });
-  }, []);
+  }, [preferences, leaveBalances]);
 
   const handleSavePtAvailability = useCallback((empId, updatedAvailForEmp) => {
     setPtAvailability(prev => ({
@@ -312,8 +370,8 @@ export default function App() {
     }));
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
-  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休連動)
-  const handleOverrideHours = useCallback(({ empId, day, actualHours, startTime, endTime, breakHours, diffHours, notes }) => {
+  // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，需求 #006 方案 A)
+  const handleOverrideHours = useCallback(({ empId, day, actualHours, startTime, endTime, breakHours, diffHours, deductionType = 'COMP_TIME', notes }) => {
     const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
 
     const newOverrides = { ...scheduleOverrides };
@@ -326,44 +384,90 @@ export default function App() {
       actual_end_time: endTime,
       actual_break_hours: breakHours,
       actual_diff_hours: diffHours,
+      actual_deduction_type: deductionType,
       actual_notes: notes
     };
     setScheduleOverrides(newOverrides);
 
-    // 正職同仁自動連動補休增減與存摺流水紀錄 (需求 #002 & #003)
+    // 正職同仁自動連動補休/特休增減與存摺流水紀錄 (需求 #002, #003 & #006 方案 A)
     if (diffHours && diffHours !== 0) {
       const targetEmp = allEmployees.find(e => e.emp_id === empId);
       if (targetEmp && targetEmp.role !== 'PT') {
-        let updatedComp = 0;
-        setLeaveBalances(prev => {
-          const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
-          const newComp = Math.max(0, (currentBal.compTimeHours || 0) + diffHours);
-          updatedComp = newComp;
-          return {
-            ...prev,
-            [empId]: {
-              ...currentBal,
-              compTimeHours: newComp
-            }
-          };
-        });
-
-        // 自動寫入存摺流水紀錄
         const isInc = diffHours > 0;
-        const newTx = {
-          tx_id: `TX_${Date.now()}`,
-          emp_id: empId,
-          category: 'COMP_TIME',
-          date: `2026-09-${day < 10 ? '0' + day : day}`,
-          action: isInc ? 'INCREASE' : 'DEDUCT',
-          title: isInc ? `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)` : `主管實勤覆核工時短少 (${diffHours}h 扣減補休)`,
-          amount: diffHours,
-          unit: '小時',
-          balance_after: updatedComp,
-          ref_no: `OVERRIDE_9${day}`,
-          notes: notes || '門市現場實勤覆核差額自動連動存摺'
-        };
-        setPassbookTransactions(prev => [newTx, ...prev]);
+        
+        if (isInc) {
+          // 加班延長：正職自動核轉補休增額
+          let updatedComp = 0;
+          setLeaveBalances(prev => {
+            const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
+            const newComp = Math.max(0, (currentBal.compTimeHours || 0) + diffHours);
+            updatedComp = newComp;
+            return {
+              ...prev,
+              [empId]: { ...currentBal, compTimeHours: newComp }
+            };
+          });
+
+          const newTx = {
+            tx_id: `TX_${Date.now()}`,
+            emp_id: empId,
+            category: 'COMP_TIME',
+            date: `2026-09-${day < 10 ? '0' + day : day}`,
+            action: 'INCREASE',
+            title: `主管實勤覆核工時延時 (+${diffHours}h 核轉補休)`,
+            amount: diffHours,
+            unit: '小時',
+            balance_after: updatedComp,
+            ref_no: `OVERRIDE_9${day}`,
+            notes: notes || '門市現場實勤覆核差額自動連動存摺'
+          };
+          setPassbookTransactions(prev => [newTx, ...prev]);
+        } else {
+          // 工時短少或臨時請假 (diffHours < 0)
+          if (deductionType === 'COMP_TIME') {
+            let updatedComp = 0;
+            setLeaveBalances(prev => {
+              const currentBal = prev[empId] || { annualLeaveDays: 3, compTimeHours: 0 };
+              const newComp = Math.max(0, (currentBal.compTimeHours || 0) + diffHours);
+              updatedComp = newComp;
+              return {
+                ...prev,
+                [empId]: { ...currentBal, compTimeHours: newComp }
+              };
+            });
+
+            const newTx = {
+              tx_id: `TX_${Date.now()}`,
+              emp_id: empId,
+              category: 'COMP_TIME',
+              date: `2026-09-${day < 10 ? '0' + day : day}`,
+              action: 'DEDUCT',
+              title: `臨時請假小時扣抵彈性補休 (${diffHours}h)`,
+              amount: diffHours,
+              unit: '小時',
+              balance_after: updatedComp,
+              ref_no: `OVERRIDE_9${day}`,
+              notes: notes || '門市現場實勤短少，扣減彈性補休時數'
+            };
+            setPassbookTransactions(prev => [newTx, ...prev]);
+          } else if (deductionType === 'ANNUAL_LEAVE') {
+            // 特休小時沖抵
+            const newTx = {
+              tx_id: `TX_${Date.now()}`,
+              emp_id: empId,
+              category: 'ANNUAL_LEAVE',
+              date: `2026-09-${day < 10 ? '0' + day : day}`,
+              action: 'DEDUCT',
+              title: `臨時請假小時扣抵法定特休 (${diffHours}h)`,
+              amount: diffHours,
+              unit: '小時',
+              balance_after: leaveBalances[empId]?.annualLeaveDays || 0,
+              ref_no: `OVERRIDE_9${day}`,
+              notes: notes || '門市現場實勤短少，以小時沖抵法定特休'
+            };
+            setPassbookTransactions(prev => [newTx, ...prev]);
+          }
+        }
       }
     }
 
@@ -373,18 +477,19 @@ export default function App() {
 
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
     const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
+    const deductText = diffHours < 0 ? ` [沖抵方式: ${deductionType === 'COMP_TIME' ? '扣補休' : deductionType === 'ANNUAL_LEAVE' ? '扣特休' : '事假未補'}]` : '';
     const newLog = {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
       action_type: 'HOURS_OVERRIDE',
       operator_id: currentUser ? currentUser.emp_id : 'B111014',
       operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-      notes: `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}`,
+      notes: `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}${deductText}`,
       before_snapshot: beforeSnapshot,
       after_snapshot: afterSnapshot
     };
     setAuditLogs(prev => [newLog, ...prev]);
-  }, [effectiveScheduleMap, scheduleOverrides, allEmployees, currentUser]);
+  }, [effectiveScheduleMap, scheduleOverrides, allEmployees, currentUser, leaveBalances]);
 
   // 發布月底出勤確認通知 (需求 #004 雙確認閉環機制)
   const handlePublishSettlement = useCallback(() => {

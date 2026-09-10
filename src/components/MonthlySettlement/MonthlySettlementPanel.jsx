@@ -12,6 +12,7 @@ import {
   Sparkles,
   FileSpreadsheet
 } from 'lucide-react';
+import { isWorkingShift } from '../../types/scheduler.js';
 
 /**
  * 考勤月底結算與實勤確認閉環面板 (Monthly Settlement Panel)
@@ -48,7 +49,7 @@ export default function MonthlySettlementPanel({
 
     for (let d = 1; d <= totalDays; d++) {
       const s = myShifts[d];
-      if (s && s.shift_type && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF') {
+      if (s && isWorkingShift(s.shift_type)) {
         actualWorkDays++;
         const hours = s.actual_hours !== undefined ? s.actual_hours : (s.work_hours || 8);
         totalWorkHours += hours;

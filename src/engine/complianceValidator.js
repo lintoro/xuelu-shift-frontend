@@ -1,5 +1,5 @@
 // src/engine/complianceValidator.js
-import { SHIFT_TYPES, ALERT_LEVELS } from '../types/scheduler.js';
+import { SHIFT_TYPES, ALERT_LEVELS, isWorkingShift } from '../types/scheduler.js';
 
 /**
  * 勞基法全方位合規檢核器與站點三級燈號判定模組
@@ -40,7 +40,7 @@ export function validateScheduleCompliance({
     const allWorkingStaffToday = [];
     employees.forEach(emp => {
       const assignment = scheduleMap[emp.emp_id]?.[d];
-      if (assignment?.shift_type && assignment.shift_type !== 'OFF' && assignment.shift_type !== 'TERM_OFF') {
+      if (isWorkingShift(assignment?.shift_type)) {
         allWorkingStaffToday.push(emp);
       }
     });
@@ -52,7 +52,7 @@ export function validateScheduleCompliance({
       // 計算目前已專責指派至該站的人員
       const assignedToStation = employees.filter(emp => {
         const item = scheduleMap[emp.emp_id]?.[d];
-        return item && item.station_id === station.station_id && item.shift_type !== 'OFF' && item.shift_type !== 'TERM_OFF';
+        return item && item.station_id === station.station_id && isWorkingShift(item.shift_type);
       });
 
       // 檢查此站是否有高階主管自主排班保留名額 (Executive Self-Scheduling Reserved Slot)
@@ -132,7 +132,7 @@ export function validateScheduleCompliance({
 
     for (let d = 1; d <= totalDays; d++) {
       const current = scheduleMap[emp.emp_id]?.[d];
-      const isWorking = current?.shift_type && current.shift_type !== 'OFF' && current.shift_type !== 'TERM_OFF';
+      const isWorking = isWorkingShift(current?.shift_type);
 
       if (isWorking) {
         workDays++;
@@ -174,7 +174,7 @@ export function validateScheduleCompliance({
         // 輪班間隔 >= 11 小時檢驗 (勞基法第34條)
         if (d > 1) {
           const prev = scheduleMap[emp.emp_id]?.[d - 1];
-          if (prev?.shift_type && prev.shift_type !== 'OFF' && prev.shift_type !== 'TERM_OFF') {
+          if (isWorkingShift(prev?.shift_type)) {
             const prevShift = SHIFT_TYPES[prev.shift_type];
             const currShift = SHIFT_TYPES[current.shift_type];
 

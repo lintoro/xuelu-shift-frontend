@@ -46,6 +46,7 @@ export default function ActualHoursOverride({
   const [startTime, setStartTime] = useState('10:00');
   const [endTime, setEndTime] = useState('19:00');
   const [breakHours, setBreakHours] = useState(1.0);
+  const [deductionType, setDeductionType] = useState('COMP_TIME'); // COMP_TIME, ANNUAL_LEAVE, UNPAID (需求 #006 方案 A)
   const [actualNoteInput, setActualNoteInput] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
@@ -154,6 +155,7 @@ export default function ActualHoursOverride({
       endTime: isAbsent ? null : endTime,
       breakHours: isAbsent ? 0 : breakHours,
       diffHours: hoursDiff,
+      deductionType: hoursDiff < 0 ? deductionType : null,
       isAbsent: isAbsent,
       notes: actualNoteInput || (
         isAbsent 
@@ -403,6 +405,82 @@ export default function ActualHoursOverride({
                 排班短少 -{scheduledHours} 小時
               </span>
             )}
+          </div>
+        )}
+
+        {/* 正職工時短少/臨時請假沖抵方式 (需求 #006 方案 A) */}
+        {hoursDiff < 0 && !isPT && (
+          <div className="p-3.5 rounded-xl bg-purple-50/80 border border-purple-200 mb-4 text-xs">
+            <div className="flex items-center space-x-2 mb-2">
+              <Sparkles className="w-4 h-4 text-purple-700" />
+              <h4 className="font-bold text-purple-900">
+                正職實勤短少 {Math.abs(hoursDiff)} 小時 · 臨時請假/差額沖抵方式
+              </h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'COMP_TIME' 
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-purple-50/50'
+              }`}>
+                <div className="flex items-center space-x-1.5 font-bold">
+                  <input
+                    type="radio"
+                    name="deductionType"
+                    value="COMP_TIME"
+                    checked={deductionType === 'COMP_TIME'}
+                    onChange={(e) => setDeductionType(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span>扣抵彈性補休 (-{Math.abs(hoursDiff)}h)</span>
+                </div>
+                <span className={`text-[10px] mt-1 ${deductionType === 'COMP_TIME' ? 'text-purple-100' : 'text-slate-500'}`}>
+                  自同仁可用補休時數扣減流水
+                </span>
+              </label>
+
+              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'ANNUAL_LEAVE' 
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-amber-50/50'
+              }`}>
+                <div className="flex items-center space-x-1.5 font-bold">
+                  <input
+                    type="radio"
+                    name="deductionType"
+                    value="ANNUAL_LEAVE"
+                    checked={deductionType === 'ANNUAL_LEAVE'}
+                    onChange={(e) => setDeductionType(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span>扣抵法定特休 (-{Math.abs(hoursDiff)}h)</span>
+                </div>
+                <span className={`text-[10px] mt-1 ${deductionType === 'ANNUAL_LEAVE' ? 'text-amber-100' : 'text-slate-500'}`}>
+                  以小時沖抵法定特休存摺
+                </span>
+              </label>
+
+              <label className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'UNPAID' 
+                  ? 'bg-slate-700 text-white border-slate-700 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}>
+                <div className="flex items-center space-x-1.5 font-bold">
+                  <input
+                    type="radio"
+                    name="deductionType"
+                    value="UNPAID"
+                    checked={deductionType === 'UNPAID'}
+                    onChange={(e) => setDeductionType(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span>事假/純工時短少</span>
+                </div>
+                <span className={`text-[10px] mt-1 ${deductionType === 'UNPAID' ? 'text-slate-200' : 'text-slate-500'}`}>
+                  不扣假勤存摺，僅作差額紀錄
+                </span>
+              </label>
+            </div>
           </div>
         )}
 

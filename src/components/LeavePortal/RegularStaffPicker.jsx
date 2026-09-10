@@ -25,7 +25,7 @@ export default function RegularStaffPicker({
 
   const [activeDay, setActiveDay] = useState(null); // 目前正在編輯的日期
   const [selectedPriority, setSelectedPriority] = useState(1);
-  const [selectedLeaveType, setSelectedLeaveType] = useState('自選例休');
+  const [selectedLeaveType, setSelectedLeaveType] = useState('OFF'); // OFF, AL, CT
   const [compHours, setCompHours] = useState(8);
   const [note, setNote] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
@@ -83,7 +83,7 @@ export default function RegularStaffPicker({
       // 載入既有設定供修改
       setActiveDay(cell.day);
       setSelectedPriority(cell.myPref.priority || 1);
-      setSelectedLeaveType(cell.myPref.leave_type || '自選例休');
+      setSelectedLeaveType(cell.myPref.leave_type || 'OFF');
       setCompHours(cell.myPref.comp_hours || 8);
       setNote(cell.myPref.note || '');
     } else {
@@ -103,7 +103,7 @@ export default function RegularStaffPicker({
       setActiveDay(cell.day);
       // 若當日已滿額，預設建議登記為備選第 2 志願
       setSelectedPriority(cell.isFull ? 2 : 1);
-      setSelectedLeaveType('自選例休');
+      setSelectedLeaveType('OFF');
       setCompHours(8);
       setNote('');
     }
@@ -113,16 +113,16 @@ export default function RegularStaffPicker({
   const handleSaveDayPref = () => {
     if (!activeDay) return;
 
-    // 特休與補休餘額防呆
-    if (selectedLeaveType === '特休' && (leaveBalance.annualLeaveDays || 0) <= 0) {
-      setFeedbackMsg('特休假可用天數不足！');
-      setTimeout(() => setFeedbackMsg(''), 3000);
+    // 特休與補休餘額防呆 (需求 #006 方案 A)
+    if (selectedLeaveType === 'AL' && (leaveBalance.annualLeaveDays || 0) <= 0) {
+      setFeedbackMsg('特休假可用天數不足（餘額為 0 天）！無法排定特休。');
+      setTimeout(() => setFeedbackMsg(''), 4000);
       return;
     }
 
-    if (selectedLeaveType === '補休' && (leaveBalance.compTimeHours || 0) < compHours) {
-      setFeedbackMsg(`補休時數不足（可用 ${leaveBalance.compTimeHours || 0} 小時，欲申請 ${compHours} 小時）！`);
-      setTimeout(() => setFeedbackMsg(''), 3000);
+    if (selectedLeaveType === 'CT' && (leaveBalance.compTimeHours || 0) < 8) {
+      setFeedbackMsg(`補休時數不足全日 8 小時（目前可用 ${leaveBalance.compTimeHours || 0} 小時）！無法排定全日補休。`);
+      setTimeout(() => setFeedbackMsg(''), 4000);
       return;
     }
 
@@ -132,14 +132,15 @@ export default function RegularStaffPicker({
       day: activeDay,
       priority: selectedPriority,
       leave_type: selectedLeaveType,
-      comp_hours: selectedLeaveType === '補休' ? compHours : 0,
+      comp_hours: selectedLeaveType === 'CT' ? 8 : 0,
       note
     });
 
     onSavePreferences(employee.emp_id, updated);
     setActiveDay(null);
-    setFeedbackMsg(`已成功更新 ${activeDay} 日自選劃休意向！`);
-    setTimeout(() => setFeedbackMsg(''), 3000);
+    const leaveLabel = selectedLeaveType === 'AL' ? '法定特休 (扣1天)' : selectedLeaveType === 'CT' ? '彈性補休 (扣8h)' : '常態例休';
+    setFeedbackMsg(`已成功登記 9/${activeDay} 日 ${leaveLabel} 志願意向！`);
+    setTimeout(() => setFeedbackMsg(''), 3500);
   };
 
   // 刪除當日劃休
@@ -201,6 +202,18 @@ export default function RegularStaffPicker({
                 style={{ width: `${(weekendSelected / 1) * 100}%` }}
               />
             </div>
+          </div>
+
+          {/* 特休可用天數 */}
+          <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-2 min-w-[90px] text-center">
+            <div className="text-[10px] text-amber-700 font-bold">特休可用</div>
+            <div className="text-xs font-black text-amber-900 mt-0.5">{leaveBalance.annualLeaveDays || 0} 天整</div>
+          </div>
+
+          {/* 補休可用時數 */}
+          <div className="bg-purple-50/80 border border-purple-200 rounded-lg p-2 min-w-[95px] text-center">
+            <div className="text-[10px] text-purple-700 font-bold">可用補休</div>
+            <div className="text-xs font-black text-purple-900 mt-0.5">{leaveBalance.compTimeHours || 0} 小時</div>
           </div>
         </div>
       </div>
@@ -276,13 +289,19 @@ export default function RegularStaffPicker({
                 {/* 本人已劃休徽章 */}
                 {isSelected ? (
                   <div className="my-auto">
-                    <div className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center justify-between ${
-                      cell.myPref.priority === 1
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-amber-500 text-white shadow-xs'
+                    <div className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center justify-between shadow-2xs ${
+                      cell.myPref.leave_type === 'AL'
+                        ? 'bg-amber-500 text-white'
+                        : cell.myPref.leave_type === 'CT'
+                        ? 'bg-purple-600 text-white'
+                        : cell.myPref.priority === 1
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-600 text-white'
                     }`}>
                       <span>第 {cell.myPref.priority} 志願</span>
-                      <span className="text-[9px] font-normal opacity-90">{cell.myPref.leave_type}</span>
+                      <span className="text-[9px] font-black opacity-95">
+                        {cell.myPref.leave_type === 'AL' ? '特休(AL)' : cell.myPref.leave_type === 'CT' ? '補休(CT)' : '例休'}
+                      </span>
                     </div>
                     {cell.myPref.note && (
                       <div className="text-[9px] text-slate-500 truncate mt-0.5">
@@ -365,17 +384,21 @@ export default function RegularStaffPicker({
               </div>
             </div>
 
-            {/* 假別選擇 */}
+            {/* 假別選擇 (需求 #006 方案 A) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">假別型態</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">假別型態 (全日排定)</label>
               <select
                 value={selectedLeaveType}
                 onChange={(e) => setSelectedLeaveType(e.target.value)}
                 className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
               >
-                <option value="自選例休">自選例休 (法定常態休假)</option>
-                <option value="特休">法定特休 (扣特休存摺，餘額 {leaveBalance.annualLeaveDays} 天)</option>
-                <option value="補休">彈性補休 (扣補休時數，餘額 {leaveBalance.compTimeHours} 小時)</option>
+                <option value="OFF">自選常態例休 (一般排休，不扣存摺)</option>
+                <option value="AL">
+                  法定特休 (全日8h · 扣特休 1 天 · 餘額 {leaveBalance.annualLeaveDays || 0} 天)
+                </option>
+                <option value="CT">
+                  彈性補休 (全日8h · 扣補休 8 小時 · 餘額 {leaveBalance.compTimeHours || 0} 小時)
+                </option>
               </select>
             </div>
 

@@ -66,8 +66,52 @@ export const SHIFT_TYPES = {
     color: 'bg-gray-100 text-gray-400 border-gray-200',
     badgeColor: 'bg-gray-400 text-white',
     description: '離職生效後絕對真空，不計產能'
+  },
+  AL: {
+    code: 'AL',
+    name: '特休',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-amber-50 text-amber-700 border-amber-300',
+    badgeColor: 'bg-amber-600 text-white',
+    description: '法定週年制特別休假 (全日 8h)'
+  },
+  CT: {
+    code: 'CT',
+    name: '補休',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-purple-50 text-purple-700 border-purple-300',
+    badgeColor: 'bg-purple-600 text-white',
+    description: '加班核轉彈性補償休假 (全日 8h)'
   }
 };
+
+/**
+ * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休、非補休)
+ */
+export function isWorkingShift(shiftType) {
+  return !!shiftType && 
+    shiftType !== 'OFF' && 
+    shiftType !== 'TERM_OFF' && 
+    shiftType !== 'AL' && 
+    shiftType !== 'CT';
+}
+
+/**
+ * 判定該班別是否為各類休假 (含一般例休、特休、補休、離職真空)
+ */
+export function isOffShift(shiftType) {
+  return !shiftType || 
+    shiftType === 'OFF' || 
+    shiftType === 'TERM_OFF' || 
+    shiftType === 'AL' || 
+    shiftType === 'CT';
+}
 
 export const ALERT_LEVELS = {
   GREEN: {
