@@ -13,19 +13,42 @@ import { DEFAULT_SHIFT_TYPES } from '../types/scheduler.js';
  */
 
 const STORAGE_KEY_GAS_URL = 'xuelu_gas_api_url';
+const STORAGE_KEY_CLOUD_DISABLED = 'xuelu_cloud_disabled';
+export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ/exec';
 
 export const ApiService = {
-  // 取得當前設定之 GAS 網址
+  // 取得當前設定之 GAS 網址 (優先順序: localStorage 手動設定 -> 停用旗標 -> VITE_GAS_API_URL 環境變數 -> 全域變數 -> 系統預設正式資料庫)
   getGasUrl() {
-    if (typeof window === 'undefined') return '';
+    if (typeof window === 'undefined') return DEFAULT_GAS_URL;
+
+    // 若使用者主動點擊切換為本地沙盒
+    if (localStorage.getItem(STORAGE_KEY_CLOUD_DISABLED) === 'true') {
+      return '';
+    }
+
     const stored = localStorage.getItem(STORAGE_KEY_GAS_URL);
     if (stored && stored.trim()) return stored.trim();
-    return window.__GAS_API_URL__ || '';
+
+    try {
+      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GAS_API_URL) {
+        const envUrl = import.meta.env.VITE_GAS_API_URL.trim();
+        if (envUrl) return envUrl;
+      }
+    } catch {
+      // 忽略
+    }
+
+    if (window.__GAS_API_URL__ && window.__GAS_API_URL__.trim()) {
+      return window.__GAS_API_URL__.trim();
+    }
+
+    return DEFAULT_GAS_URL;
   },
 
   // 設置新 GAS 網址至瀏覽器快取
   setGasUrl(url) {
     if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEY_CLOUD_DISABLED);
     const cleanUrl = (url || '').trim();
     if (cleanUrl) {
       localStorage.setItem(STORAGE_KEY_GAS_URL, cleanUrl);
@@ -34,9 +57,18 @@ export const ApiService = {
     }
   },
 
+  // 恢復為預設正式雲端資料庫網址
+  resetToDefaultGasUrl() {
+    if (typeof window === 'undefined') return DEFAULT_GAS_URL;
+    localStorage.removeItem(STORAGE_KEY_CLOUD_DISABLED);
+    localStorage.removeItem(STORAGE_KEY_GAS_URL);
+    return DEFAULT_GAS_URL;
+  },
+
   // 清除 GAS 網址並切換回本地沙盒
   clearGasUrl() {
     if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEY_CLOUD_DISABLED, 'true');
     localStorage.removeItem(STORAGE_KEY_GAS_URL);
   },
 
@@ -51,7 +83,8 @@ export const ApiService = {
 
   // 檢查當前是否啟用雲端模式
   isCloudMode() {
-    return this.isGasIframe() || !!this.getGasUrl();
+    const url = this.getGasUrl();
+    return this.isGasIframe() || (!!url && url.startsWith('http'));
   },
 
   // 伺服器連線延遲測試 (Ping)
@@ -85,7 +118,8 @@ export const ApiService = {
 
   // 統一 JSON-RPC 呼叫網關
   async callRpc(method, params = {}, options = {}) {
-    const gasUrl = options.urlOverride || this.getGasUrl();
+    let gasUrl = options.urlOverride || this.getGasUrl();
+    if (gasUrl === '__DISABLED__') gasUrl = '';
 
     // 1. 若處於 GAS 嵌入 iframe (google.script.run)
     if (this.isGasIframe() && !options.urlOverride) {
@@ -124,8 +158,8 @@ export const ApiService = {
 
         const response = await fetch(gasUrl, {
           method: 'POST',
-          // 依 Google Apps Script 規範，使用 text/plain;charset=utf-8 繞過瀏覽器 CORS 預檢限制
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          // 依 Google Apps Script 規範，使用 application/x-www-form-urlencoded 能 100% 確保觸發 doPost 並順利取得 JSON 回應
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: method,

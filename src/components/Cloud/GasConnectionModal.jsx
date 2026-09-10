@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   Server
 } from 'lucide-react';
-import { ApiService } from '../../services/apiService.js';
+import { ApiService, DEFAULT_GAS_URL } from '../../services/apiService.js';
 
 export default function GasConnectionModal({
   isOpen,
@@ -189,10 +189,18 @@ export default function GasConnectionModal({
 
           {/* GAS 網址輸入區 */}
           <div className="space-y-2">
-            <label className="block font-semibold text-xs text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-              <span>Google Apps Script Web App 部署網址 (Web App URL)</span>
-              <span className="text-[11px] text-indigo-500 font-normal">自動記憶於本機快取</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block font-semibold text-xs text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                Google Apps Script Web App 部署網址 (Web App URL)
+              </label>
+              <button
+                type="button"
+                onClick={() => setGasUrl(DEFAULT_GAS_URL)}
+                className="text-[11px] text-indigo-500 hover:text-indigo-600 font-medium hover:underline transition"
+              >
+                帶入系統預設雲端資料庫
+              </button>
+            </div>
             <div className="relative">
               <input
                 type="url"

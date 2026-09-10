@@ -192,8 +192,9 @@ export default function LoginView({
               <Lock className="w-4 h-4 text-indigo-600" />
               <span>個人登入認證</span>
             </h2>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-              安全連線已啟用
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Google 雲端資料庫連線中 ({employees.length} 人)
             </span>
           </div>
 
