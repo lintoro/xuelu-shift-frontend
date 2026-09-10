@@ -18,6 +18,7 @@ import FairnessMetricsPanel from './components/Fairness/FairnessMetricsPanel.jsx
 import LoginView from './components/Auth/LoginView.jsx';
 import ChangePasswordModal from './components/Auth/ChangePasswordModal.jsx';
 import MyDashboard from './components/Dashboard/MyDashboard.jsx';
+import MonthlySettlementPanel from './components/MonthlySettlement/MonthlySettlementPanel.jsx';
 
 import { STATIONS, EMPLOYEES, DEFAULT_MONTHLY_RULES, MOCK_MONTH_BORDERS } from './data/mockMasterData.js';
 import { 
@@ -95,6 +96,10 @@ export default function App() {
 
   // 調班/手動覆寫層 (Schedule Overrides)
   const [scheduleOverrides, setScheduleOverrides] = useState({});
+
+  // 月底考勤結算發布狀態與全員簽認記錄 (需求 #004 雙確認閉環機制)
+  const [isSettlementPublished, setIsSettlementPublished] = useState(false);
+  const [signOffList, setSignOffList] = useState({});
 
   // 規則組合
   const currentRules = useMemo(() => ({
@@ -381,6 +386,48 @@ export default function App() {
     setAuditLogs(prev => [newLog, ...prev]);
   }, [effectiveScheduleMap, scheduleOverrides, allEmployees, currentUser]);
 
+  // 發布月底出勤確認通知 (需求 #004 雙確認閉環機制)
+  const handlePublishSettlement = useCallback(() => {
+    setIsSettlementPublished(true);
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'MONTHLY_SETTLEMENT_PUBLISH',
+      operator_id: currentUser ? currentUser.emp_id : 'B111014',
+      operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+      notes: `正式發布 ${currentRules.target_year_month || '2026-09'} 月底實勤定稿班表與全員到班雙確認通知`,
+      before_snapshot: null,
+      after_snapshot: null
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [currentUser, currentRules]);
+
+  // 同仁完成實勤電子簽認
+  const handleEmployeeSignOff = useCallback((empId) => {
+    const emp = allEmployees.find(e => e.emp_id === empId);
+    const nowIso = new Date().toLocaleString('zh-TW', { hour12: false });
+    setSignOffList(prev => ({
+      ...prev,
+      [empId]: {
+        emp_id: empId,
+        emp_name: emp?.name || empId,
+        signed_at: nowIso,
+        status: 'CONFIRMED'
+      }
+    }));
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'EMPLOYEE_SIGNOFF',
+      operator_id: empId,
+      operator_name: emp?.name || empId,
+      notes: `同仁完成月底實勤定稿班表電子簽署確認 (${nowIso})`,
+      before_snapshot: null,
+      after_snapshot: null
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [allEmployees]);
+
   // 人事主檔更新
   const handleUpdateEmployee = useCallback((updatedEmp) => {
     setAllEmployees(prev => prev.map(e => e.emp_id === updatedEmp.emp_id ? updatedEmp : e));
@@ -578,6 +625,9 @@ export default function App() {
             swapRequests={swapRequests}
             rules={currentRules}
             passbookTransactions={passbookTransactions}
+            isSettlementPublished={isSettlementPublished}
+            signOffList={signOffList}
+            onSignOff={handleEmployeeSignOff}
             onExportMyIcs={handleExportMyIcs}
             onNavigateTab={setActiveTab}
           />
@@ -739,6 +789,20 @@ export default function App() {
           <AuditLogsPanel
             auditLogs={auditLogs}
             onRollback={handleRollback}
+          />
+        )}
+
+        {/* TAB 10: 考勤月底結算與實勤雙確認閉環 (需求 #004) */}
+        {activeTab === 'MONTHLY_SETTLEMENT' && (
+          <MonthlySettlementPanel
+            employees={allEmployees}
+            stations={allStations}
+            scheduleMap={effectiveScheduleMap}
+            swapRequests={swapRequests}
+            rules={currentRules}
+            isSettlementPublished={isSettlementPublished}
+            signOffList={signOffList}
+            onPublishSettlement={handlePublishSettlement}
           />
         )}
       </main>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, ShieldAlert, Sparkles, User, BookOpen } from 'lucide-react';
+import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle } from 'lucide-react';
 import { SHIFT_TYPES } from '../../types/scheduler.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 
@@ -11,6 +11,9 @@ export default function MyDashboard({
   swapRequests,
   rules,
   passbookTransactions = [],
+  isSettlementPublished = false,
+  signOffList = {},
+  onSignOff,
   onExportMyIcs,
   onNavigateTab
 }) {
@@ -44,6 +47,9 @@ export default function MyDashboard({
   const mySwaps = swapRequests.filter(
     s => s.applicant_id === currentUser.emp_id || s.target_id === currentUser.emp_id
   );
+
+  const isSigned = !!signOffList[currentUser.emp_id];
+  const mySignInfo = signOffList[currentUser.emp_id];
 
   return (
     <div className="space-y-6 mb-8">
@@ -85,6 +91,62 @@ export default function MyDashboard({
           </div>
         </div>
       </div>
+
+      {/* 月底實勤雙確認定稿卡片 (需求 #004 閉環機制) */}
+      {isSettlementPublished && (
+        <div className={`rounded-2xl border p-5 shadow-sm transition-all ${
+          isSigned 
+            ? 'bg-emerald-50/80 border-emerald-300' 
+            : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300'
+        }`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                isSigned ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+              }`}>
+                {isSigned ? <CheckCircle2 className="w-6 h-6" /> : <FileCheck2 className="w-6 h-6" />}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                    isSigned ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                  }`}>
+                    {isSigned ? '雙確認已完成' : '考勤月底結算：待簽認'}
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {yearMonth} 月底實勤定稿班表二次覆核確認
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  {isSigned ? (
+                    <>您已於 <strong className="text-emerald-800">{mySignInfo?.signed_at}</strong> 完成實勤定稿簽認。本月核定出勤 <strong>{myWorkDays} 天</strong>（實勤約 <strong>{myTotalHours} 小時</strong>），出勤狀態已結案歸檔。</>
+                  ) : (
+                    <>主管已正式發布本月實勤定稿班表！經線上調動與現場實勤覆核後，您的實際出勤為 <strong className="text-indigo-700">{myWorkDays} 天</strong>、休假 <strong className="text-emerald-700">{myOffDays} 天</strong>、工時約 <strong className="text-indigo-700">{myTotalHours} 小時</strong>。請核對下方日曆無誤後，進行電子簽署完成閉環流程。</>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center self-end md:self-auto">
+              {isSigned ? (
+                <div className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-xs font-bold shadow-2xs">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>已完成電子簽署</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSignOff && onSignOff(currentUser.emp_id)}
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-black shadow-md shadow-amber-200 active:scale-95 transition-all cursor-pointer"
+                >
+                  <FileCheck2 className="w-4 h-4" />
+                  <span>確認出勤無誤 · 電子簽認</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 個人指標卡片列 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

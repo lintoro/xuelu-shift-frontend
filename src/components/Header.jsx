@@ -14,7 +14,8 @@ import {
   BarChart3,
   User,
   LogOut,
-  KeyRound
+  KeyRound,
+  FileCheck2
 } from 'lucide-react';
 
 export default function Header({ 
@@ -42,6 +43,7 @@ export default function Header({
     { id: 'CONFLICTS', label: '衝突透視', icon: Eye, show: isManager || isAdmin },
     { id: 'SWAPS', label: '調班二階審核', icon: ArrowLeftRight, show: true },
     { id: 'HOURS_OVERRIDE', label: '實勤覆核', icon: Clock, show: isManager || isLeader },
+    { id: 'MONTHLY_SETTLEMENT', label: '月底考勤結算', icon: FileCheck2, show: isManager || isAdmin },
     // 核心決策：人事管理與 120 天平帳僅限營運高階 Manager，Admin 嚴格無人事權！
     { id: 'PERSONNEL', label: '人事管理', icon: Users, show: isManager },
     { id: 'HOLIDAY_TRANSFER', label: '120天平帳', icon: Scale, show: isManager },

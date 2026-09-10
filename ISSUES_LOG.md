@@ -103,7 +103,7 @@
   - `src/components/Dashboard/MyDashboard.jsx`（同仁端月底出勤確認對帳卡）
   - `src/components/Admin/` 或新增 `MonthlySettlement/MonthlySettlementPanel.jsx`（主管端月底結算發布與簽核追蹤面板）
   - `src/utils/calendarExport.js`（匯出調動後實勤 CSV/試算表）
-- **目前狀態**：`📋 已記錄 · 等候命令`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v1.6.0-issue004-done)`
 
 ### 📌 [需求 #005] 人事組織主檔支援清單編輯與清潔組完全雙向隔離規則
 
@@ -141,4 +141,5 @@
 | 4 | 2026-09-10 | 【需求 #003】主管端實勤覆核面板重構 (起訖時間/35條休息/補休連動/日期鎖定) | `v1.2.0-issue005-done` | `v1.3.0-issue003-done` | 實作起訖/休息選單、勞基法35條防呆、差額連動補休/PT工時、未來日期反灰鎖定，npm run build 通過。 |
 | 5 | 2026-09-10 | 【需求 #001】線上調班申請支援個人挪休與自調班表 (SELF_RESCHEDULE) | `v1.3.0-issue003-done` | `v1.4.0-issue001-done` | 新增個人自調挪休通道、個人7休1預檢、站點缺工警示、二階終審自動覆寫與雙快照留痕，npm run build 通過。 |
 | 6 | 2026-09-10 | 【需求 #002】我的工作台個人化特休與補休存摺明細介面 (Passbook) | `v1.4.0-issue001-done` | `v1.5.0-issue002-done` | 實作特休(週年制純天數)/補休(12/31歸零純時數)雙分頁存摺、流水歷程帳、覆核差額自動追加流水，npm run build 通過。 |
+| 7 | 2026-09-10 | 【需求 #004】考勤月底結算機制與「實勤確認班表（雙確認閉環機制）」 | `v1.5.0-issue002-done` | `v1.6.0-issue004-done` | 實作主管考勤月底結算面板 (MonthlySettlementPanel)、全員到班雙確認簽認追蹤、同仁工作台電子簽署對帳卡、結算清冊 CSV 匯出，npm run build 通過。 |
 
