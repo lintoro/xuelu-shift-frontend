@@ -628,38 +628,84 @@ export default function ShiftSwapPortal({
                       </div>
                     </div>
 
-                    {/* 審核操作按鈕：僅具審核權限之組長或主管可操作，一般 Staff / PT 僅檢視進度 */}
-                    <div className="flex items-center space-x-2">
-                      {isPendingFirst && canFirstReview && (
-                        <button
-                          onClick={() => onFirstReview(req.swap_id, true)}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>組長初審通過</span>
-                        </button>
-                      )}
+                    {/* 審核操作按鈕：依照主管指示 #013 嚴格落實同組限制、嚴禁跳組、利益迴避與向上覆核 */}
+                    {(() => {
+                      const isSelfSwap = req.applicant_id === currentEmp?.emp_id || req.target_emp_id === currentEmp?.emp_id;
+                      const isLeaderStationMatch = isLeader && (
+                        req.applicant_station === currentEmp?.primary_station ||
+                        req.target_station === currentEmp?.primary_station
+                      );
+                      const canFirst = (isManager || isAdmin) 
+                        ? !isSelfSwap 
+                        : (isLeader && isLeaderStationMatch && !isSelfSwap);
+                      const canFinal = (isManager || isAdmin) && !isSelfSwap;
 
-                      {isPendingFinal && canFinalApprove && (
-                        <button
-                          onClick={() => onFinalApprove(req.swap_id, true)}
-                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>高管終審核准 (即時覆寫班表)</span>
-                        </button>
-                      )}
+                      return (
+                        <div className="flex items-center space-x-2">
+                          {/* 1. 初審狀態處理 */}
+                          {isPendingFirst && (
+                            <>
+                              {isSelfSwap && (
+                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
+                                  <Lock className="w-3 h-3 text-amber-600" />
+                                  <span>涉及自身調班（初審向上由經理裁決）</span>
+                                </span>
+                              )}
 
-                      {((isPendingFirst && canFirstReview) || (isPendingFinal && canFinalApprove)) && (
-                        <button
-                          onClick={() => isPendingFirst ? onFirstReview(req.swap_id, false) : onFinalApprove(req.swap_id, false)}
-                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          <span>駁回</span>
-                        </button>
-                      )}
-                    </div>
+                              {isLeader && !isLeaderStationMatch && !isSelfSwap && (
+                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-100 border border-slate-200 text-slate-500 font-semibold flex items-center space-x-1">
+                                  <Lock className="w-3 h-3 text-slate-400" />
+                                  <span>需由【{stationMap[req.applicant_station] || '該站點'}】組長初審（禁止跨組）</span>
+                                </span>
+                              )}
+
+                              {canFirst && (
+                                <button
+                                  onClick={() => onFirstReview(req.swap_id, true)}
+                                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>組長初審通過</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {/* 2. 終審狀態處理 */}
+                          {isPendingFinal && (
+                            <>
+                              {isSelfSwap && (isManager || isAdmin) && (
+                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
+                                  <Lock className="w-3 h-3 text-amber-600" />
+                                  <span>自身調班迴避（由高管/Admin 代理終審）</span>
+                                </span>
+                              )}
+
+                              {canFinal && (
+                                <button
+                                  onClick={() => onFinalApprove(req.swap_id, true)}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>高管終審核准 (即時覆寫班表)</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {/* 駁回按鈕 */}
+                          {((isPendingFirst && canFirst) || (isPendingFinal && canFinal)) && (
+                            <button
+                              onClick={() => isPendingFirst ? onFirstReview(req.swap_id, false) : onFinalApprove(req.swap_id, false)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer transition-all"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>駁回</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

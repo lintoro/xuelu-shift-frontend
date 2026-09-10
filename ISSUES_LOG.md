@@ -331,6 +331,31 @@
   - `src/App.jsx`
 - **目前狀態**：`✅ 已完成修復並通過驗證 (v2.2.0-swap-soft-guard-solo-switch-done)`
 
+### 📌 [需求 #013] 覆核該是同組不能跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核
+
+- **來源反饋**：主管檢視實勤覆核面板（李俐旻服務台組長畫面中，下拉選單出現餐飲部許雅婷且預設李俐旻自己之截圖）提出關鍵風控指示：
+  > **「覆核該是同組 不能跳組 也不能自己跟MAMGER向上」**
+- **現狀分析與痛點**：
+  1. **組長跨組跳組漏洞**：先前的覆核同仁下拉選單載入全體同仁，導致服務台組長李俐旻可跳組選取餐飲部許雅婷、MSS 林錦達等其他站點同仁，違反站點責任制。
+  2. **自我覆核風控弊端**：選單預設 `B112001`（李俐旻自己），操作者能自我覆核與微調自己的出勤打卡時間，存在嚴重的球員兼裁判與工時竄改風險。
+  3. **層級越權與向上覆核通道缺失**：組長不應向上覆核高階主管 Manager 或同級組長；而組長個人的實勤出勤，必須由營運高管 (Manager) 向上覆核。
+  4. **調班二階審核同組與利益迴避缺失**：組長可初審跨站點調班單，且可初審自己發起的調班單。
+- **最佳實踐與架構方案**：
+  1. **實勤覆核合格清單篩選 (`ActualHoursOverride.jsx`)**：
+     - **利益迴避 (不能自己)**：任何操作者（Leader、Manager、Admin）一律排除本人 (`emp.emp_id !== currentUser.emp_id`)，動態預設合格名單首位同仁。
+     - **同組限制 (不能跳組)**：組長 (Leader) 僅能覆核同主屬站點同仁 (`emp.primary_station === currentUser.primary_station`)。
+     - **不得向上 (不能跟 MANAGER 向上)**：組長僅能向下覆核基層同仁 (`emp.role !== 'Manager' && emp.role !== 'Leader'`)，不可覆核高管或組長。
+     - **組長向上由 MANAGER 覆核**：營運高管 (Manager) 擁有全站點統籌覆核權，納入各站點組長 (Leader) 實勤向上覆核，並提供 Manager 站點快速篩選器。
+     - **管轄權責橫幅與防呆**：清楚標示權責範圍，若該組無基層同仁可審則禁用儲存並提示。
+  2. **調班二階審核防弊機制 (`ShiftSwapPortal.jsx`)**：
+     - 初審禁止跨組：組長僅可初審所轄站點之調班單，非本組單據標記「需由【該站點】組長初審（禁止跨組）」。
+     - 自我審核利益迴避：若申請人或被調人為本人，禁止初審與終審，標記「涉及自身調班（由高管向上裁決）」。
+- **影響範圍評估**：
+  - `src/components/WorkHours/ActualHoursOverride.jsx`
+  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`
+  - `scratch/test_review_hierarchy_and_station_scope.mjs`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.3.0-review-hierarchy-station-scope-done)`
+
 ---
 
 ## 處理歷史與版本控制記錄 (Version & Rollback History)
@@ -351,3 +376,4 @@
 | 12 | 2026-09-10 | 【需求 #010 語氣修正】加班工時以計發加班費為法定前提，修正「自動增加補休」之負面觀感 | `v2.0.0-hours-override-triple-done` | `v2.0.1-overtime-pay-first-done` | 依《勞基法》第24/32-1條，全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，覆核比對、結算清冊表頭、存摺流水標題全數嚴謹合規，npm run build 通過。 |
 | 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
 | 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
+| 15 | 2026-09-10 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |

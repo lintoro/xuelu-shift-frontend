@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Clock, 
   Check, 
@@ -13,7 +13,9 @@ import {
   Calendar,
   X,
   Lock,
-  FileCheck
+  FileCheck,
+  Filter,
+  Users
 } from 'lucide-react';
 
 /**
@@ -24,6 +26,10 @@ import {
  * 3. 營運高管 (Manager / Admin) 依現場實況「三度確認強制放行機制 (Triple-Confirmation Lock)」
  * 4. 自動工時比對：正職自動增減補休時數，PT 結算實際到班工時
  * 5. 日期嚴格防呆：僅開放當日 (含今日之前)，未來未發生日期全面鎖定禁止選取
+ * 6. 【主管指示 #013 組織風控權限】：
+ *    - 同組限制（不能跳組）：站點組長 (Leader) 僅能覆核同屬站點之基層同仁，禁止跳組。
+ *    - 嚴禁自我覆核（不能自己）：任何操作者一律排除本人，避免球員兼裁判之工時舞弊。
+ *    - 不得向上（不能跟 MANAGER 向上）：組長不可向上覆核 Manager 或其他組長；組長實勤向上交由 Manager 覆核。
  */
 export default function ActualHoursOverride({
   employees,
@@ -36,8 +42,51 @@ export default function ActualHoursOverride({
   // 業務設定：當前系統營運當日 (9 月 10 日)
   const TODAY_DAY = 10;
 
+  // 角色權限判定
+  const isLeader = currentUser?.role === 'Leader';
+  const isManager = currentUser?.role === 'Manager' || !!currentUser?.is_admin;
+
+  // 營運高管專用站點快速篩選器
+  const [stationFilter, setStationFilter] = useState('ALL');
+
+  // 依主管指示 #013 組織風控層級篩選合格之覆核對象清單
+  const reviewableEmployees = useMemo(() => {
+    if (!currentUser) return [];
+
+    return employees.filter(emp => {
+      // 1. 利益迴避原則：嚴格排除操作者本人 (不能自己覆核自己)
+      if (emp.emp_id === currentUser.emp_id) return false;
+
+      // 2. 排除自排免審高管 (如豁免排班者)
+      if (emp.is_self_scheduled) return false;
+
+      if (isLeader) {
+        // 3. 組長同組限制：僅能覆核同主屬站點同仁，禁止跳組
+        if (emp.primary_station !== currentUser.primary_station) return false;
+
+        // 4. 組長不得向上覆核：禁止覆核 Manager 或同級 Leader (僅能向下覆核 Staff 與 PT)
+        if (emp.role === 'Manager' || emp.role === 'Leader') return false;
+
+        return true;
+      }
+
+      if (isManager) {
+        // 5. 營運高管統籌覆核：可向上覆核各站點組長 (Leader) 以及全場 Staff / PT
+        if (stationFilter !== 'ALL' && emp.primary_station !== stationFilter) {
+          return false;
+        }
+        return true;
+      }
+
+      return false;
+    });
+  }, [employees, currentUser, isLeader, isManager, stationFilter]);
+
   const [selectedDay, setSelectedDay] = useState(10);
-  const [selectedEmpId, setSelectedEmpId] = useState('B112001'); // 預設李俐旻
+  // 動態預設選取合格名單的第一位同仁 (不再預設李俐旻自己)
+  const [selectedEmpId, setSelectedEmpId] = useState(() => {
+    return reviewableEmployees[0]?.emp_id || '';
+  });
   const [isAbsent, setIsAbsent] = useState(false); // 當日未到勤/全日請假
 
   // 高管三度確認彈窗控制
@@ -46,9 +95,6 @@ export default function ActualHoursOverride({
   const [hasConfirmedStep1, setHasConfirmedStep1] = useState(false);
   const [hasConfirmedStep2, setHasConfirmedStep2] = useState(false);
   const [emergencyReason, setEmergencyReason] = useState('');
-
-  // 判斷當前操作者是否為營運高管 (Manager / Admin)
-  const isManager = currentUser?.role === 'Manager' || !!currentUser?.is_admin;
 
   // 時間選單選項產生器 (每 30 分鐘一刻度)
   const startTimeOptions = [
@@ -77,15 +123,15 @@ export default function ActualHoursOverride({
   const [actualNoteInput, setActualNoteInput] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
-  const currentEmp = employees.find(e => e.emp_id === selectedEmpId) || employees[0];
+  const currentEmp = reviewableEmployees.find(e => e.emp_id === selectedEmpId) || reviewableEmployees[0] || null;
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
 
-  const scheduledShift = scheduleMap[currentEmp?.emp_id]?.[selectedDay];
+  const scheduledShift = currentEmp ? scheduleMap[currentEmp.emp_id]?.[selectedDay] : null;
   const scheduledHours = scheduledShift?.work_hours || 0;
   const isPT = currentEmp?.role === 'PT';
 
   // 取得同仁假勤存摺額度 (特休天數換算為 8 小時/天)
-  const empLeaveBalance = leaveBalances[selectedEmpId] || { annualLeaveDays: 0, compTimeHours: 0 };
+  const empLeaveBalance = (currentEmp && leaveBalances[currentEmp.emp_id]) || { annualLeaveDays: 0, compTimeHours: 0 };
   const availableCompTimeHours = empLeaveBalance.compTimeHours || 0;
   const availableAnnualLeaveDays = empLeaveBalance.annualLeaveDays || 0;
   const availableAnnualLeaveHours = availableAnnualLeaveDays * 8;
@@ -140,6 +186,20 @@ export default function ActualHoursOverride({
         setBreakHours(1.0);
     }
   };
+
+  // 當合格名單變動或當前選取之同仁已不合法時，自動修正選取 (需求 #013)
+  useEffect(() => {
+    if (reviewableEmployees.length > 0) {
+      const exists = reviewableEmployees.some(e => e.emp_id === selectedEmpId);
+      if (!exists) {
+        const nextId = reviewableEmployees[0].emp_id;
+        setSelectedEmpId(nextId);
+        syncShiftDefaults(nextId, selectedDay);
+      }
+    } else {
+      setSelectedEmpId('');
+    }
+  }, [reviewableEmployees, selectedEmpId, selectedDay]);
 
   // 跨度與淨工時計算
   const startDec = timeToDecimal(startTime);
@@ -316,9 +376,49 @@ export default function ActualHoursOverride({
           <span className="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold">
             今日：9 月 {TODAY_DAY} 日
           </span>
-          <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
-            操作主管：<strong className="text-slate-900">{currentUser?.name || '林慶忠'}</strong> ({currentUser?.role === 'Manager' ? '營運高管' : currentUser?.role || '主管'})
+          <span className={`text-[11px] px-2.5 py-1 rounded-full border font-bold flex items-center space-x-1 ${
+            isManager 
+              ? 'bg-purple-50 text-purple-800 border-purple-200' 
+              : 'bg-blue-50 text-blue-800 border-blue-200'
+          }`}>
+            <Users className="w-3 h-3 shrink-0" />
+            <span>
+              操作主管：{currentUser?.name || '未知'} ({isManager ? '營運高管' : `${stationMap[currentUser?.primary_station] || '站點'}組長`})
+            </span>
           </span>
+        </div>
+      </div>
+
+      {/* 主管指示 #013 權責管轄範圍橫幅 */}
+      <div className={`mb-4 p-3 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs ${
+        isLeader 
+          ? 'bg-blue-50/70 border-blue-200 text-blue-900' 
+          : 'bg-purple-50/70 border-purple-200 text-purple-900'
+      }`}>
+        <div className="flex items-center space-x-2">
+          <ShieldCheck className={`w-4 h-4 shrink-0 ${isLeader ? 'text-blue-600' : 'text-purple-600'}`} />
+          <span>
+            {isLeader ? (
+              <>
+                <strong>【站點組長覆核權責】</strong>：僅限<strong>【{stationMap[currentUser?.primary_station] || '服務台'}】</strong>同組基層同仁（不能跳組、嚴禁自我覆核）；組長自身實勤出勤由<strong>營運高管 (Manager) 向上覆核</strong>。
+              </>
+            ) : (
+              <>
+                <strong>【營運高管統籌覆核】</strong>：具備全站點向上總覆核權，統籌各站點組長 (Leader 向上覆核) 與全場基層同仁實勤（排除個人自我覆核）。
+              </>
+            )}
+          </span>
+        </div>
+        <div className="text-[11px] font-mono font-bold">
+          {isLeader ? (
+            <span className="px-2 py-0.5 rounded bg-blue-100/80 text-blue-800">
+              同組合格覆核對象：{reviewableEmployees.length} 人
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded bg-purple-100/80 text-purple-800">
+              合格覆核總人數：{reviewableEmployees.length} 人
+            </span>
+          )}
         </div>
       </div>
 
@@ -341,24 +441,74 @@ export default function ActualHoursOverride({
 
       {/* 覆核操作表單 */}
       <form onSubmit={handleSaveNormalOverride} className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 mb-6">
+        {/* 若為 Manager，提供站點切換過濾器 */}
+        {isManager && (
+          <div className="mb-3.5 pb-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center space-x-1.5 text-slate-700 font-bold">
+              <Filter className="w-3.5 h-3.5 text-purple-600" />
+              <span>高管站點篩選：</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setStationFilter('ALL')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${
+                  stationFilter === 'ALL'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                }`}
+              >
+                全部站點 ({employees.filter(e => !e.is_self_scheduled && e.emp_id !== currentUser?.emp_id).length})
+              </button>
+              {stations.map(st => {
+                const count = employees.filter(e => !e.is_self_scheduled && e.emp_id !== currentUser?.emp_id && e.primary_station === st.station_id).length;
+                return (
+                  <button
+                    key={st.station_id}
+                    type="button"
+                    onClick={() => setStationFilter(st.station_id)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${
+                      stationFilter === st.station_id
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {st.station_name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4 text-xs">
-          {/* 1. 選擇同仁 */}
+          {/* 1. 選擇同仁 (同組限制、排除自己、排除高管) */}
           <div>
-            <label className="font-bold text-slate-700 block mb-1">覆核同仁對象</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700 block">覆核同仁對象</label>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                {isLeader ? '限同組基層' : '全場管轄'}
+              </span>
+            </div>
             <select
               value={selectedEmpId}
+              disabled={reviewableEmployees.length === 0}
               onChange={(e) => {
                 const id = e.target.value;
                 setSelectedEmpId(id);
                 syncShiftDefaults(id, selectedDay);
               }}
-              className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold cursor-pointer"
+              className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
             >
-              {employees.filter(e => !e.is_self_scheduled).map(e => (
-                <option key={e.emp_id} value={e.emp_id}>
-                  {e.name} ({stationMap[e.primary_station] || e.primary_station} · {e.role === 'PT' ? '計時PT' : '正職'})
-                </option>
-              ))}
+              {reviewableEmployees.length === 0 ? (
+                <option value="">(本組尚無可覆核同仁)</option>
+              ) : (
+                reviewableEmployees.map(e => (
+                  <option key={e.emp_id} value={e.emp_id}>
+                    {e.name} ({stationMap[e.primary_station] || e.primary_station} · {e.role === 'PT' ? '計時PT' : e.role === 'Leader' ? '🌟站點組長' : '正職'})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -829,10 +979,10 @@ export default function ActualHoursOverride({
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* 一般儲存按鈕 (在有法規違規或假勤額度不足時鎖死) */}
+            {/* 一般儲存按鈕 (在有法規違規、假勤額度不足或無合法覆核對象時鎖死) */}
             <button
               type="submit"
-              disabled={hasLaborLawViolations || isDeductionBalanceInsufficient}
+              disabled={hasLaborLawViolations || isDeductionBalanceInsufficient || !currentEmp || reviewableEmployees.length === 0}
               className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer active:scale-95 transition-all"
             >
               <Save className="w-4 h-4" />
