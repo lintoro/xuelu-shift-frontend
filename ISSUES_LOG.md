@@ -127,7 +127,7 @@
 - **影響範圍評估**：
   - `src/components/Admin/PersonnelManagement.jsx`（新增與編輯彈窗擴充支援站點複選元件、雙向連動防呆）
   - `src/engine/schedulerEngine.js`（確保清潔組調度完全雙向獨立）
-- **目前狀態**：`📋 已記錄 · 等候命令`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v1.2.0-issue005-done)`
 
 ---
 
@@ -137,4 +137,5 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | 2026-09-10 | 初始穩定基準線 (Baseline) | — | `v1.0.0-baseline` | 專案建置 0 錯誤，含全新異常提醒介面，伺服器運行中。 |
 | 2 | 2026-09-10 | PROGRESS.md 未執行工作全數完成 (Phase 2 雙向聯動 + Phase 3 GAS 7+1 初始化與部署手冊) | `v1.0.1-logged` | `v1.1.0-progress-completed` | 全模組完成度 100%，npm run build 通過，產出 DEPLOY_GUIDE.md。 |
+| 3 | 2026-09-10 | 【需求 #005】人事組織主檔支援清單編輯與清潔組完全雙向隔離 | `v1.1.0-progress-completed` | `v1.2.0-issue005-done` | 編輯/新增彈窗支援多選增減，清潔組雙向隔離鎖死，npm run build 通過。 |
 

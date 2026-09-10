@@ -27,6 +27,37 @@ export default function PersonnelManagement({
 
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
 
+  // 處理主屬站點變更（落實清潔組雙向隔離規則）
+  const getUpdatedSupportedStations = (prevSupported, newPrimary) => {
+    if (newPrimary === 'ST_CLEAN') {
+      // 規則 A：清潔組為固定特別單位，不支援其它組別
+      return ['ST_CLEAN'];
+    }
+    // 規則 B：其它組別不讓任何人支援清潔組，且主屬站點必選
+    const cleaned = (prevSupported || []).filter(id => id !== 'ST_CLEAN');
+    return Array.from(new Set([...cleaned, newPrimary]));
+  };
+
+  // 處理核取方塊切換支援站點
+  const toggleSupportedStation = (currentSupported, stationId, checked, primaryStation) => {
+    if (primaryStation === 'ST_CLEAN') {
+      return ['ST_CLEAN'];
+    }
+    if (stationId === 'ST_CLEAN') {
+      // 禁止外組同仁支援清潔組
+      return (currentSupported || []).filter(id => id !== 'ST_CLEAN');
+    }
+    if (stationId === primaryStation) {
+      // 主屬站點必選，不可取消
+      return currentSupported || [primaryStation];
+    }
+    if (checked) {
+      return Array.from(new Set([...(currentSupported || []), stationId]));
+    } else {
+      return (currentSupported || []).filter(id => id !== stationId);
+    }
+  };
+
   // 儲存編輯
   const handleSaveEdit = (e) => {
     e.preventDefault();
@@ -257,11 +288,14 @@ export default function PersonnelManagement({
                 <label className="font-bold text-slate-700 block mb-1">主屬站點</label>
                 <select
                   value={newEmpForm.primary_station}
-                  onChange={(e) => setNewEmpForm({ 
-                    ...newEmpForm, 
-                    primary_station: e.target.value,
-                    supported_stations: [e.target.value]
-                  })}
+                  onChange={(e) => {
+                    const newPrimary = e.target.value;
+                    setNewEmpForm({ 
+                      ...newEmpForm, 
+                      primary_station: newPrimary,
+                      supported_stations: getUpdatedSupportedStations(newEmpForm.supported_stations, newPrimary)
+                    });
+                  }}
                   className="w-full border border-slate-300 rounded p-2"
                 >
                   {stations.map(st => (
@@ -290,6 +324,83 @@ export default function PersonnelManagement({
                   onChange={(e) => setNewEmpForm({ ...newEmpForm, hire_date: e.target.value })}
                   className="w-full border border-slate-300 rounded p-2 font-mono"
                 />
+              </div>
+            </div>
+
+            {/* 新增同仁：跨組支援清單 (落實清潔組雙向隔離) */}
+            <div className="mb-4 text-xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="font-bold text-slate-700 block">
+                  跨組支援清單 (supported_stations)
+                </label>
+                {newEmpForm.primary_station === 'ST_CLEAN' ? (
+                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                    特別單位：不支援外組
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
+                )}
+              </div>
+
+              {newEmpForm.primary_station === 'ST_CLEAN' && (
+                <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                {stations.map(st => {
+                  const isCleanUnit = st.station_id === 'ST_CLEAN';
+                  const isPrimary = st.station_id === newEmpForm.primary_station;
+                  const isCleanPrimary = newEmpForm.primary_station === 'ST_CLEAN';
+                  
+                  // 雙向隔離防線：
+                  // 1. 若主屬為清潔組：除清潔外全部禁用
+                  // 2. 若主屬為外組：清潔組強制禁用反灰（不讓外組支援清潔）
+                  const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
+                  const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id));
+
+                  return (
+                    <label
+                      key={st.station_id}
+                      className={`flex items-center space-x-1.5 p-1.5 rounded border text-[11px] transition-all ${
+                        isDisabled
+                          ? isCleanUnit && !isCleanPrimary
+                            ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed text-slate-400'
+                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-not-allowed font-semibold'
+                          : isChecked
+                          ? 'bg-indigo-100/70 border-indigo-300 text-indigo-950 font-bold cursor-pointer hover:bg-indigo-200/50'
+                          : 'bg-white border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-100'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isDisabled}
+                        onChange={(e) => {
+                          const updated = toggleSupportedStation(
+                            newEmpForm.supported_stations,
+                            st.station_id,
+                            e.target.checked,
+                            newEmpForm.primary_station
+                          );
+                          setNewEmpForm({ ...newEmpForm, supported_stations: updated });
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                      />
+                      <span className="truncate">
+                        {st.station_name}
+                        {isCleanUnit && !isCleanPrimary && (
+                          <span className="text-[9px] text-rose-500 block leading-tight">禁止外援</span>
+                        )}
+                        {isPrimary && (
+                          <span className="text-[9px] text-indigo-500 block leading-tight">主屬</span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -335,7 +446,14 @@ export default function PersonnelManagement({
                 <label className="font-bold text-slate-700 block mb-1">主屬站點</label>
                 <select
                   value={editingEmp.primary_station}
-                  onChange={(e) => setEditingEmp({ ...editingEmp, primary_station: e.target.value })}
+                  onChange={(e) => {
+                    const newPrimary = e.target.value;
+                    setEditingEmp({ 
+                      ...editingEmp, 
+                      primary_station: newPrimary,
+                      supported_stations: getUpdatedSupportedStations(editingEmp.supported_stations, newPrimary)
+                    });
+                  }}
                   className="w-full border border-slate-300 rounded p-2"
                 >
                   {stations.map(st => (
@@ -366,6 +484,83 @@ export default function PersonnelManagement({
                   <option value="Active">在職中 (Active)</option>
                   <option value="Inactive">離職/停用 (自動啟動離職銷假真空)</option>
                 </select>
+              </div>
+
+              {/* 編輯同仁：跨組支援清單 (落實清潔組雙向隔離) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-slate-700 block">
+                    跨組支援清單 (supported_stations)
+                  </label>
+                  {editingEmp.primary_station === 'ST_CLEAN' ? (
+                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                      特別單位：不支援外組
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
+                  )}
+                </div>
+
+                {editingEmp.primary_station === 'ST_CLEAN' && (
+                  <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  {stations.map(st => {
+                    const isCleanUnit = st.station_id === 'ST_CLEAN';
+                    const isPrimary = st.station_id === editingEmp.primary_station;
+                    const isCleanPrimary = editingEmp.primary_station === 'ST_CLEAN';
+                    
+                    // 雙向隔離防線：
+                    // 1. 若主屬為清潔組：除清潔外全部禁用
+                    // 2. 若主屬為外組：清潔組強制禁用反灰（不讓外組支援清潔）
+                    const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
+                    const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (editingEmp.supported_stations || []).includes(st.station_id));
+
+                    return (
+                      <label
+                        key={st.station_id}
+                        className={`flex items-center space-x-1.5 p-1.5 rounded border text-[11px] transition-all ${
+                          isDisabled
+                            ? isCleanUnit && !isCleanPrimary
+                              ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed text-slate-400'
+                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-not-allowed font-semibold'
+                            : isChecked
+                            ? 'bg-indigo-100/70 border-indigo-300 text-indigo-950 font-bold cursor-pointer hover:bg-indigo-200/50'
+                            : 'bg-white border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            const updated = toggleSupportedStation(
+                              editingEmp.supported_stations,
+                              st.station_id,
+                              e.target.checked,
+                              editingEmp.primary_station
+                            );
+                            setEditingEmp({ ...editingEmp, supported_stations: updated });
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                        />
+                        <span className="truncate">
+                          {st.station_name}
+                          {isCleanUnit && !isCleanPrimary && (
+                            <span className="text-[9px] text-rose-500 block leading-tight">禁止外援</span>
+                          )}
+                          {isPrimary && (
+                            <span className="text-[9px] text-indigo-500 block leading-tight">主屬</span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

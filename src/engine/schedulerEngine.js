@@ -257,6 +257,17 @@ export function generateSeedSchedule({
       stationHasSolo[s.station_id] = false;
     });
 
+    // 清潔組特別隔離保險：外人不可支援清潔組，清潔組同仁不支援外組
+    const isStationCompatible = (person, targetStationId) => {
+      if (targetStationId === 'ST_CLEAN') {
+        return person.primary_station === 'ST_CLEAN';
+      }
+      if (person.primary_station === 'ST_CLEAN') {
+        return false;
+      }
+      return person.primary_station === targetStationId || (person.supported_stations || []).includes(targetStationId);
+    };
+
     // -------------------------------------------------------------
     // 階段 6.1：【主屬專責保底】
     // 優先指派主屬為該站之組長與正職同仁，確保專責站點班底定錨
@@ -303,7 +314,7 @@ export function generateSeedSchedule({
       if (stationStaffCount[station.station_id] < minRequired || (requiresSolo && !stationHasSolo[station.station_id])) {
         const supporters = regularStaff.filter(e => 
           canWorkToday(e) && 
-          e.supported_stations?.includes(station.station_id) && 
+          isStationCompatible(e, station.station_id) && 
           e.primary_station !== station.station_id
         ).sort((a, b) => {
           if (requiresSolo && !stationHasSolo[station.station_id]) {
@@ -337,7 +348,7 @@ export function generateSeedSchedule({
       if (stationStaffCount[station.station_id] < minRequired) {
         const availablePTs = ptStaff.filter(pt => 
           canWorkToday(pt) &&
-          (pt.primary_station === station.station_id || pt.supported_stations?.includes(station.station_id)) &&
+          isStationCompatible(pt, station.station_id) &&
           ptWorkDaysCount[pt.emp_id] < (pt.max_monthly_days || 14)
         ).sort((a, b) => {
           if (requiresSolo && !stationHasSolo[station.station_id]) {
@@ -373,9 +384,7 @@ export function generateSeedSchedule({
         if (!cur) {
           const needyStation = sortedStations.find(st => {
             const minReq = isWeekend ? st.min_staff_weekend : st.min_staff_weekday;
-            return stationStaffCount[st.station_id] < minReq && (
-              emp.primary_station === st.station_id || emp.supported_stations?.includes(st.station_id)
-            );
+            return stationStaffCount[st.station_id] < minReq && isStationCompatible(emp, st.station_id);
           });
 
           const targetStation = needyStation || stations.find(s => s.station_id === emp.primary_station) || stations[0];
