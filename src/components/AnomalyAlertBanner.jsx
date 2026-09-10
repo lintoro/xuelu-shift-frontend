@@ -57,6 +57,14 @@ export default function AnomalyAlertBanner({
     );
   }
 
+  const handleSelectAndScroll = (day) => {
+    if (onSelectDay) onSelectDay(day);
+    const colElement = document.getElementById(`schedule-day-col-${day}`);
+    if (colElement) {
+      colElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  };
+
   return (
     <div className="bg-gradient-to-r from-rose-900/90 via-slate-900 to-amber-950 text-white rounded-xl border border-rose-500/40 p-4 sm:p-5 shadow-lg mb-6 backdrop-blur-md">
       {/* 橫幅頂部 Header */}
@@ -115,7 +123,7 @@ export default function AnomalyAlertBanner({
               return (
                 <div
                   key={day}
-                  onClick={() => onSelectDay && onSelectDay(day)}
+                  onClick={() => handleSelectAndScroll(day)}
                   className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
                     isCurrentSelected
                       ? 'bg-rose-500/30 border-rose-400 ring-2 ring-rose-400/50 text-white shadow-md'

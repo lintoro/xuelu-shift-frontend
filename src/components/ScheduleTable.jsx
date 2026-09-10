@@ -110,6 +110,7 @@ export default function ScheduleTable({
               {dayHeaders.map(({ day, isWeekend, weekDayStr }) => (
                 <th
                   key={day}
+                  id={`schedule-day-col-${day}`}
                   onClick={() => onSelectDay(day)}
                   className={`p-1.5 text-center border-b border-r border-slate-200 cursor-pointer min-w-[34px] transition-colors select-none ${
                     selectedDay === day 
