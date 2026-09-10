@@ -1,28 +1,107 @@
 // src/services/apiService.js
+import { EMPLOYEES, STATIONS, DEFAULT_MONTHLY_RULES } from '../data/mockMasterData.js';
+import { DEFAULT_SHIFT_TYPES } from '../types/scheduler.js';
+
 /**
- * 學旅排班系統統一 API 服務網關 (JSON-RPC Architecture)
- * 核心決策 8-7：支援雙模式 (Dual Mode)
- * 1. 本地開發/預覽模式 (Local Mode)：使用 LocalStorage / 記憶體模擬，零主機維護成本。
- * 2. GAS 原生 Web App 模式 (GAS Production Mode)：支援 google.script.run 或原生 Fetch POST 對接 Google Sheets 7+1 表。
+ * 學旅排班系統統一 API 服務網關 (JSON-RPC 2.0 Architecture - V2.5 雲端版)
+ * 核心規範：
+ * 1. 雙模式 (Dual-Mode)：
+ *    - 線上雲端模式 (Live Cloud Mode)：對接 Google Apps Script Web App (GAS) 與 Google Sheets 7+1+4 核心資料庫。
+ *    - 本地沙盒模式 (Local Sandbox Mode)：預設使用 localStorage / 記憶體模擬，零伺服器主機維護成本。
+ * 2. 支援動態配置 GAS 網址 (優先讀取 localStorage 快取，免手動改寫 index.html)。
+ * 3. 具備 RTT 延遲測試 (Ping) 與網路異常自動優雅降級 (Graceful Degradation)。
  */
 
-const IS_GAS_ENVIRONMENT = typeof window !== 'undefined' && typeof window.google !== 'undefined' && typeof window.google.script !== 'undefined';
-const GAS_WEB_APP_URL = (typeof window !== 'undefined' && window.__GAS_API_URL__) || '';
+const STORAGE_KEY_GAS_URL = 'xuelu_gas_api_url';
 
 export const ApiService = {
-  // 檢查當前運行環境
-  isGasEnvironment() {
-    return IS_GAS_ENVIRONMENT;
+  // 取得當前設定之 GAS 網址
+  getGasUrl() {
+    if (typeof window === 'undefined') return '';
+    const stored = localStorage.getItem(STORAGE_KEY_GAS_URL);
+    if (stored && stored.trim()) return stored.trim();
+    return window.__GAS_API_URL__ || '';
   },
 
-  // 統一 JSON-RPC 呼叫器
-  async callRpc(method, params = {}) {
+  // 設置新 GAS 網址至瀏覽器快取
+  setGasUrl(url) {
+    if (typeof window === 'undefined') return;
+    const cleanUrl = (url || '').trim();
+    if (cleanUrl) {
+      localStorage.setItem(STORAGE_KEY_GAS_URL, cleanUrl);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_GAS_URL);
+    }
+  },
+
+  // 清除 GAS 網址並切換回本地沙盒
+  clearGasUrl() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEY_GAS_URL);
+  },
+
+  // 檢查是否處於原生 GAS iframe (google.script.run)
+  isGasIframe() {
+    return (
+      typeof window !== 'undefined' &&
+      typeof window.google !== 'undefined' &&
+      typeof window.google.script !== 'undefined'
+    );
+  },
+
+  // 檢查當前是否啟用雲端模式
+  isCloudMode() {
+    return this.isGasIframe() || !!this.getGasUrl();
+  },
+
+  // 伺服器連線延遲測試 (Ping)
+  async pingServer(targetUrl = null) {
+    const url = targetUrl || this.getGasUrl();
+    if (!url && !this.isGasIframe()) {
+      return {
+        success: false,
+        error: '尚未配置 Google Apps Script 部署網址'
+      };
+    }
+
+    const startTime = performance.now();
+    try {
+      const result = await this.callRpc('ping', {}, { urlOverride: url, timeoutMs: 12000, noFallback: true });
+      const latencyMs = Math.round(performance.now() - startTime);
+      return {
+        success: true,
+        latencyMs,
+        version: result?.version || 'v2.5.0',
+        server: result?.server || 'Google Apps Script',
+        timestamp: result?.timestamp || new Date().toISOString()
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message || '連線逾時或 Google Apps Script 未正確回應'
+      };
+    }
+  },
+
+  // 統一 JSON-RPC 呼叫網關
+  async callRpc(method, params = {}, options = {}) {
+    const gasUrl = options.urlOverride || this.getGasUrl();
+
     // 1. 若處於 GAS 嵌入 iframe (google.script.run)
-    if (IS_GAS_ENVIRONMENT) {
+    if (this.isGasIframe() && !options.urlOverride) {
       return new Promise((resolve, reject) => {
         window.google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
+          .withSuccessHandler((res) => {
+            if (res && res.error) reject(new Error(res.error.message || 'API 錯誤'));
+            else resolve(res ? res.result : null);
+          })
+          .withFailureHandler((err) => {
+            if (options.noFallback) reject(err);
+            else {
+              console.warn('[API 降級] google.script.run 失敗，切換本地沙盒:', err);
+              resolve(this.mockHandler(method, params));
+            }
+          })
           .doPost({
             postData: {
               contents: JSON.stringify({
@@ -37,30 +116,59 @@ export const ApiService = {
     }
 
     // 2. 若配置了外部已發布的 GAS Web App URL
-    if (GAS_WEB_APP_URL) {
-      const response = await fetch(GAS_WEB_APP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS 跨域最佳實踐
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: method,
-          params: params,
-          id: Date.now()
-        })
-      });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message || 'API 呼叫失敗');
-      return data.result;
+    if (gasUrl) {
+      try {
+        const controller = new AbortController();
+        const timeoutMs = options.timeoutMs || 20000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await fetch(gasUrl, {
+          method: 'POST',
+          // 依 Google Apps Script 規範，使用 text/plain;charset=utf-8 繞過瀏覽器 CORS 預檢限制
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: method,
+            params: params,
+            id: Date.now()
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: 雲端端點伺服器回應異常`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error.message || 'Google Apps Script 業務處理失敗');
+        }
+        return data.result;
+      } catch (err) {
+        if (options.noFallback) {
+          throw err;
+        }
+        console.warn(`[API 降級] 呼叫 ${method} 失敗 (${err.message})，自動回退至本地沙盒模式。`);
+        return this.mockHandler(method, params);
+      }
     }
 
-    // 3. 本地 Mock 模式（預設）
+    // 3. 本地 Mock 沙盒模式（預設）
     return this.mockHandler(method, params);
   },
 
   // 本地 Mock 回應處理器
   async mockHandler(method, params) {
-    console.log(`[API 本地模式] 呼叫 ${method}`, params);
     switch (method) {
+      case 'ping':
+        return {
+          success: true,
+          version: 'v2.5.0-local-mock',
+          timestamp: new Date().toISOString(),
+          server: 'Local Sandbox Memory'
+        };
+
       case 'auth.login':
         return {
           success: true,
@@ -75,12 +183,16 @@ export const ApiService = {
         };
 
       case 'schedule.getInitialData': {
-        const { EMPLOYEES, STATIONS, DEFAULT_MONTHLY_RULES } = await import('../data/mockMasterData.js');
         return {
           employees: EMPLOYEES,
           stations: STATIONS,
+          shiftTypes: DEFAULT_SHIFT_TYPES,
           rules: DEFAULT_MONTHLY_RULES,
-          scheduleMap: {}
+          scheduleMap: {},
+          swaps: [],
+          overrides: {},
+          passbooks: [],
+          auditLogs: []
         };
       }
 
@@ -91,6 +203,18 @@ export const ApiService = {
         return { success: true, icsContent: 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR' };
 
       case 'schedule.saveSchedule':
+        return { success: true, count: Object.keys(params.schedule_matrix || {}).length, timestamp: new Date().toISOString() };
+
+      case 'swap.submit':
+        return { success: true, swap_id: params.swap_data?.swap_id || ('SWAP_' + Date.now()) };
+
+      case 'swap.review':
+        return { success: true, swap_id: params.swap_id, status: params.is_approved ? 'APPROVED' : 'REJECTED' };
+
+      case 'workhours.override':
+        return { success: true, timestamp: new Date().toISOString() };
+
+      case 'settlement.sign':
         return { success: true, timestamp: new Date().toISOString() };
 
       case 'audit.rollback':
@@ -99,8 +223,14 @@ export const ApiService = {
       case 'admin.savePersonnel':
         return { success: true };
 
+      case 'admin.saveShiftTypes':
+        return { success: true, count: (params.shift_types || []).length };
+
       case 'admin.holidayTransfer':
         return { success: true };
+
+      case 'admin.syncAll':
+        return { success: true, timestamp: new Date().toISOString() };
 
       case 'ai.optimizeSchedule':
         return {
@@ -118,18 +248,74 @@ export const ApiService = {
     }
   },
 
-  // 取得全系統初始主檔 (Employees, Stations, Rules, Quotas)
-  async getInitialMasterData(yearMonth = '2026-09') {
-    return this.callRpc('schedule.getInitialData', { year_month: yearMonth });
+  // 取得全系統初始主檔 (Employees, Stations, Rules, Quotas, Shifts...)
+  async getInitialMasterData(yearMonth = '2026-09', token = null) {
+    return this.callRpc('schedule.getInitialData', { year_month: yearMonth, token: token });
   },
 
   // 儲存全月排班矩陣 (Schedules 表)
-  async saveScheduleMatrix(yearMonth, scheduleMap, operatorId) {
+  async saveScheduleMatrix(yearMonth, scheduleMap, token = 'session_active') {
     return this.callRpc('schedule.saveSchedule', {
       year_month: yearMonth,
       schedule_matrix: scheduleMap,
-      token: 'session_active'
+      token: token
     });
+  },
+
+  // 送出調班申請
+  async submitSwap(swapData, token = 'session_active') {
+    return this.callRpc('swap.submit', { swap_data: swapData, token: token });
+  },
+
+  // 審核調班申請 (初審 / 終審 / Admin 備查)
+  async reviewSwap(swapId, isApproved, stage = 'FINAL', meta = {}, token = 'session_active') {
+    return this.callRpc('swap.review', {
+      swap_id: swapId,
+      is_approved: isApproved,
+      stage: stage,
+      meta: meta,
+      token: token
+    });
+  },
+
+  // 實勤覆核工時儲存
+  async overrideWorkHours(overrideData, token = 'session_active') {
+    return this.callRpc('workhours.override', {
+      override_data: overrideData,
+      token: token
+    });
+  },
+
+  // 月底考勤簽署
+  async signSettlement(signData, token = 'session_active') {
+    return this.callRpc('settlement.sign', {
+      sign_data: signData,
+      token: token
+    });
+  },
+
+  // 儲存營業班別主檔
+  async saveShiftTypes(shiftTypes, token = 'session_active') {
+    return this.callRpc('admin.saveShiftTypes', {
+      shift_types: shiftTypes,
+      token: token
+    });
+  },
+
+  // 人事主檔變更儲存
+  async savePersonnel(employeeData, token = 'session_active') {
+    return this.callRpc('admin.savePersonnel', {
+      employee_data: employeeData,
+      token: token
+    });
+  },
+
+  // 一鍵全量同步本地資料至 Google 試算表
+  async syncAllToCloud(payload, token = 'session_active') {
+    return this.callRpc('admin.syncAll', {
+      payload: payload,
+      token: token
+    }, { timeoutMs: 30000, noFallback: true });
   },
 
   // 寫入不可抹滅之 Audit Log
@@ -139,17 +325,16 @@ export const ApiService = {
   },
 
   // 匯出同仁專屬 ICS 行事曆
-  async exportMyIcs(empId, yearMonth) {
-    return this.callRpc('calendar.exportMyIcs', { emp_id: empId, year_month: yearMonth });
-  },
-
-  // 人事主檔變更儲存
-  async savePersonnel(employeeData) {
-    return this.callRpc('admin.savePersonnel', { employee_data: employeeData });
+  async exportMyIcs(empId, yearMonth, token = 'session_active') {
+    return this.callRpc('calendar.exportMyIcs', {
+      emp_id: empId,
+      year_month: yearMonth,
+      token: token
+    });
   },
 
   // 班表回滾
-  async rollbackSchedule(logId) {
-    return this.callRpc('audit.rollback', { log_id: logId });
+  async rollbackSchedule(logId, token = 'session_active') {
+    return this.callRpc('audit.rollback', { log_id: logId, token: token });
   }
 };

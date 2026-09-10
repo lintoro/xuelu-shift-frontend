@@ -20,7 +20,9 @@ import ChangePasswordModal from './components/Auth/ChangePasswordModal.jsx';
 import MyDashboard from './components/Dashboard/MyDashboard.jsx';
 import MonthlySettlementPanel from './components/MonthlySettlement/MonthlySettlementPanel.jsx';
 import ShiftMasterManagement from './components/Admin/ShiftMasterManagement.jsx';
+import GasConnectionModal from './components/Cloud/GasConnectionModal.jsx';
 
+import { ApiService } from './services/apiService.js';
 import { DEFAULT_SHIFT_TYPES } from './types/scheduler.js';
 import { STATIONS, EMPLOYEES, DEFAULT_MONTHLY_RULES, MOCK_MONTH_BORDERS } from './data/mockMasterData.js';
 import { 
@@ -40,6 +42,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isChangePinOpen, setIsChangePinOpen] = useState(false);
   const [isForcedPinChange, setIsForcedPinChange] = useState(false);
+
+  // 雲端連線與同步狀態 (Issue #015)
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [isCloudMode, setIsCloudMode] = useState(() => ApiService.isCloudMode());
 
   const [activeTab, setActiveTab] = useState('MY_DASHBOARD'); 
   const [currentMonth, setCurrentMonth] = useState('2026-09');
@@ -413,6 +419,12 @@ export default function App() {
         }
       };
     }));
+
+    if (ApiService.isCloudMode()) {
+      ApiService.reviewSwap(swapId, isApproved, isAdminArchived ? 'ADMIN_VERIFY' : 'FINAL', meta).catch(e => {
+        console.warn('[雲端同步] 調班審核更新失敗:', e);
+      });
+    }
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
   // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，支援高管違規強制核實)
@@ -574,7 +586,25 @@ export default function App() {
       after_snapshot: afterSnapshot
     };
     setAuditLogs(prev => [newLog, ...prev]);
-  }, [effectiveScheduleMap, scheduleOverrides, allEmployees, currentUser, leaveBalances]);
+
+    if (ApiService.isCloudMode()) {
+      ApiService.overrideWorkHours({
+        year_month: currentMonth,
+        emp_id: empId,
+        day: day,
+        actual_hours: actualHours,
+        actual_start_time: startTime,
+        actual_end_time: endTime,
+        actual_break_hours: breakHours,
+        actual_diff_hours: diffHours,
+        actual_deduction_type: deductionType,
+        is_labor_violation_override: isLaborViolationOverride,
+        actual_notes: notes
+      }).catch(e => {
+        console.warn('[雲端同步] 實勤覆核儲存失敗:', e);
+      });
+    }
+  }, [effectiveScheduleMap, scheduleOverrides, allEmployees, currentUser, leaveBalances, currentMonth]);
 
   // 發布月底出勤確認通知 (需求 #004 雙確認閉環機制)
   const handlePublishSettlement = useCallback(() => {
@@ -618,13 +648,79 @@ export default function App() {
     setAuditLogs(prev => [newLog, ...prev]);
   }, [allEmployees]);
 
+  // ==========================================
+  // 雲端雙向同步機制 (Issue #015: Google Sheets & GAS)
+  // ==========================================
+  // 從 Google 試算表拉取最新全量資料
+  const handlePullFromCloud = useCallback(async () => {
+    try {
+      const data = await ApiService.getInitialMasterData(currentMonth);
+      if (!data) return false;
+
+      if (data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
+        setAllEmployees(data.employees);
+      }
+      if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
+        setAllStations(data.stations);
+      }
+      if (data.shiftTypes && Array.isArray(data.shiftTypes) && data.shiftTypes.length > 0) {
+        const shiftsObj = {};
+        data.shiftTypes.forEach(st => { shiftsObj[st.code] = st; });
+        setShiftTypes(shiftsObj);
+      }
+      if (data.swaps && Array.isArray(data.swaps)) {
+        setSwapRequests(data.swaps);
+      }
+      if (data.overrides && typeof data.overrides === 'object') {
+        setScheduleOverrides(data.overrides);
+      }
+      if (data.passbooks && Array.isArray(data.passbooks)) {
+        setPassbookTransactions(data.passbooks);
+      }
+      if (data.auditLogs && Array.isArray(data.auditLogs)) {
+        setAuditLogs(data.auditLogs);
+      }
+
+      setIsCloudMode(true);
+      return true;
+    } catch (err) {
+      console.error('從雲端試算表拉取失敗:', err);
+      return false;
+    }
+  }, [currentMonth]);
+
+  // 一鍵全量同步本地沙盒狀態至 Google 試算表
+  const handlePushToCloud = useCallback(async () => {
+    try {
+      const payload = {
+        yearMonth: currentMonth,
+        employees: allEmployees,
+        stations: allStations,
+        shiftTypes: Object.values(shiftTypes),
+        scheduleMap: effectiveScheduleMap
+      };
+      const res = await ApiService.syncAllToCloud(payload);
+      setIsCloudMode(true);
+      return res && res.success;
+    } catch (err) {
+      console.error('全量備份推送至雲端試算表失敗:', err);
+      return false;
+    }
+  }, [currentMonth, allEmployees, allStations, shiftTypes, effectiveScheduleMap]);
+
   // 人事主檔更新
   const handleUpdateEmployee = useCallback((updatedEmp) => {
     setAllEmployees(prev => prev.map(e => e.emp_id === updatedEmp.emp_id ? updatedEmp : e));
+    if (ApiService.isCloudMode()) {
+      ApiService.savePersonnel(updatedEmp).catch(e => console.warn('[雲端同步] 人事主檔更新失敗:', e));
+    }
   }, []);
 
   const handleAddEmployee = useCallback((newEmp) => {
     setAllEmployees(prev => [...prev, newEmp]);
+    if (ApiService.isCloudMode()) {
+      ApiService.savePersonnel(newEmp).catch(e => console.warn('[雲端同步] 新增同仁失敗:', e));
+    }
   }, []);
 
   const handleUpdateStationLeader = useCallback((stationId, newLeaderId) => {
@@ -634,10 +730,15 @@ export default function App() {
   // 營業班別主檔管理回呼 (需求 #008 Manager 專屬規劃與稽核日誌連動)
   const handleSaveShiftType = useCallback((newShift) => {
     const beforeState = JSON.parse(JSON.stringify(shiftTypes));
-    setShiftTypes(prev => ({
-      ...prev,
+    const nextShiftTypes = {
+      ...shiftTypes,
       [newShift.code]: newShift
-    }));
+    };
+    setShiftTypes(nextShiftTypes);
+
+    if (ApiService.isCloudMode()) {
+      ApiService.saveShiftTypes(Object.values(nextShiftTypes)).catch(e => console.warn('[雲端同步] 班別更新失敗:', e));
+    }
 
     const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
     const operatorId = currentUser ? currentUser.emp_id : 'B111014';
@@ -651,7 +752,7 @@ export default function App() {
       operator_name: operatorName,
       notes: `主管【${operatorName}】${isNew ? '新增' : '更新'}營業班別【${newShift.code} - ${newShift.name}】(${newShift.startTime}~${newShift.endTime}，實勤 ${newShift.workHours}h)`,
       before_snapshot: beforeState,
-      after_snapshot: { ...shiftTypes, [newShift.code]: newShift }
+      after_snapshot: nextShiftTypes
     };
     setAuditLogs(prev => [newLog, ...prev]);
   }, [shiftTypes, currentUser]);
@@ -879,6 +980,8 @@ export default function App() {
         onTabChange={setActiveTab}
         onOpenChangePin={() => { setIsForcedPinChange(false); setIsChangePinOpen(true); }}
         onLogout={handleLogout}
+        onOpenCloudModal={() => setIsCloudModalOpen(true)}
+        isCloudMode={isCloudMode}
         isValid={validation.isValid}
       />
 
@@ -1118,9 +1221,20 @@ export default function App() {
         onChangePinSuccess={handleChangePinSuccess}
       />
 
+      {/* Google Sheets 與 GAS 雲端連線同步彈窗 (Issue #015) */}
+      <GasConnectionModal
+        isOpen={isCloudModalOpen}
+        onClose={() => {
+          setIsCloudModalOpen(false);
+          setIsCloudMode(ApiService.isCloudMode());
+        }}
+        onPullFromCloud={handlePullFromCloud}
+        onPushToCloud={handlePushToCloud}
+      />
+
       {/* 底部資訊 */}
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-        學旅營運處多站點智慧排班與勞基法合規審查系統 · 全架構基礎工程完工定案版 (V2.3)
+        學旅營運處多站點智慧排班與勞基法合規審查系統 · Google Sheets 與 GAS 雲端實體驗證版 (V2.5)
       </footer>
     </div>
   );

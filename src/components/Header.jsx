@@ -15,7 +15,10 @@ import {
   User,
   LogOut,
   KeyRound,
-  FileCheck2
+  FileCheck2,
+  Cloud,
+  CloudCheck,
+  CloudOff
 } from 'lucide-react';
 
 export default function Header({ 
@@ -28,6 +31,8 @@ export default function Header({
   onTabChange,
   onOpenChangePin,
   onLogout,
+  onOpenCloudModal,
+  isCloudMode,
   isValid
 }) {
   const isManager = currentUser?.role === 'Manager';
@@ -67,15 +72,38 @@ export default function Header({
             <div className="flex items-center space-x-2">
               <h1 className="text-base font-bold text-slate-900 tracking-tight">學旅營運處多站點智慧排班系統</h1>
               <span className="px-1.5 py-0.2 text-[10px] font-semibold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                V2.3 權限解耦版
+                V2.5 雲端聯調版
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">9大站點 · 4大班別 · 正交雙軌資安體系</p>
+            <p className="text-[11px] text-slate-500">9大站點 · 4大班別 · Google Sheets 雙向持久化</p>
           </div>
         </div>
 
-        {/* 右側：同仁資訊徽章、密碼按鈕、登出 */}
+        {/* 右側：雲端狀態、月份與工時模式、同仁資訊、密碼按鈕、登出 */}
         <div className="flex items-center flex-wrap gap-2.5">
+          {/* 雲端連線狀態動態指示按鈕 */}
+          <button
+            type="button"
+            onClick={onOpenCloudModal}
+            title={isCloudMode ? "Google Sheets 雲端連線中 (點擊開啟設定與同步)" : "目前處於本地沙盒模式 (點擊配置 Google Sheets GAS 雲端連線)"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+              isCloudMode
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            {isCloudMode ? (
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            )}
+            <Cloud className="w-3.5 h-3.5" />
+            <span>{isCloudMode ? '雲端同步' : '本地沙盒'}</span>
+          </button>
+
           {/* 月份與工時模式 (僅 Manager / Admin 可調整工時模式) */}
           <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200 text-xs">
             <Calendar className="w-3.5 h-3.5 ml-1.5 mr-1 text-slate-500" />

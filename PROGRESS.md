@@ -186,7 +186,7 @@ git tag -l
 # 一鍵回退至當前 V2.4.0 完工定稿版本
 git checkout v2.4.0-admin-verify-manager-self-declared-done
 ```
-�則（清潔組代碼 `ST_CLEAN` 隔離防呆）」。
+�則（清潔組代碼 `ST_CLEAN` 隔離防呆）」。
 2. **目前連線狀態：本地高擬真持久化沙盒 (Local Storage Data Store)**：
    * 目前系統運作於本地 Vite 伺服器 (`http://localhost:3000/`)。
    * 資料讀寫透過瀏覽器 `localStorage`（如 `xuelu_employees_v1`、`xuelu_audit_logs_v1`）達成持久化，重啟伺服器或重新整理網頁資料均不丟失。
