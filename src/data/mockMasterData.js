@@ -95,40 +95,41 @@ export const STATIONS = [
 
 // 核心同仁名冊：落實業務角色 (role) 與系統權限 (is_admin) 雙軌解耦
 export const EMPLOYEES = [
-  // 營運高階主管 (Manager, is_admin: false, is_self_scheduled: true)
+  // 營運高階主管 兼 系統管理員 (Admin Manager, 掌管全場人事/國假調移/終審)
+  {
+    emp_id: 'B111155',
+    name: '陳鵬宇',
+    role: 'Manager',
+    is_admin: true, // 系統管理員 (Admin) 兼 營運高管 (Manager)
+    pin_code: '000000',
+    is_default_pin: true,
+    failed_attempts: 0,
+    lock_until: null,
+    primary_station: 'ST_OPS',
+    supported_stations: ['ST_OPS', 'ST_SERVICE', 'ST_DINING'],
+    can_solo: true,
+    solo_stations: ['ST_OPS', 'ST_SERVICE'],
+    is_self_scheduled: true,
+    status: 'Active',
+    hire_date: '2019-08-01'
+  },
+  // 正職同仁 兼 系統管理員 (Admin Staff, 數據總控與技術維護)
   {
     emp_id: 'B111014',
     name: '林慶忠',
-    role: 'Manager',
-    is_admin: false, // 純業務高階主管
+    role: 'Staff',
+    is_admin: true, // 系統管理員 (Admin) 兼 正職同仁 (Staff)
     pin_code: '000000',
     is_default_pin: true,
     failed_attempts: 0,
     lock_until: null,
     primary_station: 'ST_ADMIN',
-    supported_stations: ['ST_ADMIN', 'ST_SERVICE', 'ST_MAIN_SHOP'],
+    supported_stations: ['ST_ADMIN', 'ST_SERVICE', 'ST_SHOP_MAIN'],
     can_solo: true,
     solo_stations: ['ST_ADMIN', 'ST_SERVICE'],
-    is_self_scheduled: true,
-    status: 'Active',
-    hire_date: '2020-03-01'
-  },
-  // 正職同仁 兼 系統管理員 (Staff + Admin，擁有技術數據總控，但無人事管理微調權)
-  {
-    emp_id: 'B111155',
-    name: '陳鵬宇',
-    role: 'Staff',
-    is_admin: true, // 系統管理員 (Admin)
-    pin_code: '000000',
-    is_default_pin: true,
-    failed_attempts: 0,
-    lock_until: null,
-    primary_station: 'ST_SERVICE',
-    supported_stations: ['ST_SERVICE', 'ST_DINING'],
-    can_solo: true,
     is_self_scheduled: false,
     status: 'Active',
-    hire_date: '2021-12-01'
+    hire_date: '2020-03-01'
   },
   // 站點組長 (Leader, is_admin: false, can_solo = true)
   {

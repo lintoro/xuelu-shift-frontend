@@ -7,7 +7,8 @@ export default function PersonnelManagement({
   stations,
   onUpdateEmployee,
   onAddEmployee,
-  onUpdateStationLeader
+  onUpdateStationLeader,
+  currentSimulatedDate
 }) {
   const [editingEmp, setEditingEmp] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -135,10 +136,15 @@ export default function PersonnelManagement({
 
       {/* 站點組長 (Leader) 動態指派快顯列 */}
       <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-5">
-        <h3 className="text-xs font-bold text-slate-700 mb-2 flex items-center space-x-1.5">
-          <Award className="w-4 h-4 text-amber-600" />
-          <span>各站點組長動態指派 (組長權限非綁定同仁，而是站點指派工號)</span>
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <h3 className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+            <Award className="w-4 h-4 text-amber-600" />
+            <span>各組別當月排班組長 (Leader) 動態選派</span>
+          </h3>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300">
+            ★ 每月 10 日開始高管排班設定期：指定完成各組別當月組長
+          </span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
           {stations.map(station => (
             <div key={station.station_id} className="bg-white p-2 rounded-lg border border-slate-200">

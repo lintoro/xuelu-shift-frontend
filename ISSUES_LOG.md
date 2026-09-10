@@ -182,59 +182,128 @@
   1. 目前班別定義 `SHIFT_TYPES`（A, B, C, D 班等）為常數定義於 `src/types/scheduler.js`。
   2. 介面上缺乏「動態班別主檔維護 (Shift Master Management)」面板，當遇到商場大檔期、特定活動、或臨時需要開立「E 晚跨夜班 (15:00~24:00)」或「F 特賣短班 (11:30~16:00)」時，門市無法由介面自訂新增。
   3. **權限歸屬核心決策**：
-     - 若由 `Admin`（IT）加入：流程受制於資訊部門，失去門市營業面對商場活動的快速調度彈性。
-     - 若由 `Manager`（營運高管）規劃：最符合門市現場業務實況，因為營業時間、尖峰人力、班別更次純屬營業營運範疇。
-- **最佳實踐與架構方案（三位一體動態班別主檔）**：
-  1. **權限歸屬**：
-     - **明確歸屬 `Manager`（營運處長/店長）擁有完整新增、編輯與停用權限**。
-     - `Admin` 具備系統維運檢視或預設範本載入權限，但不干預營業決策。
-  2. **動態班別主檔面板 (ShiftMasterModal / ShiftSettingsPanel)**：
-     - 整合於「人事與營運管理」中，提供「班別主檔」獨立頁籤。
-     - 欄位支援：
-       - 班別代碼 (Code)：如 `E`、`F`、`S1`。
-       - 班別名稱 (Name)：如「夜間打烊班」、「假日午間短班」。
-       - 出勤時段 (Start / End)：下拉或時間選單。
-       - 休息時數 (Break Hours)：自動符合勞基法 35 條防呆（工作滿 4h 配 0.5h 休息）。
-       - 淨工時 (Work Hours)：系統自動試算。
-       - 視覺標籤色彩 (Color Badge)：提供 8 款高級預設色。
-       - 啟用狀態 (Active/Inactive)：隨時下架舊班別而不影響歷史班表資料。
-  3. **全系統自動適配連動**：
-     - 排班大表、實勤覆核選單、調班選單、志願劃休門戶，皆自動由動態班別陣列產生選項。
-- **影響範圍評估**：
-  - `src/components/Admin/ShiftMasterManagement.jsx`（新增動態班別維護元件）
-  - `src/App.jsx`（動態 shiftTypes 狀態機與持久化、稽核日誌連動）
-  - `src/types/scheduler.js`（作為初始預設模板與通用出勤判定）
-  - `src/components/Header.jsx`（Manager 專屬導航 Tab）
-- **目前狀態**：`✅ 已完成修復並通過驗證 (v1.8.0-issues007-008-done)`
+     - 若由 `Admin`（IT）加入：流程受制於資訊部門，�### 📌 [需求 #015] Google Sheets 與 GAS 雲端實體驗證聯調架構（無縫雙向同步與高可靠度容錯降級）
 
-### 📌 [需求 #009] PT 與 STAFF 排班總表面板異常提示隔離與調班操作權限收攏
-
-- **來源反饋**：主管於檢視正職員工（張舒扉）排班總表面板時提出截圖（「檢查 PT 跟STAFF的排班總表面版 不該存在提示異常提醒 他們沒有調班的權利」）。
+- **來源反饋**：為達成系統「零主機維護成本（$0 Serverless）」之長期營運承諾，需驗證並實裝前端與 Google Workspace 雲端試算表及 Google Apps Script (GAS) 之真實 API 連網聯調與雙向同步。
 - **現狀分析與痛點**：
-  1. 目前在「排班總表 (SCHEDULE)」頁籤中，未限制同仁業務角色，導致 PT（計時同仁）與一般正職員工 (Staff) 在排班大表上方均看見了全館排班異常提醒與人力缺口警示看板 (`AnomalyAlertBanner`)、底層演算法引擎除錯卡 (`EngineDebugger`) 以及站點人力檢驗燈號 (`StationStatusOverview`)。
-  2. PT 與一般 Staff 屬於現場出勤人員，並無站點或全館之排班調度權（「沒有調班的權利」），直接看到全館 7 處空窗、8 處警示等管理層缺工資訊，會造成心理恐慌與版面干擾。
-  3. 導覽列中原將 Tab 4 統一名稱為「調班二階審核」，且 `ShiftSwapPortal` 的審核通過/駁回按鈕未進行角色防呆，導致非主管同仁也能看見審核操作按鈕。
+  1. 系統初期主要仰賴前端 Local Mock 記憶體狀態機，雲端試算表尚未與前端全面雙向聯調。
+  2. 網路延遲或離線情境下，若連線不穩可能造成操作受阻。
+  3. 需將 Issue #011~#014 的全新欄位（如支援部門 Solo 開關 `solo_stations`、互調班軟性特例 `is_special_case`、Admin 備查歸檔 `admin_verifier_id`、4 大折抵假別 `deduction_type`）完整映射至 Google 試算表欄位結構。
 - **最佳實踐與架構方案**：
-  1. **排班總表面板角色防呆隔離 (`App.jsx` & `AnomalyAlertBanner.jsx`)**：
-     - 定義 `canManageShifts = isManager || isAdmin || isLeader`。
-     - 僅具備排班調度權限的主管與組長（Manager/Admin/Leader）方可檢視 `AnomalyAlertBanner`（組長看本組、主管看全館）與 `StationStatusOverview`。
-     - 僅高階主管 Manager 與系統管理員 Admin 可檢視演算法除錯與重新計算引擎 (`EngineDebugger`)。
-     - PT 與 Staff 進入「排班總表」時，呈現純淨、直覺之「出勤排班大表 (`ScheduleTable`)」，不顯示任何異常提醒與缺工警示看板。
-  2. **調班門戶權限收攏與導覽文案動態化 (`Header.jsx` & `ShiftSwapPortal.jsx`)**：
-     - PT 人員無調班資格，導覽列完全隱藏 SWAPS Tab。
-     - 一般 Staff 導覽列 Tab 標籤動態更名為「線上調班申請」（僅 Leader/Manager/Admin 呈現「調班二階審核」）。
-     - `ShiftSwapPortal` 傳入 `currentUser`，組長初審按鈕僅限 Leader/Manager/Admin 可見，高管終審覆寫按鈕僅限 Manager/Admin 可見；Staff 僅可填寫對調/挪休申請與查看審核進度，無任何核准權限按鈕。
+  1. **動態雙模式 API 客戶端 (`ApiService.js`)**：
+     - 提供 URL 快取、智慧 Ping 探針與雙模式無縫切換（Cloud Live Mode / Local Sandbox Mode）。
+  2. **Code.gs 雲端後端 13 張核心表對齊**：
+     - 涵蓋 7 大主檔表、1 大系統狀態表、4 大擴充業務表（`Shift_Masters`, `Leave_Passbooks`, `Monthly_Settlements`, `Actual_Hours_Overrides`）。
+  3. **沙盒降級防護 (Graceful Degradation)**：
+     - 當雲端 API 逾時或離線時，自動平滑降級為前端本機快照沙盒，保障門市現場營運永不中斷。
 - **影響範圍評估**：
-  - `src/components/AnomalyAlertBanner.jsx`（非主管/組長角色直接 return null 業務防呆）
-  - `src/App.jsx`（排班總表面板對 PT/Staff 徹底隔離異常看板、引擎卡與站點燈號；傳入 `currentUser` 至 `ShiftSwapPortal`）
-  - `src/components/Header.jsx`（PT 隱藏調班 Tab、Staff 顯示「線上調班申請」、主管顯示「調班二階審核」）
-  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`（嚴格收攏初審通過與終審核准按鈕，一般同仁無操作權限）
-- **目前狀態**：`✅ 已完成修復並通過驗證 (v1.9.0-issue009-done)`
+  - `src/services/ApiService.js`
+  - `src/backend/Code.gs`
+  - `scratch/test_gas_api_contract.mjs`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.5.0-gas-cloud-integration-done)`
 
-### 📌 [需求 #010] 勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休通道強化
+### 📌 [需求 #016] 全月排班生命週期 8 大時限排程引擎與關卡機制
 
-- **來源反饋**：主管檢視實勤覆核面板（李俐旻出勤 10:00~23:00 跨度 13h 休息 0h 截圖）提出三大問題：
-  1. 還未看到自己與自己排好的班調休調班（個人自調挪休）的處理方式，請問是怎麼規劃跟實作的？
+- **來源反饋**：營運主管要求實裝門市全月份排班生命週期的時限管制引擎與各階段作業關卡：
+  1. 每月 10 日開始：MANAGER 下月排班設定（調移、休假規則、指定各組別當月組長）。
+  2. 每月 12 日開始：開放下個月排班劃選，一般員工開始預訂志願序。
+  3. 每月 18 日開始：協調衝突，站點組長初審。
+  4. 每月 20 日開始：MANAGER 覆審。
+  5. 每月 24 日前：最後需於 24 日前完成全場排定。
+  6. 每月 25 日：完成全員簽回確認。
+  7. 月底最後一天：完成當月出勤確認。
+  8. 次月 2 日：全員確認簽回。
+  9. 平時：隨時進行調班及主管審核出確實出勤。
+- **現狀分析與痛點**：
+  1. 原系統缺乏「生命週期時限感」，正職劃休、排班調整、月底簽認等功能缺乏時間邊界限制，可能導致同仁過早或過晚劃休、組長逾期未審核。
+  2. 門市營運需要清晰的視覺化時程步驟指示（當前在生命週期的哪一步、離下個關卡截止剩幾天）。
+  3. 月底最後一天天數各月不同（大月 31 日、小月 30 日、二月 28 或 29 日），不能寫死 30 日，需動態演算法精準判定。
+  4. 次月 1~2 日牽涉跨月考勤結算簽認，需精確判定為結算期而非提前進入下下月排班。
+- **最佳實踐與架構方案**：
+  1. **排程引擎核心模組 (`src/engine/schedulingTimelineEngine.js`)**：
+     - 定義 `TIMELINE_STAGES` 8 大時限排程階段與時程區間。
+     - 實作 `getTimelineStatus(targetDate)` 動態解析當前所處階段、進度百分比與截止倒數天數。
+     - 動態計算大小月與閏年二月最後一天天數 (`getDaysInMonth(year, month)`)，精準判定月底最後一天出勤確認期。
+     - 提供 `checkActionTimelineEligibility(actionType, userRole, currentDate)` 業務操作守衛，並保留主管特權放行。
+  2. **全域時程指示器與時光機切換 (`SchedulingTimelineStepper.jsx`)**：
+     - 頂部懸浮可視化 8 步驟 Stepper，當前階段動態脈衝高亮，並顯示操作倒數或提示。
+     - 整合「時光機 (Date Travel Simulator)」快速預設按鈕（10日設定、12日劃選、18日初審、20日覆審、24日排定、25日簽回、月底確認、次月2日結算），方便門市管理與展示驗收。
+  3. **業務面板時限管控連動**：
+     - **同仁劃休門戶 (`RegularStaffPicker.jsx`)**：未滿 12 日或逾 17 日顯示琥珀色管制鎖定橫幅，一般同仁無法送出，主管保留特權放行。
+     - **排班大表面板 (`ScheduleTable.jsx`)**：20~23 日呈現高管覆審橫幅、24 日排定截止提醒、25 日全員簽回標籤。
+     - **人事管理面板 (`PersonnelManagement.jsx`)**：組長指派區塊標註【每月 10 日開始高管排班設定期：指定完成各組別當月組長】業務時限徽章。
+     - **月底結算面板 (`MonthlySettlementPanel.jsx`)**：月底最後一天標記「出勤確認與實勤覆核」，次月 2 日標記「全員考勤簽認截止」閉環。
+- **影響範圍評估**：
+  - `src/engine/schedulingTimelineEngine.js`
+  - `src/components/Timeline/SchedulingTimelineStepper.jsx`
+  - `src/App.jsx`
+  - `src/components/LeavePortal/RegularStaffPicker.jsx`
+  - `src/components/ScheduleTable.jsx`
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/components/MonthlySettlement/MonthlySettlementPanel.jsx`
+  - `scratch/test_scheduling_timeline_lifecycle.mjs`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.6.0-scheduling-timeline-done)`
+
+### 📌 [需求 #017] 登入頁正式化、全年度國假調移動態平帳與服務業國假出勤調移同意免雙薪閉環機制
+
+- **來源反饋**：主管於正式環境驗收與門市實務檢視中提出：
+  1. 登入工號預設留白，加入「記住工號」功能，下方消除常態測試示範卡，保留連點 5 次 Logo 彩蛋。
+  2. 「120天平帳」改名為「國定假日調移」，天數動態化（不一定死板 120 天）。
+  3. 國定假日調移非主管單方強制，需個別同仁確認同意；服務業即使休假天數不移動，只要國假有出勤就必須取得同意，以合法免除雙薪問題。
+- **現狀分析與痛點**：
+  1. 原登入頁寫死主管工號，且常態展示一鍵登入卡，不符正式同仁登入規範。
+  2. 原平帳面板硬編碼 120 天，無法因應各年度政府公告之休假天數差異。
+  3. 缺乏勞基法第 37、39 條服務業國假出勤「事前個別勞工同意」之法律閉環，可能衍生雙薪加班費補發之勞檢爭議。
+- **最佳實踐與架構方案**：
+  1. **登入模組正式化與 Mobile-First**：
+     - 工號預設留白，支援 `rememberEmpId` localStorage 記憶。
+     - PIN 輸入框支援純數字九宮格鍵盤（`inputMode="numeric"`）與輸滿 6 碼自動送出。
+     - 消除常態測試卡，頂部 Logo 連點 5 次觸發管理員除錯彩蛋。
+  2. **全年度國假調移動態加總平帳 (`AnnualHolidayTransfer.jsx`)**：
+     - 頁籤與面板正名為「國定假日調移」與「全年度國定假日專案調移設定面板」。
+     - 動態加總各月法定天數（`totalStatutory`），支援平帳或非 120 天（如 116 天）之即時平衡驗證。
+     - 支援 2026/2027 年度切換與專案借還去向透明化明細。
+  3. **同仁國假出勤調移同意簽認閉環 (`MyDashboard.jsx`)**：
+     - 精準鎖定國假排班出勤同仁，於工作台派發載明原節日與指定調移休假日之電子同意卡。
+     - 同仁點擊同意後生成防偽時間戳記，連動排班大表（顯示 `已同意免雙薪`）與月底結算清冊。
+- **影響範圍評估**：
+  - `src/components/Auth/LoginView.jsx`
+  - `src/components/Header.jsx`
+  - `src/data/holidayTransferStore.js`
+  - `src/components/Admin/AnnualHolidayTransfer.jsx`
+  - `src/components/Dashboard/MyDashboard.jsx`
+  - `src/components/ScheduleTable.jsx`
+  - `src/components/MonthlySettlement/MonthlySettlementPanel.jsx`
+  - `src/App.jsx`
+  - `scratch/test_holiday_consent_and_login.mjs`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.7.0-holiday-consent-done)`
+
+---
+
+## 處理歷史與版本控制記錄 (Version & Rollback History)
+
+| 序號 | 處理日期 | 關聯需求/問題 | 變更前版號 (Snapshot) | 變更後版號 | 處理結果與回滾驗證 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 2026-09-10 | 初始穩定基準線 (Baseline) | — | `v1.0.0-baseline` | 專案建置 0 錯誤，含全新異常提醒介面，伺服器運行中。 |
+| 2 | 2026-09-10 | PROGRESS.md 未執行工作全數完成 (Phase 2 雙向聯動 + Phase 3 GAS 7+1 初始化與部署手冊) | `v1.0.1-logged` | `v1.1.0-progress-completed` | 全模組完成度 100%，npm run build 通過，產出 DEPLOY_GUIDE.md。 |
+| 3 | 2026-09-10 | 【需求 #005】人事組織主檔支援清單編輯與清潔組完全雙向隔離 | `v1.1.0-progress-completed` | `v1.2.0-issue005-done` | 編輯/新增彈窗支援多選增減，清潔組雙向隔離鎖死，npm run build 通過。 |
+| 4 | 2026-09-10 | 【需求 #003】主管端實勤覆核面板重構 (起訖時間/35條休息/補休連動/日期鎖定) | `v1.2.0-issue005-done` | `v1.3.0-issue003-done` | 實作起訖/休息選單、勞基法35條防呆、差額連動補休/PT工時、未來日期反灰鎖定，npm run build 通過。 |
+| 5 | 2026-09-10 | 【需求 #001】線上調班申請支援個人挪休與自調班表 (SELF_RESCHEDULE) | `v1.3.0-issue003-done` | `v1.4.0-issue001-done` | 新增個人自調挪休通道、個人7休1預檢、站點缺工警示、二階終審自動覆寫與雙快照留痕，npm run build 通過。 |
+| 6 | 2026-09-10 | 【需求 #002】我的工作台個人化特休與補休存摺明細介面 (Passbook) | `v1.4.0-issue001-done` | `v1.5.0-issue002-done` | 實作特休(週年制純天數)/補休(12/31歸零純時數)雙分頁存摺、流水歷程帳、覆核差額自動追加流水，npm run build 通過。 |
+| 7 | 2026-09-10 | 【需求 #004】考勤月底結算機制與「實勤確認班表（雙確認閉環機制）」 | `v1.5.0-issue002-done` | `v1.6.0-issue004-done` | 實作主管考勤月底結算面板 (MonthlySettlementPanel)、全員到班雙確認簽認追蹤、同仁工作台電子簽署對帳卡、結算清冊 CSV 匯出，npm run build 通過。 |
+| 8 | 2026-09-10 | 【需求 #006】特休與補休排定功能 (方案 A：雙軌解耦，預排全日扣假 + 覆核小時沖抵) | `v1.6.0-issue004-done` | `v1.7.0-issue006-done` | 劃休門戶新增 AL/CT 假別排定、即時餘額防呆與存摺連動扣抵；實勤覆核短少工時支援扣補休、扣特休時數或純事假沖抵，npm run build 通過。 |
+| 9 | 2026-09-10 | 【需求 #007 & #008】組長視野隔離與聚焦 + Manager 動態班別主檔管理機能 | `v1.7.1-issues007-008-start` | `v1.8.0-issues007-008-done` | 實作組長本組異常過濾與排班大表預設聚焦本組；建立 ShiftMasterManagement 動態班別主檔管理與全系統調班連動，27 項測試 100% 通過，npm run build 通過。 |
+| 10 | 2026-09-10 | 【需求 #009】PT 與 STAFF 排班總表面板異常提示隔離與調班操作權限收攏 | `v1.8.0-issues007-008-done` | `v1.9.0-issue009-done` | 排班總表對 PT 與 Staff 嚴格隔離異常警示看板、演算法除錯與站點燈號；PT 隱藏調班入口，Staff 調整為「線上調班申請」並鎖定初審/終審按鈕，測試全數通過，npm run build 通過。 |
+| 11 | 2026-09-10 | 【需求 #010】勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休通道強化 | `v1.9.0-issue009-done` | `v2.0.0-hours-override-triple-done` | 修正第35條休息累進倍數(1.5h/1.0h/0.5h)、增加第32條單日工時上限12h/加班4h獨立警告、Manager三度確認放行彈窗、CSV班表/結算清冊/日曆卡永久加註違規提醒，工作台自調快捷入口，單元測試通過，npm run build 通過。 |
+| 12 | 2026-09-10 | 【需求 #010 語氣修正】加班工時以計發加班費為法定前提，修正「自動增加補休」之負面觀感 | `v2.0.0-hours-override-triple-done` | `v2.0.1-overtime-pay-first-done` | 依《勞基法》第24/32-1條，全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，覆核比對、結算清冊表頭、存摺流水標題全數嚴謹合規，npm run build 通過。 |
+| 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
+| 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
+| 15 | 2026-09-10 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |
+| 16 | 2026-09-10 | 【需求 #014】最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 | `v2.3.0-review-hierarchy-station-scope-done` | `v2.4.0-admin-verify-manager-self-declared-done` | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解職場倫理衝突並落實雙人控制防弊；實勤面板支援 Admin 備查最高主管出勤，單元測試全數通過，npm run build 通過。 |
+| 17 | 2026-09-10 | 【需求 #015】Google Sheets 與 GAS 雲端實體驗證聯調架構 | `v2.4.0-admin-verify-manager-self-declared-done` | `v2.5.0-gas-cloud-integration-done` | 實作 ApiService 雙模式快取切換與 Ping 契約、對齊 Code.gs 13 張雲端表結構、健全無縫連線降級容錯，單元測試全數通過，npm run build 通過。 |
+| 18 | 2026-09-10 | 【需求 #016】全月排班生命週期 8 大時限排程引擎與關卡機制 | `v2.5.0-gas-cloud-integration-done` | `v2.6.0-scheduling-timeline-done` | 實作 8 大排班時程狀態機、動態大小月二月運算、操作資格守衛、可視化 Stepper 與時光機切換、各業務面板時限管制連動，單元與回歸測試全數通過，npm run build 通過。 |
+| 19 | 2026-09-10 | 【需求 #017】登入正式化、全年度國假調移動態平帳與服務業國假出勤調移同意免雙薪閉環機制 | `v2.6.0-scheduling-timeline-done` | `v2.7.0-holiday-consent-done` | 實作工號記憶與連點5次Logo彩蛋、國假調移動態加總平帳與年度切換、同仁出勤調移同意書簽署、排班表與結算清冊免雙薪憑證連動，單元與回歸測試全數通過，npm run build 通過。 |
+�自調挪休）的處理方式，請問是怎麼規劃跟實作的？
   2. 核實時數違反邏輯：不能設定 0 休息正確，但上例 13 小時已超過至少 2 個 4 小時及超過每日最多加班時數了，但沒有跳警告。
   3. 就算跳警告，MANAGER 也要能依現況核實，請重複三次後放行，但未來出報表時仍要加註提醒。
 - **現狀分析與痛點**：
@@ -379,6 +448,45 @@
   - `scratch/test_manager_self_declared_and_admin_verification.mjs`
 - **目前狀態**：`✅ 已完成修復並通過驗證 (v2.4.0-admin-verify-manager-self-declared-done)`
 
+### 📌 [需求 #015] 排班發布後調班時限阻擋與自調挪休剛性防線
+
+- **來源反饋**：主管提出「排班發布後若同仁當天想挪休，現場會開天窗，應有限制提前天數或僅允許找人代班」之管理防線。
+- **最佳實踐與架構方案**：
+  1. 發布日前允許個人自調挪休與雙人對調；
+  2. 發布日後，個人自調挪休需至少提前 2 天（48小時）；當日與次日嚴格阻擋個人自調挪休，僅允許「雙人互調或找人代班」，確保現場人力不開天窗。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.5.0-swap-deadline-guard-done)`
+
+### 📌 [需求 #016] 排班全月時限生命週期四階段時限推進器與權限鎖定
+
+- **來源反饋**：主管要求排班應有明確的時限推進機制（劃休期、排班審定、現場出勤覆核、月底結算）。
+- **最佳實踐與架構方案**：
+  1. 實作「排班生命週期時限推進控制器 (SchedulingTimelineLifecycleController)」；
+  2. 建立四階段時限防線（劃休期截止鎖定、預排審查定稿發布、每日出勤覆核、月底結算雙簽認封存）；
+  3. 支援高階主管日期模擬器進行驗證測試。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.6.0-timeline-lifecycle-done)`
+
+### 📌 [需求 #017] 登入介面正式化、國定假日專案調移動態平帳與出勤同意免雙薪法律閉環
+
+- **來源反饋**：主管要求：
+  1. 登入介面帳號留白、支援「記住工號」、常態消除下方示範卡、連點 5 次 Logo 展開除錯彩蛋；
+  2. 「120天平假」正名為「國定假日調移」，天數動態加總平帳（不寫死 120 天）；
+  3. 依《勞基法》第 37、39 條，服務業國假出勤免雙薪須取得個別同仁同意並指定調移休假日，建立電子簽認卡與結算清冊法律閉環。
+- **最佳實踐與架構方案**：
+  1. 登入介面支援 `localStorage` 記住工號、手機九宮格鍵盤、輸滿 6 碼自動驗證、點 5 次 Logo 展開彩蛋；
+  2. 建立 `calculateAnnualBalance` 動態加總法定應休天數（2026 年 116 天、2027 年 115 天等）；
+  3. 實作 `checkEmployeeHolidayConsent` 精準鎖定出勤同仁，於工作台派發調移同意書，連動排班總表點燈與月底 CSV 清冊。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.7.0-holiday-consent-done)`
+
+### 📌 [需求 #018] 核心角色定位校正（林慶忠為 ADMIN STAFF，陳鵬宇為 ADMIN MANAGER）
+
+- **來源反饋**：主管明確指示校正：
+  > **「修正一下 林慶忠是 ADMIN SATFF 陳鵬宇是 ADMIN MANGER」**
+- **現狀分析與調整**：
+  1. **陳鵬宇 (B111155)**：**ADMIN MANAGER**（系統管理員 兼 營運高管），掌管全場人事/國定假日調移/超時違規終審/換班終審；
+  2. **林慶忠 (B111014)**：**ADMIN STAFF**（系統管理員 兼 正職同仁），負責系統數據總控、備份與版本回滾（技術維護，無人事高管終審權）；
+  3. 全系統程式碼、登入彩蛋卡、操作日誌 fallback、超時授權核定與測試腳本全數對齊。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.7.1-admin-roles-aligned-done)`
+
 ---
 
 ## 處理歷史與版本控制記錄 (Version & Rollback History)
@@ -401,3 +509,7 @@
 | 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
 | 15 | 2026-09-10 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |
 | 16 | 2026-09-10 | 【需求 #014】最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 | `v2.3.0-review-hierarchy-station-scope-done` | `v2.4.0-admin-verify-manager-self-declared-done` | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解職場倫理衝突並落實雙人控制防弊；實勤面板支援 Admin 備查最高主管出勤，單元測試全數通過，npm run build 通過。 |
+| 17 | 2026-09-10 | 【需求 #015】排班發布後調班時限阻擋與自調挪休剛性防線 | `v2.4.0-admin-verify-manager-self-declared-done` | `v2.5.0-swap-deadline-guard-done` | 發布後個人自調需提前 2 天；當日與次日嚴格阻擋個人自調挪休，僅允許雙人互調或代班，單元測試全數通過，npm run build 通過。 |
+| 18 | 2026-09-10 | 【需求 #016】排班全月時限生命週期四階段推進器與主管時限控制面板 | `v2.5.0-swap-deadline-guard-done` | `v2.6.0-timeline-lifecycle-done` | 建立劃休截止、排班審查定稿、每日實勤覆核與月底雙簽認四階段推進器，支援時間機器情境模擬，單元測試全數通過，npm run build 通過。 |
+| 19 | 2026-09-10 | 【需求 #017】登入正式化、國定假日調移平帳與服務業免雙薪出勤同意閉環 | `v2.6.0-timeline-lifecycle-done` | `v2.7.0-holiday-consent-done` | 登入工號記住/留白/彩蛋收納；全年度國假動態加總平帳；國假出勤同仁同意書電子簽認與結算清冊免雙薪法律憑據，自動化測試通過，npm run build 通過。 |
+| 20 | 2026-09-10 | 【需求 #018】核心角色定位校正 (林慶忠為 ADMIN STAFF，陳鵬宇為 ADMIN MANAGER) | `v2.7.0-holiday-consent-done` | `v2.7.1-admin-roles-aligned-done` | 校正陳鵬宇為 ADMIN MANAGER (營運高管/終審)，林慶忠為 ADMIN STAFF (正職/數據維護)，全系統彩蛋、日誌、授權全面對齊，自動化測試與 build 通過。 |

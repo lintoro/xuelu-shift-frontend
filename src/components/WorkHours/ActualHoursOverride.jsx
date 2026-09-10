@@ -351,8 +351,8 @@ export default function ActualHoursOverride({
       isLaborViolationOverride: true,
       laborViolations: laborViolationsList,
       overrideManager: {
-        name: currentUser?.name || '林慶忠 (營運主管)',
-        emp_id: currentUser?.emp_id || 'B111014',
+        name: currentUser?.name || '陳鵬宇 (營運主管)',
+        emp_id: currentUser?.emp_id || 'B111155',
         role: currentUser?.role || 'Manager',
         confirmed_at: new Date().toISOString(),
         emergency_reason: emergencyReason
@@ -1136,7 +1136,7 @@ export default function ActualHoursOverride({
                     1. <strong>全館排班總表 CSV</strong>：該同仁之當日儲存格將標記 <code>[⚠️超時違規(實{netActualHours}h)]</code>，且報表最末端將永久條列此筆高管強制核實明細。
                   </p>
                   <p className="leading-relaxed">
-                    2. <strong>考勤結算清冊 CSV</strong>：月底結算名冊將新增加註欄位，明列違反條款、核定主管姓名（{currentUser?.name || '林慶忠'}）與現場緊急事由。
+                    2. <strong>考勤結算清冊 CSV</strong>：月底結算名冊將新增加註欄位，明列違反條款、核定主管姓名（{currentUser?.name || '陳鵬宇'}）與現場緊急事由。
                   </p>
                   <p className="leading-relaxed">
                     3. <strong>中央稽核歷程 (Audit Trail)</strong>：此筆操作將連同時間戳記、操作者工號與終端資訊寫入不可竄改稽核日誌。
@@ -1207,7 +1207,7 @@ export default function ActualHoursOverride({
                 <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-900 font-bold flex items-center space-x-2">
                   <Check className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>
-                    授權核定主管：{currentUser?.name || '林慶忠'} ({currentUser?.emp_id || 'B111014'} · 營運高管)
+                    授權核定主管：{currentUser?.name || '陳鵬宇'} ({currentUser?.emp_id || 'B111155'} · 營運高管)
                   </span>
                 </div>
 

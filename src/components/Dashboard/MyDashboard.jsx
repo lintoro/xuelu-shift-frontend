@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle } from 'lucide-react';
+import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle, FileText, Check } from 'lucide-react';
 import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
+import { checkEmployeeHolidayConsent } from '../../data/holidayTransferStore.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 
 export default function MyDashboard({
@@ -13,6 +14,8 @@ export default function MyDashboard({
   passbookTransactions = [],
   isSettlementPublished = false,
   signOffList = {},
+  holidayConsents = {},
+  onSignHolidayConsent,
   onSignOff,
   onExportMyIcs,
   onNavigateTab
@@ -50,6 +53,14 @@ export default function MyDashboard({
 
   const isSigned = !!signOffList[currentUser.emp_id];
   const mySignInfo = signOffList[currentUser.emp_id];
+
+  // 國定假日出勤調移同意檢核
+  const holidayConsentInfo = checkEmployeeHolidayConsent({
+    empId: currentUser.emp_id,
+    yearMonth,
+    scheduleMap,
+    consentsMap: holidayConsents
+  });
 
   return (
     <div className="space-y-6 mb-8">
@@ -107,6 +118,88 @@ export default function MyDashboard({
           </div>
         </div>
       </div>
+
+      {/* 國定假日調移出勤同意簽認卡片 (服務業免雙薪法律閉環) */}
+      {holidayConsentInfo.required && (
+        <div className={`rounded-2xl border p-5 shadow-sm transition-all ${
+          holidayConsentInfo.pendingCount === 0
+            ? 'bg-emerald-50/80 border-emerald-300'
+            : 'bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border-rose-300'
+        }`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                holidayConsentInfo.pendingCount === 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+              }`}>
+                {holidayConsentInfo.pendingCount === 0 ? <CheckCircle2 className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                    holidayConsentInfo.pendingCount === 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900 animate-pulse'
+                  }`}>
+                    {holidayConsentInfo.pendingCount === 0 ? '國假調移同意已簽認' : '重要勞基法簽署：待同意'}
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {yearMonth} 國定假日出勤調移同意書（依法免計雙薪協議）
+                  </h3>
+                </div>
+                <div className="text-xs text-slate-600 mt-1.5 leading-relaxed space-y-1">
+                  {holidayConsentInfo.holidays.map(h => (
+                    <div key={h.date} className="p-2.5 rounded-xl bg-white/80 border border-slate-200/80">
+                      <p>
+                        依《勞動基準法》第 37、39 條及勞雇雙方約定，本月份適逢法定國定假日【<strong className="text-rose-700">{h.name} ({h.date})</strong>】，排定出勤【<strong className="text-indigo-700">{h.shiftCode} 班</strong>】。
+                        經雙方事前協商合意，該國定假日調移至【<strong className="text-emerald-700">{yearMonth}-{h.suggestedOffDay < 10 ? '0' + h.suggestedOffDay : h.suggestedOffDay} (OFF)</strong>】休假。
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        • 同意要旨：本人同意於原國定假日依班表出勤，並配合調移休假，出勤日按正常工時給付工資（免另計加倍工資/雙薪）。
+                        {h.isConsented && (
+                          <span className="block text-emerald-700 font-bold mt-0.5">
+                            ✓ 電子簽名完成時間: {h.consentData?.signed_at} (雜湊防偽驗證通過)
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center self-end md:self-auto">
+              {holidayConsentInfo.pendingCount === 0 ? (
+                <div className="flex items-center space-x-1.5 text-xs text-emerald-800 font-bold bg-white/90 px-3 py-2 rounded-xl border border-emerald-300">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>已同意調移 (免雙薪)</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (onSignHolidayConsent) {
+                      holidayConsentInfo.holidays.forEach(h => {
+                        if (!h.isConsented) {
+                          onSignHolidayConsent(h.consentKey, {
+                            emp_id: currentUser.emp_id,
+                            emp_name: currentUser.name,
+                            holiday_name: h.name,
+                            holiday_date: h.date,
+                            shift_code: h.shiftCode,
+                            transferred_off_date: `${yearMonth}-${h.suggestedOffDay < 10 ? '0' + h.suggestedOffDay : h.suggestedOffDay}`,
+                            signed_at: new Date().toLocaleString('zh-TW', { hour12: false })
+                          });
+                        }
+                      });
+                    }
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md shadow-rose-600/30 transition-all cursor-pointer active:scale-95 flex items-center space-x-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>本人已審閱並同意國假調移</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 月底實勤雙確認定稿卡片 (需求 #004 閉環機制) */}
       {isSettlementPublished && (

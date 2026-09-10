@@ -10,11 +10,49 @@
  */
 
 function doGet(e) {
-  // 掛載 React 單檔 Web App
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('學旅營運處多站點智慧排班系統')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  try {
+    // 1. 若專案中已有 index.html 則掛載單檔 Web App
+    return HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('學旅營運處多站點智慧排班系統')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (err) {
+    // 2. 若未上傳 index.html，回傳精美狀態看板，絕不呈現一片空白
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>學旅排班雲端微服務 API - 運作正常</title>' +
+      '<style>' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box;}' +
+      '.card{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;max-width:520px;width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);}' +
+      '.badge{display:inline-flex;align-items:center;gap:6px;background:#065f46;color:#34d399;font-size:12px;font-weight:bold;padding:4px 12px;border-radius:9999px;margin-bottom:16px;}' +
+      '.dot{width:8px;height:8px;background:#10b981;border-radius:50%;animation:pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;}' +
+      '@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}' +
+      'h1{font-size:20px;margin:0 0 8px 0;color:#fff;}' +
+      'p{font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 16px 0;}' +
+      '.info-box{background:#0f172a;border-radius:10px;padding:14px;border:1px solid #334155;margin-bottom:20px;font-size:12px;}' +
+      '.info-row{display:flex;justify-content:space-between;padding:4px 0;color:#cbd5e1;}' +
+      '.info-label{color:#64748b;}' +
+      '.btn{display:block;text-align:center;background:#6366f1;color:#fff;text-decoration:none;font-weight:bold;font-size:14px;padding:12px;border-radius:10px;transition:background 0.2s;}' +
+      '.btn:hover{background:#4f46e5;}' +
+      '</style></head><body>' +
+      '<div class="card">' +
+      '<div class="badge"><span class="dot"></span>後端微服務運行中 (Active)</div>' +
+      '<h1>學旅營運處排班系統 - 雲端 API</h1>' +
+      '<p>本網址為 Google Apps Script 後端資料庫 API 網關，負責處理 Google Sheets 7+1 資料表讀寫與安全驗證。</p>' +
+      '<div class="info-box">' +
+      '<div class="info-row"><span class="info-label">服務狀態</span><span style="color:#34d399;font-weight:bold;">🟢 24小時雲端在線監聽</span></div>' +
+      '<div class="info-row"><span class="info-label">API 協議</span><span>JSON-RPC 2.0 (POST)</span></div>' +
+      '<div class="info-row"><span class="info-label">核心版本</span><span>v2.7.1 (雙軌解耦正式版)</span></div>' +
+      '<div class="info-row"><span class="info-label">本地前端</span><span>http://localhost:3000</span></div>' +
+      '</div>' +
+      '<p style="font-size:12px;color:#cbd5e1;margin-bottom:20px;">💡 <strong>如何登入操作系統？</strong><br>本網址為雲端資料交換管線；同仁與主管請開啟前端網頁（本機請點擊下方按鈕，正式上線請開啟 Vercel / GitHub 網址）進入系統。</p>' +
+      '<a href="http://localhost:3000" class="btn">前往系統登入頁面 (localhost:3000) →</a>' +
+      '</div></body></html>';
+    return HtmlService.createHtmlOutput(html)
+      .setTitle('學旅營運處排班系統 - 雲端 API')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
 }
 
 function doPost(e) {
@@ -161,7 +199,7 @@ function validateToken(token) {
   if (!token) throw new Error('401 Unauthorized: 未提供身分憑證 Token，請重新登入！');
   // 本地沙盒開發階段相容
   if (token === 'session_active' || token.indexOf('mock_token_') === 0) {
-    return { emp_id: 'B111014', name: '林慶忠 (營運長)', role: 'Manager', is_admin: true };
+    return { emp_id: 'B111155', name: '陳鵬宇 (營運長/管理員)', role: 'Manager', is_admin: true };
   }
   var cache = CacheService.getScriptCache();
   var sessionStr = cache.get('session_' + token);
@@ -1090,42 +1128,54 @@ function setupSpreadsheet() {
   // 初始化預設管理員與營運高管帳號 (若 Employees 表只有表頭)
   var empSheet = ss.getSheetByName('Employees');
   if (empSheet && empSheet.getLastRow() === 1) {
+    // 1. 營運高階主管 兼 系統管理員 (ADMIN MANAGER: 陳鵬宇)
     var salt1 = Utilities.getUuid().substring(0, 8);
     var hash1 = hashPin('000000', salt1);
     empSheet.appendRow([
-      'B111014',
-      '林慶忠',
+      'B111155',
+      '陳鵬宇',
       'Manager',
       hash1,
       salt1,
-      false, // 業務 Manager，非 Admin
+      true, // 系統管理員 is_admin = true
       'ST_OPS',
       '["ST_OPS","ST_SERVICE","ST_DINING"]',
-      '["ST_OPS"]',
+      '["ST_OPS","ST_SERVICE"]',
       true,
-      '2018-05-01',
+      '2019-08-01',
       new Date().toISOString(),
       'Active'
     ]);
 
+    // 2. 正職同仁 兼 系統管理員 (ADMIN STAFF: 林慶忠)
     var salt2 = Utilities.getUuid().substring(0, 8);
     var hash2 = hashPin('000000', salt2);
     empSheet.appendRow([
-      'B112008',
-      '陳鵬宇',
+      'B111014',
+      '林慶忠',
       'Staff',
       hash2,
       salt2,
       true, // 系統管理員 is_admin = true
-      'ST_SERVICE',
-      '["ST_SERVICE"]',
-      '[]',
-      false,
-      '2021-03-15',
+      'ST_ADMIN',
+      '["ST_ADMIN","ST_SERVICE","ST_SHOP_MAIN"]',
+      '["ST_ADMIN","ST_SERVICE"]',
+      true,
+      '2020-03-01',
       new Date().toISOString(),
       'Active'
     ]);
   }
 
-  SpreadsheetApp.getUi().alert('7+1+4 核心試算表初始化已順利完成！');
+  // 自動清理 Google 試算表剛建立時自帶的空白「工作表1」或「Sheet1」
+  var defaultSheet1 = ss.getSheetByName('工作表1') || ss.getSheetByName('Sheet1');
+  if (defaultSheet1 && ss.getSheets().length > 1) {
+    try {
+      ss.deleteSheet(defaultSheet1);
+    } catch (e) {
+      console.warn('刪除空白工作表1忽略:', e);
+    }
+  }
+
+  SpreadsheetApp.getUi().alert('7+1+4 核心試算表初始化已順利完成！預設空白工作表已自動清理。');
 }

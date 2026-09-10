@@ -145,8 +145,8 @@ export default function ShiftSwapPortal({
           status: 'PENDING',
           notes: ''
         } : {
-          reviewer_id: 'B111014',
-          reviewer_name: '林慶忠 (營運主管)',
+          reviewer_id: 'B111155',
+          reviewer_name: '陳鵬宇 (營運主管)',
           status: 'PENDING',
           notes: ''
         }
@@ -200,8 +200,8 @@ export default function ShiftSwapPortal({
         status: 'PENDING',
         notes: ''
       } : {
-        reviewer_id: 'B111014',
-        reviewer_name: '林慶忠 (營運主管)',
+        reviewer_id: 'B111155',
+        reviewer_name: '陳鵬宇 (營運主管)',
         status: 'PENDING',
         notes: ''
       }

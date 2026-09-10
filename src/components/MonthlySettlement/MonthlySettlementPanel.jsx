@@ -14,16 +14,9 @@ import {
   FileSpreadsheet 
 } from 'lucide-react';
 import { isWorkingShift } from '../../types/scheduler.js';
+import { getTimelineStatus } from '../../engine/schedulingTimelineEngine.js';
+import { checkEmployeeHolidayConsent } from '../../data/holidayTransferStore.js';
 
-/**
- * 考勤月底結算與實勤確認閉環面板 (Monthly Settlement Panel)
- * 依照主管【需求 #004】規範實作：
- * 1. 雙確認閉環機制：前月預排確認 + 當月月底實勤二次定稿簽認
- * 2. 彙整調班對調、個人自調挪休、主管實勤工時覆核
- * 3. 產出調動後實勤定稿班表
- * 4. 追蹤全員電子簽認進度 (Sign-off Tracker)
- * 5. 一鍵匯出正職補休結算清冊與 PT 時薪工時清冊
- */
 export default function MonthlySettlementPanel({
   employees,
   stations,
@@ -32,9 +25,12 @@ export default function MonthlySettlementPanel({
   rules,
   isSettlementPublished,
   signOffList = {},
+  holidayConsents = {},
   onPublishSettlement,
-  onExportSettlementCsv
+  onExportSettlementCsv,
+  currentSimulatedDate
 }) {
+  const statusInfo = getTimelineStatus(currentSimulatedDate || '2026-09-10');
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const yearMonth = rules.target_year_month || '2026-09';
   const totalDays = rules.days_in_month || 30;
@@ -100,6 +96,26 @@ export default function MonthlySettlementPanel({
     const isSigned = !!signOffList[emp.emp_id];
     const signedAt = signOffList[emp.emp_id]?.signed_at;
 
+    // 國定假日出勤調移同意檢核 (服務業免雙薪合法憑據)
+    const holidayConsentInfo = checkEmployeeHolidayConsent({
+      empId: emp.emp_id,
+      yearMonth,
+      scheduleMap,
+      consentsMap: holidayConsents
+    });
+
+    let holidayConsentStatus = 'NONE'; // NONE, CONSENTED, PENDING
+    let holidayConsentLabel = '常態無國假出勤';
+    if (holidayConsentInfo.required) {
+      if (holidayConsentInfo.pendingCount === 0) {
+        holidayConsentStatus = 'CONSENTED';
+        holidayConsentLabel = '已簽署同意(免雙薪)';
+      } else {
+        holidayConsentStatus = 'PENDING';
+        holidayConsentLabel = `⚠️ 待簽認(${holidayConsentInfo.pendingCount}節日)`;
+      }
+    }
+
     return {
       emp,
       actualWorkDays,
@@ -114,7 +130,10 @@ export default function MonthlySettlementPanel({
       isSigned,
       signedAt,
       violationCount: violationList.length,
-      violationList
+      violationList,
+      holidayConsentInfo,
+      holidayConsentStatus,
+      holidayConsentLabel
     };
   });
 
@@ -129,18 +148,18 @@ export default function MonthlySettlementPanel({
     setTimeout(() => setFeedbackMsg(''), 5000);
   };
 
-  // 匯出 CSV 清冊 (含法規合規與主管強制核實加註提醒，以及事假扣全薪/病假扣半薪明細)
+  // 匯出 CSV 清冊 (含法規合規與主管強制核實加註提醒，以及事假扣全薪/病假扣半薪明細、國定假日調移同意狀態)
   const handleExportCsv = () => {
-    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,延長加班與差額時數(依法計發加班費或意願換補休),事假折抵(扣全薪),病假與照顧假(扣半薪),補休折抵(全薪),特休折抵(全薪),線上調動次數,勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
+    let csvContent = '工號,姓名,業務角色,主屬站點,出勤天數,休假天數,實勤總工時,延長加班與差額時數(依法計發加班費或意願換補休),事假折抵(扣全薪),病假與照顧假(扣半薪),補休折抵(全薪),特休折抵(全薪),線上調動次數,國定假日調移同意(服務業免雙薪法律憑據),勞基法合規與主管強制核實加註,月底簽認狀態,簽認時間戳記\n';
     staffSummaries.forEach(s => {
       let violationNote = '法定合規出勤';
       if (s.violationCount > 0) {
         const details = s.violationList.map(v => 
-          `[9/${v.day} 實勤${v.actualHours}h超標: 經營運高管 ${v.manager?.name || '林慶忠'} 強制核定 (事由: ${v.manager?.emergency_reason || '現場緊急調度'})]`
+          `[9/${v.day} 實勤${v.actualHours}h超標: 經營運高管 ${v.manager?.name || '陳鵬宇'} 強制核定 (事由: ${v.manager?.emergency_reason || '現場緊急調度'})]`
         ).join('; ');
         violationNote = `⚠️ 存在 ${s.violationCount} 筆主管強制核實超時違規勤務: ${details}`;
       }
-      csvContent += `"${s.emp.emp_id}","${s.emp.name}","${s.emp.role}","${stationMap[s.emp.primary_station] || s.emp.primary_station}","${s.actualWorkDays}","${s.actualOffDays}","${s.totalWorkHours}","${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours}","${s.personalLeaveHours > 0 ? `${s.personalLeaveHours}h` : '0h'}","${s.sickLeaveHours > 0 ? `${s.sickLeaveHours}h` : '0h'}","${s.compTimeDeductHours > 0 ? `${s.compTimeDeductHours}h` : '0h'}","${s.annualLeaveDeductHours > 0 ? `${s.annualLeaveDeductHours}h` : '0h'}","${s.mySwapsCount}","${violationNote}","${s.isSigned ? '已確認' : '待簽認'}","${s.signedAt || '-'}"\n`;
+      csvContent += `"${s.emp.emp_id}","${s.emp.name}","${s.emp.role}","${stationMap[s.emp.primary_station] || s.emp.primary_station}","${s.actualWorkDays}","${s.actualOffDays}","${s.totalWorkHours}","${s.overtimeDiffHours >= 0 ? '+' : ''}${s.overtimeDiffHours}","${s.personalLeaveHours > 0 ? `${s.personalLeaveHours}h` : '0h'}","${s.sickLeaveHours > 0 ? `${s.sickLeaveHours}h` : '0h'}","${s.compTimeDeductHours > 0 ? `${s.compTimeDeductHours}h` : '0h'}","${s.annualLeaveDeductHours > 0 ? `${s.annualLeaveDeductHours}h` : '0h'}","${s.mySwapsCount}","${s.holidayConsentLabel}","${violationNote}","${s.isSigned ? '已確認' : '待簽認'}","${s.signedAt || '-'}"\n`;
     });
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -155,6 +174,45 @@ export default function MonthlySettlementPanel({
 
   return (
     <div className="space-y-6 mb-8">
+      {/* 考勤結算時限階段提醒 (Issue #016) */}
+      {statusInfo.currentStage?.id === 'MONTH_END_ACTUAL' && (
+        <div className="p-4 rounded-xl border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-950 dark:text-cyan-200 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-5 h-5 text-cyan-600 dark:text-cyan-400 shrink-0 animate-pulse" />
+            <div>
+              <div className="font-bold flex items-center gap-2">
+                <span>【階段 7/8 · 當月底出勤確認日】今日完成當月出勤確認與實勤微調覆核</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-cyan-200 dark:bg-cyan-900 text-cyan-900 dark:text-cyan-100 font-black">
+                  今日截止
+                </span>
+              </div>
+              <p className="text-[11px] text-cyan-800 dark:text-cyan-300 mt-0.5">
+                營運高管與站點組長請於今日內完成全體同仁當月出勤實況確認、延長工時核發及 4 大請假折抵。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {statusInfo.currentStage?.id === 'NEXT_MONTH_SIGNOFF' && (
+        <div className="p-4 rounded-xl border border-teal-300 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-950 dark:text-teal-200 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <div>
+              <div className="font-bold flex items-center gap-2">
+                <span>【階段 8/8 · 次月 2 日考勤結算簽認截止日】全員完成實勤考勤電子簽認對帳閉環</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-teal-200 dark:bg-teal-900 text-teal-900 dark:text-teal-100 font-black">
+                  次月 2 日截止
+                </span>
+              </div>
+              <p className="text-[11px] text-teal-800 dark:text-teal-300 mt-0.5">
+                請督促全體同仁於次月 2 日 23:59 前核對全月總工時、事假、病假與補休特休明細並完成線上簽認。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 頂部 Header */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
@@ -286,12 +344,13 @@ export default function MonthlySettlementPanel({
                   請假扣抵明細
                 </th>
                 <th className="p-2.5 font-bold text-center">調動次數</th>
+                <th className="p-2.5 font-bold text-center">國假調移同意 (免雙薪)</th>
                 <th className="p-2.5 font-bold text-center">法規合規與主管加註</th>
                 <th className="p-2.5 font-bold text-center">月底簽認狀態</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, compTimeDeductHours, annualLeaveDeductHours, personalLeaveHours, sickLeaveHours, mySwapsCount, isSigned, signedAt, violationCount, violationList }) => {
+              {staffSummaries.map(({ emp, actualWorkDays, actualOffDays, totalWorkHours, overtimeDiffHours, compTimeDeductHours, annualLeaveDeductHours, personalLeaveHours, sickLeaveHours, mySwapsCount, isSigned, signedAt, violationCount, violationList, holidayConsentStatus }) => {
                 const isPT = emp.role === 'PT';
                 return (
                   <tr key={emp.emp_id} className="hover:bg-slate-50 transition-colors">
@@ -370,10 +429,23 @@ export default function MonthlySettlementPanel({
                       )}
                     </td>
                     <td className="p-2.5 text-center">
+                      {holidayConsentStatus === 'CONSENTED' ? (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
+                          ✓ 已同意免雙薪
+                        </span>
+                      ) : holidayConsentStatus === 'PENDING' ? (
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px] animate-pulse">
+                          ⚠️ 待同意簽認
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-[10px]">常態無國假出勤</span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-center">
                       {violationCount > 0 ? (
                         <span 
                           className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px] cursor-help shadow-2xs"
-                          title={violationList.map(v => `9/${v.day} 實勤${v.actualHours}h超標 (核定高管: ${v.manager?.name || '林慶忠'} · 事由: ${v.manager?.emergency_reason || '緊急搶修支援'})`).join('\n')}
+                          title={violationList.map(v => `9/${v.day} 實勤${v.actualHours}h超標 (核定高管: ${v.manager?.name || '陳鵬宇'} · 事由: ${v.manager?.emergency_reason || '緊急搶修支援'})`).join('\n')}
                         >
                           <AlertTriangle className="w-3 h-3 text-rose-600" />
                           <span>⚠️ 特准超時 ({violationCount}天)</span>

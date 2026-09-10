@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { SHIFT_TYPES } from '../types/scheduler.js';
-import { User, Sparkles, AlertCircle, Calendar, Filter } from 'lucide-react';
+import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
+import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
 
 export default function ScheduleTable({
   scheduleResult,
@@ -13,8 +15,12 @@ export default function ScheduleTable({
   onExportIcs,
   onExportCsv,
   currentUser,
-  shiftTypes = SHIFT_TYPES
+  shiftTypes = SHIFT_TYPES,
+  currentSimulatedDate,
+  holidayConsents = {}
 }) {
+  const statusInfo = getTimelineStatus(currentSimulatedDate || '2026-09-10');
+  const simDay = statusInfo.day;
   const isLeader = currentUser?.role === 'Leader';
   const myLeaderStation = isLeader 
     ? (stations.find(s => s.leader_emp_id === currentUser?.emp_id) || 
@@ -31,15 +37,19 @@ export default function ScheduleTable({
   const stationNameMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
   const effectiveShiftDefs = shiftTypes || SHIFT_TYPES;
 
-  // 取得平假日資訊
+  // 取得平假日資訊與國定假日
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
+  const monthStr = month < 10 ? '0' + month : '' + month;
   const dayHeaders = [];
   for (let d = 1; d <= totalDays; d++) {
     const dateObj = new Date(year, month - 1, d);
     const dayOfWeek = dateObj.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const weekDayStr = ['日', '一', '二', '三', '四', '五', '六'][dayOfWeek];
-    dayHeaders.push({ day: d, isWeekend, weekDayStr });
+    const dayStr = d < 10 ? '0' + d : '' + d;
+    const fullDate = `${year}-${monthStr}-${dayStr}`;
+    const holidayObj = isStatutoryHoliday(fullDate);
+    dayHeaders.push({ day: d, isWeekend, weekDayStr, holidayObj, fullDate });
   }
 
   // 雙重篩選人員（角色 + 站點/組別）
@@ -59,6 +69,43 @@ export default function ScheduleTable({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+      {/* 排班時限階段專屬提示 (Issue #016) */}
+      {simDay >= 20 && simDay <= 23 && (
+        <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+            <span className="font-bold">【階段 4/8 · 營運高管覆審期 (每月 20~23 日)】全場排班調度進行中</span>
+          </div>
+          <span className="font-semibold text-[11px] text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-rose-300">
+            ⚠️ 規範最後需於 24 日前 完成全場排定！
+          </span>
+        </div>
+      )}
+
+      {simDay === 24 && (
+        <div className="px-4 py-2.5 bg-rose-500/10 border-b border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-bold">🚨【階段 5/8 · 全場排定完成截止日 (24日)】今日必須完成排定發布！</span>
+          </div>
+          <span className="text-[11px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded">
+            今日 23:59 截止
+          </span>
+        </div>
+      )}
+
+      {simDay === 25 && (
+        <div className="px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">📢【階段 6/8 · 全員下月班表公告簽回日 (25日)】下月班表已公告</span>
+          </div>
+          <span className="text-[11px] text-emerald-700 font-semibold">
+            請全體同仁於今日完成電子簽回確認
+          </span>
+        </div>
+      )}
+
       {/* 表頭控制列 */}
       <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
         <div className="flex items-center space-x-3">
@@ -154,22 +201,29 @@ export default function ScheduleTable({
               </th>
 
               {/* 1 ~ 30 日表頭 */}
-              {dayHeaders.map(({ day, isWeekend, weekDayStr }) => {
+              {dayHeaders.map(({ day, isWeekend, weekDayStr, holidayObj }) => {
                 const isSelected = selectedDay === day;
                 return (
                   <th
                     key={day}
                     id={`schedule-day-col-${day}`}
                     onClick={() => onSelectDay(day)}
-                    className={`p-1.5 text-center border-r border-slate-200 min-w-[34px] cursor-pointer transition-colors select-none ${
+                    className={`p-1.5 text-center border-r border-slate-200 min-w-[34px] cursor-pointer transition-colors select-none relative ${
                       isSelected 
                         ? 'bg-indigo-600 text-white font-extrabold shadow-inner' 
+                        : holidayObj
+                        ? 'bg-rose-100/70 text-rose-900 hover:bg-rose-200/70'
                         : isWeekend 
                         ? 'bg-rose-50/70 text-rose-700 hover:bg-rose-100/70' 
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
-                    title={`點擊檢視 9月${day}日 (${weekDayStr}) 站點合規燈號`}
+                    title={holidayObj ? `法定國定假日：${holidayObj.name}` : `點擊檢視 9月${day}日 (${weekDayStr}) 站點合規燈號`}
                   >
+                    {holidayObj && (
+                      <div className="text-[8px] leading-tight font-black text-rose-600 bg-white/90 rounded px-0.5 mb-0.5 truncate">
+                        {holidayObj.name.includes('中秋') ? '中秋' : holidayObj.name.includes('國慶') ? '國慶' : '國假'}
+                      </div>
+                    )}
                     <div className="text-[11px] font-bold leading-none">{day}</div>
                     <div className={`text-[9px] mt-0.5 ${isSelected ? 'text-indigo-100' : isWeekend ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>
                       {weekDayStr}
@@ -216,12 +270,13 @@ export default function ScheduleTable({
                     </td>
 
                     {/* 1 ~ 30 日班別格 */}
-                    {dayHeaders.map(({ day, isWeekend }) => {
+                    {dayHeaders.map(({ day, isWeekend, holidayObj }) => {
                       const shift = scheduleMap[emp.emp_id]?.[day];
                       const shiftCode = shift?.shift_type;
                       const shiftDef = effectiveShiftDefs[shiftCode];
 
                       let cellBg = isWeekend ? 'bg-rose-50/20' : '';
+                      if (holidayObj) cellBg = 'bg-rose-50/40';
                       let pillStyle = 'text-slate-300';
                       let label = '-';
 
@@ -245,22 +300,41 @@ export default function ScheduleTable({
                         pillStyle = `${shiftDef.color || 'bg-indigo-100 text-indigo-800'} font-bold border shadow-2xs`;
                       }
 
+                      // 國定假日出勤調移簽認狀態檢核
+                      const isHolidayDuty = holidayObj && shiftCode && shiftCode !== 'OFF' && shiftCode !== 'TERM_OFF' && !isManager;
+                      const consentKey = `${rules.target_year_month || '2026-09'}_${day}_${emp.emp_id}`;
+                      const isConsented = isHolidayDuty ? !!holidayConsents[consentKey] : false;
+
+                      let holidayTooltip = '';
+                      if (isHolidayDuty) {
+                        holidayTooltip = isConsented 
+                          ? `\n[國假調移: ${emp.name} 已同意出勤免雙薪]` 
+                          : `\n[⚠️ 國假調移: 待同仁同意簽署 (服務業免雙薪要件)]`;
+                      }
+
                       return (
                         <td
                           key={day}
-                          className={`p-1 text-center border-r border-slate-100 ${cellBg} ${
+                          className={`p-1 text-center border-r border-slate-100 relative ${cellBg} ${
                             selectedDay === day ? 'bg-indigo-50/50' : ''
                           }`}
                           title={
                             shift
-                              ? `${emp.name} | ${day}日: ${shiftCode || '留白'} (${stationNameMap[shift.station_id] || shift.station_id || '-'}) - ${shift.note || shiftDef?.name || ''}`
+                              ? `${emp.name} | ${day}日: ${shiftCode || '留白'} (${stationNameMap[shift.station_id] || shift.station_id || '-'}) - ${shift.note || shiftDef?.name || ''}${holidayTooltip}`
                               : ''
                           }
                         >
                           <div
-                            className={`w-6 h-6 mx-auto rounded flex items-center justify-center text-[11px] transition-transform ${pillStyle}`}
+                            className={`w-6 h-6 mx-auto rounded flex items-center justify-center text-[11px] transition-transform relative ${pillStyle}`}
                           >
                             {label}
+                            {isHolidayDuty && (
+                              <span 
+                                className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-white ${
+                                  isConsented ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'
+                                }`} 
+                              />
+                            )}
                           </div>
                         </td>
                       );

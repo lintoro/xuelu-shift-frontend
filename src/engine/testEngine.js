@@ -33,9 +33,9 @@ console.log(`[效能指標] 排班完成！耗時: ${result.durationMs} ms (目�
 console.log(`[矩陣規格] 員工數: ${EMPLOYEES.length}, 天數: ${result.totalDays}`);
 
 // 驗證高階主管留白
-const managerSchedule = result.scheduleMap['B111014'];
+const managerSchedule = result.scheduleMap['B111155'];
 const managerShifts = Object.values(managerSchedule).filter(s => s.shift_type !== null);
-console.log(`[高管豁免] 林慶忠 (B111014) 預排班數: ${managerShifts.length} (預期 0，完全留白)`);
+console.log(`[高管豁免] 陳鵬宇 (B111155) 預排班數: ${managerShifts.length} (預期 0，完全留白)`);
 
 // 執行法規合規審查
 const validation = validateScheduleCompliance({

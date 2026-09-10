@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Calendar, CheckCircle, AlertCircle, Trash2, HeartHandshake, ShieldAlert, Sparkles } from 'lucide-react';
+import { Calendar, CheckCircle, AlertCircle, Trash2, HeartHandshake, ShieldAlert, Sparkles, Clock, Lock } from 'lucide-react';
+import { checkActionTimelineEligibility } from '../../engine/schedulingTimelineEngine.js';
 
 export default function RegularStaffPicker({
   employee,
@@ -8,10 +9,18 @@ export default function RegularStaffPicker({
   dailyQuotas,
   rules,
   leaveBalance,
-  onSavePreferences
+  onSavePreferences,
+  currentSimulatedDate
 }) {
   const totalDays = rules.days_in_month || 30;
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
+
+  // 檢查排班時限合規性 (每月 12 ~ 17 日開放同仁預訂)
+  const timelineCheck = checkActionTimelineEligibility(
+    'SUBMIT_PREFERENCE',
+    employee?.role || 'Staff',
+    currentSimulatedDate || '2026-09-10'
+  );
 
   // 當前同仁的劃休志願
   const myPrefs = preferences.filter(p => p.emp_id === employee.emp_id);
@@ -217,6 +226,34 @@ export default function RegularStaffPicker({
           </div>
         </div>
       </div>
+
+      {/* 排班時限排程提醒卡片 (Issue #016) */}
+      {!timelineCheck.allowed ? (
+        <div className="mb-4 p-3.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 shadow-2xs">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <div className="font-bold flex items-center gap-2">
+              <span>【排班時限管控提醒】一般同仁志願預訂時限管控</span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 font-semibold">
+                開放時段：每月 12 日 ~ 17 日
+              </span>
+            </div>
+            <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+              {timelineCheck.reason}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">🟢 目前處於「一般同仁劃休預訂開放期 (每月 12 ~ 17 日)」</span>
+          </div>
+          <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+            請於 17 日 23:59 前完成劃休志願登記
+          </span>
+        </div>
+      )}
 
       {/* 提示訊息回饋 */}
       {feedbackMsg && (

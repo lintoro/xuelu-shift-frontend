@@ -24,8 +24,8 @@ export const INITIAL_SWAP_REQUESTS = [
       notes: ''
     },
     final_review: {
-      reviewer_id: 'B111014',
-      reviewer_name: '林慶忠',
+      reviewer_id: 'B111155',
+      reviewer_name: '陳鵬宇',
       status: 'PENDING',
       notes: ''
     }
@@ -37,8 +37,8 @@ export const INITIAL_AUDIT_LOGS = [
     log_id: 'LOG_20260901_001',
     timestamp: '2026-09-09T16:00:00.000Z',
     action_type: 'SCHEDULE_INIT',
-    operator_id: 'B111014',
-    operator_name: '林慶忠 (營運長)',
+    operator_id: 'B111155',
+    operator_name: '陳鵬宇 (營運長)',
     notes: '初始排班種子矩陣生成並經滑動視窗合規檢驗鎖定',
     before_snapshot: null,
     after_snapshot: null // 運行時注入
@@ -179,7 +179,10 @@ export function precheckSwapCompliance({
     }
   }
 
-  // 2. 執行虛擬對調排班模擬
+  // 2. 執行虛擬對調排班模擬（防呆：確保 simMap 中存在雙方員工物件）
+  if (!simMap[applicantId]) simMap[applicantId] = {};
+  if (!simMap[targetId]) simMap[targetId] = {};
+
   if (applicantDay === targetDay) {
     simMap[applicantId][applicantDay] = tarShift ? { ...tarShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
     simMap[targetId][targetDay] = appShift ? { ...appShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };

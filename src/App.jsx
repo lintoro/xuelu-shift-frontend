@@ -21,14 +21,15 @@ import MyDashboard from './components/Dashboard/MyDashboard.jsx';
 import MonthlySettlementPanel from './components/MonthlySettlement/MonthlySettlementPanel.jsx';
 import ShiftMasterManagement from './components/Admin/ShiftMasterManagement.jsx';
 import GasConnectionModal from './components/Cloud/GasConnectionModal.jsx';
+import SchedulingTimelineStepper from './components/Timeline/SchedulingTimelineStepper.jsx';
 
 import { ApiService } from './services/apiService.js';
 import { DEFAULT_SHIFT_TYPES } from './types/scheduler.js';
 import { STATIONS, EMPLOYEES, DEFAULT_MONTHLY_RULES, MOCK_MONTH_BORDERS } from './data/mockMasterData.js';
-import { 
-  INITIAL_LEAVE_BALANCES, 
-  INITIAL_DAILY_QUOTAS, 
-  INITIAL_PREFERENCES, 
+import {
+  INITIAL_LEAVE_BALANCES,
+  INITIAL_DAILY_QUOTAS,
+  INITIAL_PREFERENCES,
   INITIAL_PT_AVAILABILITY,
   INITIAL_PASSBOOK_TRANSACTIONS
 } from './data/leaveStore.js';
@@ -47,17 +48,28 @@ export default function App() {
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [isCloudMode, setIsCloudMode] = useState(() => ApiService.isCloudMode());
 
-  const [activeTab, setActiveTab] = useState('MY_DASHBOARD'); 
+  // 全月排班生命週期時限排程狀態 (Issue #016)
+  const [currentSimulatedDate, setCurrentSimulatedDate] = useState('2026-09-10');
+
+  const [activeTab, setActiveTab] = useState('MY_DASHBOARD');
   const [currentMonth, setCurrentMonth] = useState('2026-09');
   const [workHourModel, setWorkHourModel] = useState('REGULAR');
   const [selectedDay, setSelectedDay] = useState(1);
   const [isResignedActive, setIsResignedActive] = useState(false);
 
-  // 動態人事主檔 (支援 localStorage 本機持久化，改動密碼重新整理不丟失)
+  // 動態人事主檔 (支援 localStorage 本機持久化，升級 v2 校正 Admin Manager/Staff)
   const [allEmployees, setAllEmployees] = useState(() => {
     try {
-      const saved = localStorage.getItem('xuelu_employees_v1');
-      return saved ? JSON.parse(saved) : EMPLOYEES;
+      const saved = localStorage.getItem('xuelu_employees_v2') || localStorage.getItem('xuelu_employees_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map(e => {
+          if (e.emp_id === 'B111155') return { ...e, role: 'Manager', is_admin: true, is_self_scheduled: true };
+          if (e.emp_id === 'B111014') return { ...e, role: 'Staff', is_admin: true, is_self_scheduled: false };
+          return e;
+        });
+      }
+      return EMPLOYEES;
     } catch {
       return EMPLOYEES;
     }
@@ -65,7 +77,7 @@ export default function App() {
   const [allStations, setAllStations] = useState(STATIONS);
 
   // 門戶中選取檢視的同仁身分
-  const [currentEmpId, setCurrentEmpId] = useState('B111014');
+  const [currentEmpId, setCurrentEmpId] = useState('B111155');
 
   // 全員劃休志願序與存摺狀態
   const [preferences, setPreferences] = useState(INITIAL_PREFERENCES);
@@ -88,19 +100,46 @@ export default function App() {
   // 自動同步至 localStorage
   React.useEffect(() => {
     try {
-      localStorage.setItem('xuelu_employees_v1', JSON.stringify(allEmployees));
+      localStorage.setItem('xuelu_employees_v2', JSON.stringify(allEmployees));
     } catch (e) {
       console.warn('localStorage save failed', e);
     }
   }, [allEmployees]);
 
+  // 國定假日出勤調移同意紀錄 (服務業免雙薪法律閉環，支援 localStorage 持久化)
+  const [holidayConsents, setHolidayConsents] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_holiday_consents_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
   React.useEffect(() => {
     try {
-      localStorage.setItem('xuelu_audit_logs_v1', JSON.stringify(auditLogs));
+      localStorage.setItem('xuelu_holiday_consents_v1', JSON.stringify(holidayConsents));
     } catch (e) {
       console.warn('localStorage save failed', e);
     }
-  }, [auditLogs]);
+  }, [holidayConsents]);
+
+  const handleSignHolidayConsent = useCallback((consentKey, consentData) => {
+    setHolidayConsents(prev => ({
+      ...prev,
+      [consentKey]: consentData
+    }));
+
+    // 寫入不可抹滅稽核軌跡
+    setAuditLogs(prev => [{
+      log_id: `LOG_HOLIDAY_CONSENT_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'HOLIDAY_CONSENT_SIGNED',
+      operator_id: consentData.emp_id,
+      operator_name: consentData.emp_name,
+      notes: `同仁【${consentData.emp_name}】完成國定假日【${consentData.holiday_name} (${consentData.holiday_date})】出勤調移同意書簽署（指定調移休假日: ${consentData.transferred_off_date}，出勤日按正常工時給薪，依法免計雙薪）。`
+    }, ...prev]);
+  }, []);
 
   // 營業班別動態主檔 (需求 #008 Manager 專屬規劃與自訂維護)
   const [shiftTypes, setShiftTypes] = useState(() => {
@@ -318,7 +357,7 @@ export default function App() {
         // 個人自調挪休覆寫
         if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
         const empStation = allEmployees.find(e => e.emp_id === req.applicant_id)?.primary_station || 'ST_SERVICE';
-        
+
         newOverrides[req.applicant_id][req.applicant_day] = {
           shift_type: 'OFF',
           station_id: null,
@@ -349,8 +388,8 @@ export default function App() {
           log_id: `LOG_${Date.now()}`,
           timestamp: new Date().toISOString(),
           action_type: isAdminArchived ? 'SHIFT_SWAP_ADMIN_ARCHIVED' : 'SELF_RESCHEDULE',
-          operator_id: currentUser ? currentUser.emp_id : 'B111014',
-          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '林慶忠 (營運長)'),
+          operator_id: currentUser ? currentUser.emp_id : 'B111155',
+          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '陳鵬宇 (營運長)'),
           notes: logNotes,
           before_snapshot: beforeSnapshot,
           after_snapshot: afterSnapshot
@@ -396,8 +435,8 @@ export default function App() {
           log_id: `LOG_${Date.now()}`,
           timestamp: new Date().toISOString(),
           action_type: isAdminArchived ? 'SHIFT_SWAP_ADMIN_ARCHIVED' : (req.is_special_swap ? 'SHIFT_SWAP_SPECIAL' : 'SHIFT_SWAP'),
-          operator_id: currentUser ? currentUser.emp_id : 'B111014',
-          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '林慶忠 (營運長)'),
+          operator_id: currentUser ? currentUser.emp_id : 'B111155',
+          operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '陳鵬宇 (營運長)'),
           notes: logNotes,
           before_snapshot: beforeSnapshot,
           after_snapshot: afterSnapshot
@@ -428,15 +467,15 @@ export default function App() {
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
   // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，支援高管違規強制核實)
-  const handleOverrideHours = useCallback(({ 
-    empId, 
-    day, 
-    actualHours, 
-    startTime, 
-    endTime, 
-    breakHours, 
-    diffHours, 
-    deductionType = 'COMP_TIME', 
+  const handleOverrideHours = useCallback(({
+    empId,
+    day,
+    actualHours,
+    startTime,
+    endTime,
+    breakHours,
+    diffHours,
+    deductionType = 'COMP_TIME',
     notes,
     isLaborViolationOverride = false,
     laborViolations = [],
@@ -467,7 +506,7 @@ export default function App() {
       const targetEmp = allEmployees.find(e => e.emp_id === empId);
       if (targetEmp && targetEmp.role !== 'PT') {
         const isInc = diffHours > 0;
-        
+
         if (isInc) {
           // 加班延長：正職自動核轉補休增額
           let updatedComp = 0;
@@ -487,7 +526,7 @@ export default function App() {
             category: 'COMP_TIME',
             date: `2026-09-${day < 10 ? '0' + day : day}`,
             action: 'INCREASE',
-            title: isLaborViolationOverride 
+            title: isLaborViolationOverride
               ? `高管強制核定超時出勤 (+${diffHours}h 延長工時認列/意願補休)`
               : `主管實勤覆核延長工時 (+${diffHours}h 延長工時認列/意願補休)`,
             amount: diffHours,
@@ -564,23 +603,22 @@ export default function App() {
 
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
     const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
-    const deductText = diffHours < 0 ? ` [沖抵方式: ${
-      deductionType === 'COMP_TIME' ? '扣補休(全薪)' :
-      deductionType === 'ANNUAL_LEAVE' ? '扣特休(全薪)' :
-      deductionType === 'SICK_LEAVE' ? '病假/照顧假(扣半薪)' :
-      '事假(扣全薪)'
-    }]` : '';
-    
+    const deductText = diffHours < 0 ? ` [沖抵方式: ${deductionType === 'COMP_TIME' ? '扣補休(全薪)' :
+        deductionType === 'ANNUAL_LEAVE' ? '扣特休(全薪)' :
+          deductionType === 'SICK_LEAVE' ? '病假/照顧假(扣半薪)' :
+            '事假(扣全薪)'
+      }]` : '';
+
     const logNotes = isLaborViolationOverride
-      ? `【⚠️營運高管強制核定超時違規勤務】${empName} (9/${day}) 淨實勤 ${actualHours}h。核定高管: ${currentUser?.name || '林慶忠'}。違規事項: ${laborViolations.join('; ')}。現場事由: ${overrideManager?.emergency_reason || ''}`
+      ? `【⚠️營運高管強制核定超時違規勤務】${empName} (9/${day}) 淨實勤 ${actualHours}h。核定高管: ${currentUser?.name || '陳鵬宇'}。違規事項: ${laborViolations.join('; ')}。現場事由: ${overrideManager?.emergency_reason || ''}`
       : `覆核實勤工時：${empName} (9/${day}) 調整為 ${actualHours} 小時${diffText}${deductText}`;
 
     const newLog = {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
       action_type: isLaborViolationOverride ? 'HOURS_OVERRIDE_VIOLATION' : 'HOURS_OVERRIDE',
-      operator_id: currentUser ? currentUser.emp_id : 'B111014',
-      operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+      operator_id: currentUser ? currentUser.emp_id : 'B111155',
+      operator_name: currentUser ? currentUser.name : '陳鵬宇 (營運長)',
       notes: logNotes,
       before_snapshot: beforeSnapshot,
       after_snapshot: afterSnapshot
@@ -613,8 +651,8 @@ export default function App() {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
       action_type: 'MONTHLY_SETTLEMENT_PUBLISH',
-      operator_id: currentUser ? currentUser.emp_id : 'B111014',
-      operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+      operator_id: currentUser ? currentUser.emp_id : 'B111155',
+      operator_name: currentUser ? currentUser.name : '陳鵬宇 (營運長)',
       notes: `正式發布 ${currentRules.target_year_month || '2026-09'} 月底實勤定稿班表與全員到班雙確認通知`,
       before_snapshot: null,
       after_snapshot: null
@@ -740,8 +778,8 @@ export default function App() {
       ApiService.saveShiftTypes(Object.values(nextShiftTypes)).catch(e => console.warn('[雲端同步] 班別更新失敗:', e));
     }
 
-    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
-    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+    const operatorName = currentUser ? currentUser.name : '陳鵬宇 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111155';
     const isNew = !shiftTypes[newShift.code];
 
     const newLog = {
@@ -765,8 +803,8 @@ export default function App() {
       return copy;
     });
 
-    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
-    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+    const operatorName = currentUser ? currentUser.name : '陳鵬宇 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111155';
 
     const newLog = {
       log_id: `LOG_${Date.now()}`,
@@ -786,8 +824,8 @@ export default function App() {
     localStorage.removeItem('xuelu_shift_types_v1');
     setShiftTypes(DEFAULT_SHIFT_TYPES);
 
-    const operatorName = currentUser ? currentUser.name : '林慶忠 (營運長)';
-    const operatorId = currentUser ? currentUser.emp_id : 'B111014';
+    const operatorName = currentUser ? currentUser.name : '陳鵬宇 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111155';
 
     const newLog = {
       log_id: `LOG_${Date.now()}`,
@@ -816,8 +854,8 @@ export default function App() {
       log_id: `LOG_${Date.now()}`,
       timestamp: new Date().toISOString(),
       action_type: 'ROLLBACK',
-      operator_id: currentUser ? currentUser.emp_id : 'B111014',
-      operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+      operator_id: currentUser ? currentUser.emp_id : 'B111155',
+      operator_name: currentUser ? currentUser.name : '陳鵬宇 (營運長)',
       notes: `一鍵回滾班表矩陣至日誌【${targetLogId}】之狀態`,
       before_snapshot: beforeState,
       after_snapshot: targetSnapshot
@@ -987,6 +1025,13 @@ export default function App() {
 
       {/* 主工作區 */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* 全月排班生命週期時限排程狀態看板 (Issue #016) */}
+        <SchedulingTimelineStepper
+          currentSimulatedDate={currentSimulatedDate}
+          onSimulateDateChange={setCurrentSimulatedDate}
+          currentUser={currentUser}
+        />
+
         {/* TAB 0: 我的專屬工作台 (Personal Dashboard) */}
         {activeTab === 'MY_DASHBOARD' && (
           <MyDashboard
@@ -999,6 +1044,8 @@ export default function App() {
             passbookTransactions={passbookTransactions}
             isSettlementPublished={isSettlementPublished}
             signOffList={signOffList}
+            holidayConsents={holidayConsents}
+            onSignHolidayConsent={handleSignHolidayConsent}
             onSignOff={handleEmployeeSignOff}
             onExportMyIcs={handleExportMyIcs}
             onNavigateTab={setActiveTab}
@@ -1055,6 +1102,8 @@ export default function App() {
               onExportCsv={handleExportStoreCsv}
               currentUser={currentUser}
               shiftTypes={shiftTypes}
+              currentSimulatedDate={currentSimulatedDate}
+              holidayConsents={holidayConsents}
             />
 
             {/* 勞基法合規證明書：僅主管與組長檢視法規審查細項 */}
@@ -1106,6 +1155,7 @@ export default function App() {
                 rules={currentRules}
                 leaveBalance={leaveBalances[currentEmpId] || { annualLeaveDays: 0, compTimeHours: 0 }}
                 onSavePreferences={handleSavePreferences}
+                currentSimulatedDate={currentSimulatedDate}
               />
             )}
           </>
@@ -1158,6 +1208,7 @@ export default function App() {
             onUpdateEmployee={handleUpdateEmployee}
             onAddEmployee={handleAddEmployee}
             onUpdateStationLeader={handleUpdateStationLeader}
+            currentSimulatedDate={currentSimulatedDate}
           />
         )}
 
@@ -1172,10 +1223,14 @@ export default function App() {
           />
         )}
 
-        {/* TAB 7: 全年度國定假日調移 120 天平帳 */}
+        {/* TAB 7: 全年度國定假日專案調移平帳 (年度放假平帳管理) */}
         {activeTab === 'HOLIDAY_TRANSFER' && (
           <AnnualHolidayTransfer
             employees={allEmployees}
+            scheduleMap={effectiveScheduleMap}
+            currentMonth={currentMonth}
+            holidayConsents={holidayConsents}
+            onSignHolidayConsent={handleSignHolidayConsent}
           />
         )}
 
@@ -1207,7 +1262,9 @@ export default function App() {
             rules={currentRules}
             isSettlementPublished={isSettlementPublished}
             signOffList={signOffList}
+            holidayConsents={holidayConsents}
             onPublishSettlement={handlePublishSettlement}
+            currentSimulatedDate={currentSimulatedDate}
           />
         )}
       </main>

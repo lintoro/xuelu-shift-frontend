@@ -52,7 +52,7 @@ export default function Header({
     // 核心決策：人事管理、班別規劃與 120 天平帳僅限營運高階 Manager，Admin 嚴格無人事與班別規劃權！
     { id: 'PERSONNEL', label: '人事管理', icon: Users, show: isManager },
     { id: 'SHIFT_SETTINGS', label: '班別主檔', icon: Clock, show: isManager },
-    { id: 'HOLIDAY_TRANSFER', label: '120天平帳', icon: Scale, show: isManager },
+    { id: 'HOLIDAY_TRANSFER', label: '國定假日調移', icon: Scale, show: isManager },
     { id: 'FAIRNESS', label: '公平性與AI', icon: BarChart3, show: isManager || isAdmin },
     { id: 'AUDIT_LOGS', label: '稽核回滾', icon: History, show: isManager || isAdmin }
   ];
