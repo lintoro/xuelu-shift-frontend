@@ -1,9 +1,7 @@
-# 學旅營運處多站點智慧排班與勞基法合規審查系統
-## 專案開發進度、現況盤點與維運交接報告 (PROGRESS.md)
-
-> **專案版本**：V2.8.1 正式完工驗收暨雲端上線準備版（最新標籤：`v2.0.1-overtime-pay-first-done`）  
+# 學旅營運處多站點智慧排班與勞基法合規審查> **專案版本**：V2.4.0 正式完工驗收暨交接封裝版（最新標籤：`v2.4.0-admin-verify-manager-self-declared-done`）  
 > **更新日期**：2026-09-10  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
+> **完整維運交接說明書**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)。
 
 ---
 
@@ -64,9 +62,24 @@
   - **勞基法第 35 條休息累進倍數防呆**：動態計算累積在勤跨度，滿 4h 需 0.5h、滿 8h（跨度 $\ge 8.5$h）需 1.0h、滿 12h（跨度 $\ge 12.5$h）需 1.5h，未達法定累積時數時動態警示。
   - **勞基法第 32 條第 2 項單日工時上限嚴重警告卡**：扣除休息後淨實勤 $> 12$h 或單日加班 $> 4$h 時，獨立紅底警示卡跳出，普通儲存按鈕剛性鎖死。
   - **營運高管現場實況三度確認強制放行機制 (Triple-Confirmation Modal)**：面臨現場突發緊急勤務時，僅限 Manager / Admin 可透過三階安全鎖（1. 違規條款事實核認、2. 法律責任與報表加註宣告、3. 輸入緊急事由並最終授權）強制核定入帳。
-  - 工時自動比對：正職同仁差額自動核轉為補休增減並寫入存摺流水帳；PT 人員直接核定到班工時。
-  - 日期範圍安全防呆：僅開放當日及歷史日期，未來日期全面反灰鎖定。
+  - **加班以計發加班費為法定前提 (需求 #010 語氣修正)**：全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，依《勞基法》第 24 條與第 32-1 條消弭管理語氣爭議。
   - **未來報表違規加註提醒全面連動**：全館 CSV 班表儲存格加註 `[⚠️超時違規]`、尾部輸出高管強制核實專案清單；月底結算名冊顯示紅底標籤 `⚠️ 特准超時`，結算 CSV 新增「法規合規與主管強制核實加註」欄位；個人工作台當日日曆格顯示 `⚠️ 特准實勤 Xh`。
+- [x] **未到勤或請假折抵之額度不足檢核與 4 大假別選項 (需求 #011)**：
+  - 同仁若欲以「彈性補休」或「法定特休」沖抵短少出勤時數，系統比對存摺可用額度；**若不足以扣抵，立即觸發紅底異常震動卡，儲存按鈕剛性鎖死**。
+  - 擴充 4 大請假折抵選項：1. 扣抵彈性補休（全薪）、2. 扣抵法定特休（全薪）、3. 事假/其它（扣全薪）、4. 病假/照顧假（扣半薪）。
+  - 月底結算清冊與 CSV 匯出完整連動事假、病假與補休特休沖抵統計。
+- [x] **支援部門能否獨立 (Solo) 開關與互調班軟性特例關卡 (需求 #012)**：
+  - 人事主檔各支援站點增設「🌟 可獨立 (Solo)」開關，同仁主檔擴充 `solo_stations: string[]`。
+  - 換班安全預檢引擎對價關係檢核（A 與 B 互相支援能力、調入站點獨立能力）；若資格不符採**軟性關卡放行（送單不鎖死）**，加註【⚠️ 跨組特例調班】，交由組長初審與高管終審放行。
+- [x] **實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上覆核 (需求 #013)**：
+  - 站點組長 (Leader) 覆核選單**嚴格限定同組基層同仁**（排除跨組、排除本人、排除高管與其他組長）。
+  - 利益迴避機制：任何操作者選單排除本人，自動預設合格清單首位同仁，杜絕自我覆核。
+  - 組長實勤出勤向上由營運高管 (Manager) 覆核，高管介面提供站點快速篩選器。
+  - 調班初審同組檢核：組長僅可初審所轄站點調班單，自身調班單利益迴避由高管向上裁決。
+- [x] **最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 (需求 #014)**：
+  - 確立最高主管（林慶忠）為最高決策者，同級主管調班向上裁定；最高主管發起調班自動進入【最高主管業務裁定 · 待行政合規備查】（`PENDING_ADMIN_VERIFY`）。
+  - 系統管理員 Admin（陳鵬宇）操作按鈕正名為 **`【檢驗合規並備查歸檔】(Verify & Archive)`**，僅做形式法規檢驗，化解「下屬 Staff 審核上司 Manager」之倫理衝突，並落實雙人控制（Dual Control）防弊。
+  - 實勤面板開放 Admin 備查最高主管出勤，儲存按鈕切換為 `【檢驗合規並備查歸檔 (Admin Archive)】`。
 
 ### 5. 營運後台、月底考勤結算與稽核 (Admin & Settlement) — 100%
 - [x] **動態人事主檔與清潔組雙向隔離 (`PersonnelManagement.jsx`)**：
@@ -92,6 +105,88 @@
 1. **純動態資料驅動 (Data-Driven)**：
    * 系統所有員工名冊、排班表、調班申請、假勤額度，皆為動態 React State 與資料庫物件，**絕無將資料寫死在邏輯程式碼中**。
    * 程式碼中的常數僅為「法規原則（如勞基法 35 條、7 休 1）」與「業務特別單位規則（清潔組代碼 `ST_CLEAN` 隔離防呆）」。
+2. **目前連線狀態：本地高擬真持久化沙盒 (Local Storage Data Store)**：
+   * 目前系統運作於本地 Vite 伺服器 (`http://localhost:3000/`)。
+   * 資料讀寫透過瀏覽器 `localStorage`（如 `xuelu_employees_v1`、`xuelu_audit_logs_v1`）達成持久化，重啟伺服器或重新整理網頁資料均不丟失。
+   * 此架構與 Google Sheets 7+1 表之欄位規格 **100% 精準對齊**，供主管無損驗收。
+3. **雲端 Google Sheets 資料庫現狀**：
+   * 後端微服務代碼 [`src/backend/Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs) 已全部寫好，包含一鍵自動建表函式 `setupSpreadsheet()`。
+   * 因需掛載於企業或主管個人的 Google Workspace / Google Drive 帳號下，目前處於**「已備妥藍圖，待本機驗收通過後一鍵掛載發布」**之狀態。
+
+---
+
+## 四、 版本歷史與 Git 標籤鏈條 (Version Log)
+
+本專案全程落實**「每次動工前記錄版號、一動一驗、嚴禁改一錯二、隨時可回溯」**之紀律，全部變更皆已建立專屬 Git Tag：
+
+| 序號 | 版號標籤 (Tag) | 處理項目 | 變更範疇 | 驗收結果 |
+| :---: | :--- | :--- | :--- | :--- | :---: |
+| 1 | `v1.0.0-baseline` | 初始穩定基準線 | 專案建置 0 錯誤、異常提醒介面與伺服器就緒 | 通過 |
+| 2 | `v1.1.0-progress-completed` | `PROGRESS.md` 未執行工作 | 異常橫幅平滑滾動定位、GAS 7+1 初始化腳本與 `DEPLOY_GUIDE.md` | 通過 |
+| 3 | `v1.2.0-issue005-done` | **【需求 #005】** 人事支援清單與清潔組隔離 | 編輯/新增彈窗支援站點多選、清潔組特別單位雙向隔離鎖死、底層派工互鎖 | 通過 |
+| 4 | `v1.3.0-issue003-done` | **【需求 #003】** 主管端實勤覆核面板重構 | 打卡起訖選單、休息扣抵、勞基法 35 條防呆、補休/PT工時連動、未來日期鎖定 | 通過 |
+| 5 | `v1.4.0-issue001-done` | **【需求 #001】** 線上調班個人挪休自調 | `SELF_RESCHEDULE` 通道、7休1法規預檢、站點缺工提醒、二階終審自動覆寫 | 通過 |
+| 6 | `v1.5.0-issue002-done` | **【需求 #002】** 工作台特休/補休存摺明細 | 週年制特休純天數、12/31 補休歸零純時數、雙分頁存摺、覆核差額流水記錄 | 通過 |
+| 7 | `v1.6.0-issue004-done` | **【需求 #004】** 考勤月底結算雙確認閉環 | 月底結算面板、全員電子簽認、清冊 CSV 匯出、工作台到班核認卡片 | 通過 |
+| 8 | `v1.7.0-issue006-done` | **【需求 #006】** 特休與補休排定功能 (方案 A) | 劃休門戶新增 AL/CT 假別排定與存摺即時扣抵；主管實勤短少支援扣補休/特休時數沖抵 | 通過 |
+| 9 | `v1.8.0-issues007-008-done` | **【需求 #007 & #008】** 組長視野隔離 + Manager 動態班別主檔 | 組長異常視野隔離、大表本組自動聚焦、ShiftMasterManagement 班別自訂與全系統連動 | 通過 |
+| 10 | `v1.9.0-issue009-done` | **【需求 #009】** PT 與 STAFF 異常提示隔離與調班權限收攏 | 排班總表對 PT/Staff 隱藏異常提醒看板與站點燈號；PT 隱藏調班 Tab，Staff 鎖死審核按鈕 | 通過 |
+| 11 | `v2.0.0-hours-override-triple-done` | **【需求 #010】** 勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休強化 | 第 35 條休息累進 (1.5h/1.0h/0.5h)、第 32 條單日工時 12h/加班 4h 獨立警告、Manager 三度確認彈窗、報表違規加註 | 通過 |
+| 12 | `v2.0.1-overtime-pay-first-done` | **【需求 #010 語氣修正】** 加班工時依法計發加班費前提正名 | 修正「自動增加補休」之負面觀感，正名為「核定加班 · 依法列加班費核發/依意願換補休」，全系統詞彙合規嚴謹 | 通過 |
+| 13 | `v2.1.0-deduction-balance-check-done` | **【需求 #011】** 未到勤或請假折抵額度不足檢驗阻擋 ＋ 4 大假別選項 | 可用額度不足紅底異常卡剛性鎖定儲存按鈕；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片與月底結算清冊連動 | 通過 |
+| 14 | `v2.2.0-swap-soft-guard-solo-switch-done` | **【需求 #012】** 支援部門 Solo 開關 ＋ 互調班軟性特例關卡 | 人事主檔各支援站點 Solo 開關；換班對價雙向檢核，資格不符採軟性放行送單不鎖死，加註特例單據由組長初審高管終審放行 | 通過 |
+| 15 | `v2.3.0-review-hierarchy-station-scope-done` | **【需求 #013】** 實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長向上覆核 | 實勤覆核限定同組基層（排除跨組、本人、高管），組長實勤向上由 Manager 覆核並提供站點篩選；調班初審同組檢核與利益迴避 | 通過 |
+| 16 | `v2.4.0-admin-verify-manager-self-declared-done` | **【需求 #014】** 最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔 | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解倫理衝突落實雙人控制；實勤面板支援最高主管備查 | 通過 |
+
+---
+
+## 五、 專案交接與接續維運指引 (Handover Guide)
+
+本專案已產出完整維運交接手冊，詳情請直接查閱：[`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)。
+
+### 1. 核心代碼結構地圖
+* **前端入口與狀態總控**：[`src/App.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/App.jsx)（動態狀態機、調班終審覆寫、實勤覆核差額連動存摺、班別主檔持久化、月底簽認回呼、最高主管調班與實勤 Admin 備查歸檔）。
+* **導覽選單**：[`src/components/Header.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Header.jsx)（整合「月底考勤結算」、「班別主檔管理」Tab 與各角色可見性）。
+* **個人工作台與假勤存摺**：
+  * 主面板：[`src/components/Dashboard/MyDashboard.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Dashboard/MyDashboard.jsx)（個人數據卡片、月底定稿二次簽署對帳卡、自調挪休通道入口）。
+  * 假勤存摺彈窗：[`src/components/Dashboard/LeavePassbookModal.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Dashboard/LeavePassbookModal.jsx)（特休/補休雙分頁與流水記錄）。
+* **排班大表與組別聚焦**：[`src/components/ScheduleTable.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/ScheduleTable.jsx)（站點過濾下拉選單、組長預設自動聚焦本組）。
+* **組長異常過濾**：[`src/components/AnomalyAlertBanner.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/AnomalyAlertBanner.jsx)（組長視野隔離、無異常綠色卡片）。
+* **班別主檔管理**：[`src/components/Admin/ShiftMasterManagement.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Admin/ShiftMasterManagement.jsx)（Manager 動態新增/編輯/停用班別、工時試算與色彩自訂）。
+* **調班二階審查與 Admin 備查**：[`src/components/ShiftSwap/ShiftSwapPortal.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/ShiftSwap/ShiftSwapPortal.jsx)（雙人對調、找人代班、個人自調挪休、特例調班軟性放行、組長初審、高管終審、Admin 備查歸檔）。
+* **主管實勤覆核面板**：[`src/components/WorkHours/ActualHoursOverride.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/WorkHours/ActualHoursOverride.jsx)（同組基層限制、嚴禁自我覆核、組長向上由 Manager 覆核、4 大假別折抵與額度不足剛性阻擋、Admin 備查最高主管出勤）。
+* **考勤月底結算**：[`src/components/MonthlySettlement/MonthlySettlementPanel.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/MonthlySettlement/MonthlySettlementPanel.jsx)（發布確認、全員簽認進度、4 大假別時數統計、CSV 匯出）。
+* **人事管理**：[`src/components/Admin/PersonnelManagement.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Admin/PersonnelManagement.jsx)（支援清單多選、支援站點「🌟 可獨立 (Solo)」開關、清潔組雙向隔離）。
+* **後端 Google Apps Script**：[`src/backend/Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs)（7+1 核心表初始化腳本、JSON-RPC 處理器、加鹽雜湊密碼驗證）。
+* **自動化測試腳本**：`scratch/`（4 大驗證腳本，覆蓋 #011 ~ #014 全部核心情境）。
+* **部署與操作手冊**：[`DEPLOY_GUIDE.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/DEPLOY_GUIDE.md) 與 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)。
+
+---
+
+### 2. 測試與建置指令
+```powershell
+# 執行 4 大自動化單元測試腳本 (全數通過)
+node scratch/test_manager_self_declared_and_admin_verification.mjs
+node scratch/test_review_hierarchy_and_station_scope.mjs
+node scratch/test_swap_soft_guard_and_solo_switch.mjs
+node scratch/test_deduction_balance_check.mjs
+
+# 生產環境打包驗證 (確保 0 錯誤)
+npm run build
+```
+
+---
+
+### 3. 緊急回滾機制 (Rollback Runbook)
+若接手維運後進行了新修改但發生異常，可執行以下指令瞬間無損回推至目前定稿穩定版本：
+```bash
+# 查看所有已建立的穩定版本標籤
+git tag -l
+
+# 一鍵回退至當前 V2.4.0 完工定稿版本
+git checkout v2.4.0-admin-verify-manager-self-declared-done
+```
+�則（清潔組代碼 `ST_CLEAN` 隔離防呆）」。
 2. **目前連線狀態：本地高擬真持久化沙盒 (Local Storage Data Store)**：
    * 目前系統運作於本地 Vite 伺服器 (`http://localhost:3000/`)。
    * 資料讀寫透過瀏覽器 `localStorage`（如 `xuelu_employees_v1`、`xuelu_audit_logs_v1`）達成持久化，重啟伺服器或重新整理網頁資料均不丟失。
