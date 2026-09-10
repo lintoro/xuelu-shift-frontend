@@ -300,6 +300,37 @@
   - `src/components/MonthlySettlement/MonthlySettlementPanel.jsx`
 - **目前狀態**：`✅ 已完成修復並通過驗證 (v2.1.0-deduction-balance-check-done)`
 
+### 📌 [需求 #012] 支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制
+
+- **來源反饋**：主管檢視線上調班門戶截圖（林慶忠欲調許雅婷餐飲班）提出指導：
+  1. 互調班應有對價關係：A 要調 B 的班，B 一定要有 A 的支援能力；A 原本能獨立，調至 B 的支援站點也必須要能獨立。
+  2. 在支援部門上，需建立支援部門能否獨立的開關，由主管設定。
+  3. 雖然資格不符，但不要剛性阻止，還是能提出申請讓 LEADER 核、讓 MANAGER 上核即可，軟性設關卡但仍能處理，增加彈性。
+- **現狀分析與痛點**：
+  1. **支援資格單向漏洞**：原先僅單向檢驗對調對象能否支援申請人站點，未雙向檢驗；且當申請人原排休假時，跳過了檢驗。
+  2. **缺少支援站點獨立能力開關**：原先僅有全局 `can_solo`，同仁在其主屬站點能獨立，不代表在其支援站點能獨立。
+  3. **剛性與軟性分工界線**：法律強制規範（如 7 休 1）需剛性阻擋；但現場跨組調動與特例替換應保留彈性，由二階主管審核裁決。
+- **最佳實踐與架構方案**：
+  1. **人事主檔各支援站點 Solo 開關 (`mockMasterData.js` & `PersonnelManagement.jsx`)**：
+     - 擴充同仁主檔 `solo_stations: string[]`，提供通用輔助函式 `canEmployeeSoloAtStation(emp, stationId)`。
+     - 主管在人事管理新增/編輯同仁彈窗中，勾選支援站點時，右側提供「🌟 可獨立 (Solo)」Checkbox 開關，可靈活切換「可獨立 / 僅協同」。
+     - 同仁清單表格以徽章清晰呈現各站點獨立能力。
+  2. **雙人互調班軟性特例預檢 (`swapStore.js`)**：
+     - 雙向檢驗 A 是否具備 B 站點支援資格、B 是否具備 A 站點支援資格；檢驗換班後該站點是否全體在勤人員皆無 Solo 資格。
+     - 若資格不符或缺 Solo，**不阻擋送單**（`isSafe: true`），而是觸發 `hasSpecialWarning: true`。
+     - 僅保留《勞基法》第 36 條連續出勤 $> 6$ 天等法定紅線剛性阻擋。
+  3. **調班門戶與二階審核標記 (`ShiftSwapPortal.jsx` & `App.jsx`)**：
+     - 雙人對調表單即時顯示雙方站點與支援資格徽章。
+     - 檢測到特例時，跳出琥珀色警示卡提醒「⚠️ 跨組/非獨立特例調班（軟性關卡放行）」，送出按鈕維持可用。
+     - 單據標註 `⚠️ 跨組特例`，二階審核提供組長初審與高管終審專屬特例審核提示與日誌記錄。
+- **影響範圍評估**：
+  - `src/data/mockMasterData.js`
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/data/swapStore.js`
+  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`
+  - `src/App.jsx`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v2.2.0-swap-soft-guard-solo-switch-done)`
+
 ---
 
 ## 處理歷史與版本控制記錄 (Version & Rollback History)
@@ -319,3 +350,4 @@
 | 11 | 2026-09-10 | 【需求 #010】勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休通道強化 | `v1.9.0-issue009-done` | `v2.0.0-hours-override-triple-done` | 修正第35條休息累進倍數(1.5h/1.0h/0.5h)、增加第32條單日工時上限12h/加班4h獨立警告、Manager三度確認放行彈窗、CSV班表/結算清冊/日曆卡永久加註違規提醒，工作台自調快捷入口，單元測試通過，npm run build 通過。 |
 | 12 | 2026-09-10 | 【需求 #010 語氣修正】加班工時以計發加班費為法定前提，修正「自動增加補休」之負面觀感 | `v2.0.0-hours-override-triple-done` | `v2.0.1-overtime-pay-first-done` | 依《勞基法》第24/32-1條，全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，覆核比對、結算清冊表頭、存摺流水標題全數嚴謹合規，npm run build 通過。 |
 | 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
+| 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |

@@ -352,22 +352,37 @@ export default function App() {
         if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
         if (!newOverrides[req.target_id]) newOverrides[req.target_id] = {};
 
-        newOverrides[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-        newOverrides[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+        if (req.applicant_day === req.target_day) {
+          // 同日對調
+          newOverrides[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          newOverrides[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+        } else {
+          // 跨日互調：雙方承接對方的出勤日與班別
+          newOverrides[req.applicant_id][req.target_day] = tarShift ? { ...tarShift, note: `接替 ${req.target_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          newOverrides[req.target_id][req.target_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.applicant_name} 接替出勤` };
+
+          newOverrides[req.target_id][req.applicant_day] = appShift ? { ...appShift, note: `接替 ${req.applicant_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          newOverrides[req.applicant_id][req.applicant_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.target_name} 接替出勤` };
+        }
 
         setScheduleOverrides(newOverrides);
 
         const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
+        if (!afterSnapshot[req.applicant_id]) afterSnapshot[req.applicant_id] = {};
+        if (!afterSnapshot[req.target_id]) afterSnapshot[req.target_id] = {};
         afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
+        afterSnapshot[req.applicant_id][req.target_day] = newOverrides[req.applicant_id][req.target_day];
+        afterSnapshot[req.target_id][req.applicant_day] = newOverrides[req.target_id][req.applicant_day];
         afterSnapshot[req.target_id][req.target_day] = newOverrides[req.target_id][req.target_day];
 
+        const specialText = req.is_special_swap ? `【⚠️特例調班核定】事由: ${req.special_warnings?.join('; ') || '無常規支援/缺Solo'}。` : '';
         const newLog = {
           log_id: `LOG_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          action_type: 'SHIFT_SWAP',
+          action_type: req.is_special_swap ? 'SHIFT_SWAP_SPECIAL' : 'SHIFT_SWAP',
           operator_id: currentUser ? currentUser.emp_id : 'B111014',
           operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-          notes: `核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`,
+          notes: `${specialText}核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`,
           before_snapshot: beforeSnapshot,
           after_snapshot: afterSnapshot
         };

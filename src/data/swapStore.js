@@ -1,5 +1,6 @@
 // src/data/swapStore.js
 import { SHIFT_TYPES } from '../types/scheduler.js';
+import { canEmployeeSoloAtStation } from './mockMasterData.js';
 
 export const INITIAL_SWAP_REQUESTS = [
   {
@@ -45,12 +46,10 @@ export const INITIAL_AUDIT_LOGS = [
 ];
 
 /**
- * 換班前剛性合規安全預檢函式 (Pre-check Safety Guard)
- * 模擬換班後的排班矩陣，檢測：
- * 1. 連續出勤是否 > 6 天 (勞基法第 36 條 7休1)
- * 2. 班距是否 < 11 小時 (勞基法第 34 條)
- * 3. 站點是否因此失去 can_solo 或人數不足
- * 4. 資格是否相符 (是否具備主屬或支援資格)
+ * 換班前安全預檢函式 (Pre-check Safety Guard)
+ * 依照主管最新指導：
+ * 1. 勞基法第 36 條 7 休 1 等法定紅線：剛性阻擋 (errors，禁止送單)
+ * 2. 雙向跨組支援能力與站點 Solo 對價關係：軟性設關卡 (warnings，增加彈性，單據加註特例供組長初審與高管終審核定)
  */
 export function precheckSwapCompliance({
   scheduleMap,
@@ -129,7 +128,7 @@ export function precheckSwapCompliance({
         return s && s.station_id === origStation.station_id && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF';
       });
 
-      const hasSolo = remainingAssigned.some(e => e.can_solo);
+      const hasSolo = remainingAssigned.some(e => canEmployeeSoloAtStation(e, origStation.station_id));
       if (origStation.requires_solo_staff && !hasSolo) {
         warnings.push(`提醒：9月${applicantDay}日您改為休假後，${origStation.station_name} 現場將缺少具備獨立顧站 (can_solo) 資格同仁，需組長調派機動支援。`);
       }
@@ -138,7 +137,9 @@ export function precheckSwapCompliance({
     return {
       isSafe: errors.length === 0,
       errors,
-      warnings
+      warnings,
+      hasSpecialWarning: warnings.length > 0,
+      specialWarningList: warnings
     };
   }
 
@@ -153,22 +154,45 @@ export function precheckSwapCompliance({
   const appShift = simMap[applicantId]?.[applicantDay];
   const tarShift = simMap[targetId]?.[targetDay];
 
-  // 1. 資格相符性預檢
-  if (tarShift && tarShift.station_id) {
-    const isTargetQualifiedForAppStation = appShift?.station_id ? (
-      tarEmp.primary_station === appShift.station_id || tarEmp.supported_stations?.includes(appShift.station_id)
-    ) : true;
-
-    if (!isTargetQualifiedForAppStation) {
-      errors.push(`${tarEmp.name} 未具備支援 ${appShift.station_id} 站點資格！`);
+  // 1. 雙向跨組支援資格檢驗 (對價關係軟性關卡：依主管指示不剛性阻止，記錄警告供二階主管核決)
+  // A. 檢驗申請人 (applicant) 是否具備對調對象出勤站點之支援能力
+  if (tarShift && tarShift.station_id && tarShift.shift_type !== 'OFF' && tarShift.shift_type !== 'TERM_OFF') {
+    const isAppQualifiedForTarStation = (
+      appEmp.primary_station === tarShift.station_id || 
+      appEmp.supported_stations?.includes(tarShift.station_id)
+    );
+    if (!isAppQualifiedForTarStation) {
+      const tarStationName = stationMap[tarShift.station_id]?.station_name || tarShift.station_id;
+      warnings.push(`⚠️ 跨組支援特例：申請人 ${appEmp.name} 未具備「${tarStationName}」之常規支援資格！本單需組長與高管特准。`);
     }
   }
 
-  // 2. 執行虛擬對調
-  simMap[applicantId][applicantDay] = tarShift ? { ...tarShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-  simMap[targetId][targetDay] = appShift ? { ...appShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+  // B. 檢驗對調對象 (target) 是否具備申請人出勤站點之支援能力
+  if (appShift && appShift.station_id && appShift.shift_type !== 'OFF' && appShift.shift_type !== 'TERM_OFF') {
+    const isTarQualifiedForAppStation = (
+      tarEmp.primary_station === appShift.station_id || 
+      tarEmp.supported_stations?.includes(appShift.station_id)
+    );
+    if (!isTarQualifiedForAppStation) {
+      const appStationName = stationMap[appShift.station_id]?.station_name || appShift.station_id;
+      warnings.push(`⚠️ 跨組支援特例：對調同仁 ${tarEmp.name} 未具備「${appStationName}」之常規支援資格！本單需組長與高管特准。`);
+    }
+  }
 
-  // 3. 檢驗連續上班天數與 7 休 1 (雙方均檢驗)
+  // 2. 執行虛擬對調排班模擬
+  if (applicantDay === targetDay) {
+    simMap[applicantId][applicantDay] = tarShift ? { ...tarShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+    simMap[targetId][targetDay] = appShift ? { ...appShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+  } else {
+    // 跨日互調：雙方互換彼此出勤日的班別與站點
+    simMap[applicantId][targetDay] = tarShift ? { ...tarShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+    simMap[targetId][targetDay] = { shift_type: 'OFF', station_id: null, work_hours: 0 };
+
+    simMap[targetId][applicantDay] = appShift ? { ...appShift } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+    simMap[applicantId][applicantDay] = { shift_type: 'OFF', station_id: null, work_hours: 0 };
+  }
+
+  // 3. 檢驗連續上班天數與 7 休 1 (剛性法律底線：勞基法第 36 條)
   [appEmp, tarEmp].forEach(emp => {
     let consecutive = monthBorders['2026-09']?.[emp.emp_id]?.consecutive_work_days_at_end || 0;
     for (let d = 1; d <= 30; d++) {
@@ -176,7 +200,7 @@ export function precheckSwapCompliance({
       if (shift && shift.shift_type && shift.shift_type !== 'OFF' && shift.shift_type !== 'TERM_OFF') {
         consecutive++;
         if (consecutive > 6) {
-          errors.push(`換班後將導致 ${emp.name} 於第 ${d} 天起連續出勤達 ${consecutive} 天（違反勞基法第36條）！`);
+          errors.push(`換班後將導致 ${emp.name} 於第 ${d} 天起連續出勤達 ${consecutive} 天（違反《勞基法》第 36 條 7 休 1 規定）！`);
           break;
         }
       } else {
@@ -185,7 +209,7 @@ export function precheckSwapCompliance({
     }
   });
 
-  // 4. 檢驗站點最低人數與 can_solo 門檻
+  // 4. 檢驗站點在勤人員之獨立顧站 (Solo) 能力 (軟性關卡：依各站 solo 開關判定，缺 solo 則跳特例警告)
   const daysToCheck = Array.from(new Set([applicantDay, targetDay]));
   daysToCheck.forEach(d => {
     stations.forEach(station => {
@@ -194,16 +218,21 @@ export function precheckSwapCompliance({
         return s && s.station_id === station.station_id && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF';
       });
 
-      const hasSolo = assigned.some(e => e.can_solo);
-      if (station.requires_solo_staff && assigned.length > 0 && !hasSolo) {
-        errors.push(`第 ${d} 天換班後，${station.station_name} 缺少具備獨立顧站 (can_solo) 資格人員！`);
+      if (station.requires_solo_staff && assigned.length > 0) {
+        const hasSolo = assigned.some(e => canEmployeeSoloAtStation(e, station.station_id));
+        if (!hasSolo) {
+          warnings.push(`⚠️ 現場缺Solo擔當：9月${d}日換班後，${station.station_name} 現場在勤同仁皆無該站獨立顧站 (Solo) 資格！需組長調派支援或親自帶班。`);
+        }
       }
     });
   });
 
   return {
-    isSafe: errors.length === 0,
+    isSafe: errors.length === 0, // 只要沒有勞基法 7 休 1 等剛性違法，即允許提出申請！
     errors,
-    warnings
+    warnings,
+    hasSpecialWarning: warnings.length > 0,
+    specialWarningList: warnings
   };
 }
+

@@ -108,6 +108,7 @@ export const EMPLOYEES = [
     primary_station: 'ST_ADMIN',
     supported_stations: ['ST_ADMIN', 'ST_SERVICE', 'ST_MAIN_SHOP'],
     can_solo: true,
+    solo_stations: ['ST_ADMIN', 'ST_SERVICE'],
     is_self_scheduled: true,
     status: 'Active',
     hire_date: '2020-03-01'
@@ -352,6 +353,7 @@ export const EMPLOYEES = [
     primary_station: 'ST_DINING',
     supported_stations: ['ST_DINING', 'ST_SERVICE'],
     can_solo: true,
+    solo_stations: ['ST_DINING'],
     is_self_scheduled: false,
     status: 'Active',
     hire_date: '2025-07-01'
@@ -546,3 +548,19 @@ export const MOCK_MONTH_BORDERS = {
     'B115012': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' }
   }
 };
+
+/**
+ * 判斷同仁在指定站點是否具備獨立顧站 (Solo) 能力
+ * 依據主管最新規範：支援部門能否獨立由主管在人事主檔中設定
+ * 1. 若同仁主檔定義了 solo_stations 陣列，以該陣列是否包含 stationId 為準
+ * 2. 若同仁主檔未定義 solo_stations，相容舊版：若 stationId 等於主屬站點且 can_solo 為 true 則視為可獨立
+ */
+export function canEmployeeSoloAtStation(emp, stationId) {
+  if (!emp || !stationId) return false;
+  if (Array.isArray(emp.solo_stations)) {
+    return emp.solo_stations.includes(stationId);
+  }
+  // 相容舊資料
+  return emp.primary_station === stationId && !!emp.can_solo;
+}
+

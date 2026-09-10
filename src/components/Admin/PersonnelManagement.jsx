@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle } from 'lucide-react';
+import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles } from 'lucide-react';
+import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 
 export default function PersonnelManagement({
   employees,
@@ -20,6 +21,7 @@ export default function PersonnelManagement({
     primary_station: 'ST_SERVICE',
     supported_stations: ['ST_SERVICE'],
     can_solo: true,
+    solo_stations: ['ST_SERVICE'],
     is_self_scheduled: false,
     status: 'Active',
     hire_date: '2026-09-01'
@@ -198,12 +200,22 @@ export default function PersonnelManagement({
                   <td className="p-2.5 font-semibold text-slate-700">
                     {stationMap[emp.primary_station] || emp.primary_station}
                   </td>
-                  <td className="p-2.5 text-slate-500 max-w-[150px] truncate">
-                    {emp.supported_stations?.map(st => stationMap[st] || st).join('、') || '-'}
+                  <td className="p-2.5 text-slate-700 max-w-[220px]">
+                    {emp.supported_stations?.map(st => {
+                      const isSolo = canEmployeeSoloAtStation(emp, st);
+                      return (
+                        <span key={st} className="inline-flex items-center space-x-1 mr-1.5 mb-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          <span className="font-semibold text-slate-800">{stationMap[st] || st}</span>
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSolo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
+                            {isSolo ? '可獨立' : '僅協同'}
+                          </span>
+                        </span>
+                      );
+                    }) || '-'}
                   </td>
                   <td className="p-2.5">
-                    <span className={`font-semibold ${emp.can_solo ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {emp.can_solo ? '✓ 是' : '— 否'}
+                    <span className={`font-semibold text-xs ${emp.can_solo ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {emp.can_solo ? '✓ 主屬可獨立' : '— 否'}
                     </span>
                   </td>
                   <td className="p-2.5 text-slate-500 font-mono">{emp.hire_date || '2023-01-01'}</td>
@@ -349,56 +361,92 @@ export default function PersonnelManagement({
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                 {stations.map(st => {
                   const isCleanUnit = st.station_id === 'ST_CLEAN';
                   const isPrimary = st.station_id === newEmpForm.primary_station;
                   const isCleanPrimary = newEmpForm.primary_station === 'ST_CLEAN';
                   
-                  // 雙向隔離防線：
-                  // 1. 若主屬為清潔組：除清潔外全部禁用
-                  // 2. 若主屬為外組：清潔組強制禁用反灰（不讓外組支援清潔）
                   const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
                   const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id));
+                  const isSolo = isPrimary 
+                    ? !!newEmpForm.can_solo 
+                    : (newEmpForm.solo_stations || []).includes(st.station_id);
 
                   return (
-                    <label
+                    <div
                       key={st.station_id}
-                      className={`flex items-center space-x-1.5 p-1.5 rounded border text-[11px] transition-all ${
+                      className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
                         isDisabled
                           ? isCleanUnit && !isCleanPrimary
-                            ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed text-slate-400'
-                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-not-allowed font-semibold'
+                            ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
+                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
                           : isChecked
-                          ? 'bg-indigo-100/70 border-indigo-300 text-indigo-950 font-bold cursor-pointer hover:bg-indigo-200/50'
-                          : 'bg-white border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-100'
+                          ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={isDisabled}
-                        onChange={(e) => {
-                          const updated = toggleSupportedStation(
-                            newEmpForm.supported_stations,
-                            st.station_id,
-                            e.target.checked,
-                            newEmpForm.primary_station
-                          );
-                          setNewEmpForm({ ...newEmpForm, supported_stations: updated });
-                        }}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                      />
-                      <span className="truncate">
-                        {st.station_name}
-                        {isCleanUnit && !isCleanPrimary && (
-                          <span className="text-[9px] text-rose-500 block leading-tight">禁止外援</span>
-                        )}
-                        {isPrimary && (
-                          <span className="text-[9px] text-indigo-500 block leading-tight">主屬</span>
-                        )}
-                      </span>
-                    </label>
+                      <label className="flex items-center space-x-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            const updated = toggleSupportedStation(
+                              newEmpForm.supported_stations,
+                              st.station_id,
+                              e.target.checked,
+                              newEmpForm.primary_station
+                            );
+                            const updatedSolo = e.target.checked 
+                              ? (newEmpForm.solo_stations || [])
+                              : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
+                            setNewEmpForm({ ...newEmpForm, supported_stations: updated, solo_stations: updatedSolo });
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                        />
+                        <span className="font-bold truncate">
+                          {st.station_name}
+                          {isCleanUnit && !isCleanPrimary && (
+                            <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
+                          )}
+                          {isPrimary && (
+                            <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
+                          )}
+                        </span>
+                      </label>
+
+                      {/* 支援站點能否獨立開關 (由主管設定) */}
+                      {isChecked && !isCleanUnit && (
+                        <label 
+                          className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
+                            isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <span>{isSolo ? '🌟 可獨立(Solo)' : '協同支援(無Solo)'}</span>
+                          <input
+                            type="checkbox"
+                            checked={isSolo}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              if (isPrimary) {
+                                const newSolo = checked
+                                  ? Array.from(new Set([...(newEmpForm.solo_stations || []), st.station_id]))
+                                  : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
+                                setNewEmpForm({ ...newEmpForm, can_solo: checked, solo_stations: newSolo });
+                              } else {
+                                const currentSolo = newEmpForm.solo_stations || (newEmpForm.can_solo ? [newEmpForm.primary_station] : []);
+                                const newSolo = checked
+                                  ? Array.from(new Set([...currentSolo, st.station_id]))
+                                  : currentSolo.filter(id => id !== st.station_id);
+                                setNewEmpForm({ ...newEmpForm, solo_stations: newSolo });
+                              }
+                            }}
+                            className="w-3 h-3 text-amber-600 rounded cursor-pointer"
+                          />
+                        </label>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -508,56 +556,92 @@ export default function PersonnelManagement({
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                   {stations.map(st => {
                     const isCleanUnit = st.station_id === 'ST_CLEAN';
                     const isPrimary = st.station_id === editingEmp.primary_station;
                     const isCleanPrimary = editingEmp.primary_station === 'ST_CLEAN';
                     
-                    // 雙向隔離防線：
-                    // 1. 若主屬為清潔組：除清潔外全部禁用
-                    // 2. 若主屬為外組：清潔組強制禁用反灰（不讓外組支援清潔）
                     const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
                     const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (editingEmp.supported_stations || []).includes(st.station_id));
+                    const isSolo = isPrimary 
+                      ? !!editingEmp.can_solo 
+                      : (editingEmp.solo_stations || []).includes(st.station_id);
 
                     return (
-                      <label
+                      <div
                         key={st.station_id}
-                        className={`flex items-center space-x-1.5 p-1.5 rounded border text-[11px] transition-all ${
+                        className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
                           isDisabled
                             ? isCleanUnit && !isCleanPrimary
-                              ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed text-slate-400'
-                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-not-allowed font-semibold'
+                              ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
+                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
                             : isChecked
-                            ? 'bg-indigo-100/70 border-indigo-300 text-indigo-950 font-bold cursor-pointer hover:bg-indigo-200/50'
-                            : 'bg-white border-slate-200 text-slate-600 cursor-pointer hover:bg-slate-100'
+                            ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-600'
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={(e) => {
-                            const updated = toggleSupportedStation(
-                              editingEmp.supported_stations,
-                              st.station_id,
-                              e.target.checked,
-                              editingEmp.primary_station
-                            );
-                            setEditingEmp({ ...editingEmp, supported_stations: updated });
-                          }}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                        />
-                        <span className="truncate">
-                          {st.station_name}
-                          {isCleanUnit && !isCleanPrimary && (
-                            <span className="text-[9px] text-rose-500 block leading-tight">禁止外援</span>
-                          )}
-                          {isPrimary && (
-                            <span className="text-[9px] text-indigo-500 block leading-tight">主屬</span>
-                          )}
-                        </span>
-                      </label>
+                        <label className="flex items-center space-x-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onChange={(e) => {
+                              const updated = toggleSupportedStation(
+                                editingEmp.supported_stations,
+                                st.station_id,
+                                e.target.checked,
+                                editingEmp.primary_station
+                              );
+                              const updatedSolo = e.target.checked 
+                                ? (editingEmp.solo_stations || [])
+                                : (editingEmp.solo_stations || []).filter(id => id !== st.station_id);
+                              setEditingEmp({ ...editingEmp, supported_stations: updated, solo_stations: updatedSolo });
+                            }}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                          />
+                          <span className="font-bold truncate">
+                            {st.station_name}
+                            {isCleanUnit && !isCleanPrimary && (
+                              <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
+                            )}
+                            {isPrimary && (
+                              <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
+                            )}
+                          </span>
+                        </label>
+
+                        {/* 支援站點能否獨立開關 (由主管設定) */}
+                        {isChecked && !isCleanUnit && (
+                          <label 
+                            className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
+                              isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            <span>{isSolo ? '🌟 可獨立(Solo)' : '協同支援(無Solo)'}</span>
+                            <input
+                              type="checkbox"
+                              checked={isSolo}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                if (isPrimary) {
+                                  const newSolo = checked
+                                    ? Array.from(new Set([...(editingEmp.solo_stations || []), st.station_id]))
+                                    : (editingEmp.solo_stations || []).filter(id => id !== st.station_id);
+                                  setEditingEmp({ ...editingEmp, can_solo: checked, solo_stations: newSolo });
+                                } else {
+                                  const currentSolo = editingEmp.solo_stations || (editingEmp.can_solo ? [editingEmp.primary_station] : []);
+                                  const newSolo = checked
+                                    ? Array.from(new Set([...currentSolo, st.station_id]))
+                                    : currentSolo.filter(id => id !== st.station_id);
+                                  setEditingEmp({ ...editingEmp, solo_stations: newSolo });
+                                }
+                              }}
+                              className="w-3 h-3 text-amber-600 rounded cursor-pointer"
+                            />
+                          </label>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

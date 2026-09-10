@@ -12,10 +12,14 @@ import {
   X,
   FileCheck,
   User,
-  Calendar
+  Calendar,
+  ShieldAlert,
+  Sparkles,
+  Lock
 } from 'lucide-react';
 import { precheckSwapCompliance } from '../../data/swapStore.js';
 import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
+import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 
 export default function ShiftSwapPortal({
   employees,
@@ -143,6 +147,7 @@ export default function ShiftSwapPortal({
 
     // 雙人對調
     const targetEmp = employees.find(e => e.emp_id === targetEmpId);
+    const isSpecial = !!precheckResult.hasSpecialWarning;
     const newSwap = {
       swap_id: `SWAP_${Date.now()}`,
       applicant_id: currentEmp.emp_id,
@@ -157,6 +162,8 @@ export default function ShiftSwapPortal({
       reason: reason || '個人行程調整申請對調',
       created_at: new Date().toISOString(),
       status: 'PENDING_FIRST_REVIEW',
+      is_special_swap: isSpecial,
+      special_warnings: precheckResult.specialWarningList || [],
       first_review: {
         reviewer_id: currentEmp.primary_station,
         reviewer_name: `${stationMap[currentEmp.primary_station] || '站點'}組長`,
@@ -173,8 +180,9 @@ export default function ShiftSwapPortal({
 
     onAddSwapRequest(newSwap);
     setReason('');
-    setFeedbackMsg(`已成功發起與 ${targetEmp?.name} 的雙人對調申請，已進入第一階初審管線！`);
-    setTimeout(() => setFeedbackMsg(''), 4000);
+    const specialNote = isSpecial ? '【⚠️ 跨組/非獨立特例調班】' : '';
+    setFeedbackMsg(`已成功發起${specialNote}與 ${targetEmp?.name} 的雙人對調申請，已進入第一階初審管線！`);
+    setTimeout(() => setFeedbackMsg(''), 5000);
   };
 
   return (
@@ -305,6 +313,23 @@ export default function ShiftSwapPortal({
                     {targetCurrentShift?.shift_type || 'OFF'} ({stationMap[targetCurrentShift?.station_id] || '休假'})
                   </span>
                 </div>
+                {targetCurrentShift?.station_id && targetCurrentShift?.shift_type !== 'OFF' && (
+                  <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">
+                      我對該站支援資格：
+                    </span>
+                    {(currentEmp.primary_station === targetCurrentShift.station_id || currentEmp.supported_stations?.includes(targetCurrentShift.station_id)) ? (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                        ✓ 具備常規支援資格
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-bold border border-amber-300 flex items-center space-x-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        <span>⚠️ 未具備常規支援 (需二階特准)</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -407,44 +432,49 @@ export default function ShiftSwapPortal({
             />
           </div>
 
-          {/* 安全預檢結果卡片 */}
-          <div className={`p-3.5 rounded-xl border mb-4 ${
-            precheckResult.isSafe 
-              ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900' 
-              : 'bg-rose-50 border-rose-300 text-rose-900'
-          }`}>
-            <div className="flex items-center space-x-2 font-bold text-xs">
-              {precheckResult.isSafe ? (
-                <>
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    剛性合規安全預檢通過：{swapType === 'SELF_RESCHEDULE' ? '自調挪休' : '換班'}後符合《勞基法》第 36 條 7 休 1 (連勤 $\le 6$ 天) 且滿足站點顧站門檻！
-                  </span>
-                </>
-              ) : (
-                <>
-                  <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>剛性合規阻擋：調整後將觸犯以下法規或邏輯限制，系統已鎖死送出：</span>
-                </>
+          {/* 安全預檢結果卡片 (支援勞基法剛性阻擋 vs 跨組特例軟性放行) */}
+          {!precheckResult.isSafe ? (
+            /* 剛性違法阻擋 (如勞基法 7 休 1) */
+            <div className="p-3.5 rounded-xl border mb-4 bg-rose-50 border-rose-300 text-rose-900">
+              <div className="flex items-center space-x-2 font-bold text-xs">
+                <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>🚨 剛性合規阻擋：調整後將觸犯《勞動基準法》法定紅線，系統已鎖死送出：</span>
+              </div>
+              {precheckResult.errors.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-rose-700 pl-6 list-disc font-semibold">
+                  {precheckResult.errors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
               )}
             </div>
-
-            {!precheckResult.isSafe && precheckResult.errors.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-rose-700 pl-6 list-disc">
-                {precheckResult.errors.map((err, i) => (
-                  <li key={i}>{err}</li>
-                ))}
-              </ul>
-            )}
-
-            {precheckResult.warnings?.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-amber-700 pl-6 list-disc">
-                {precheckResult.warnings.map((warn, i) => (
+          ) : precheckResult.hasSpecialWarning ? (
+            /* 軟性特例關卡提醒 (依主管指示增加彈性，不阻擋送單，但加註二階審核) */
+            <div className="p-3.5 rounded-xl border mb-4 bg-amber-50/90 border-amber-300 text-amber-950">
+              <div className="flex items-center space-x-2 font-bold text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>⚠️ 檢測到【跨組/非獨立特例調班】預警（軟性關卡放行，增加現場彈性）：</span>
+              </div>
+              <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+                雖然雙方未全數具備常規支援資格或現場缺乏獨立 Solo 擔當，但依現場營運彈性原則，<strong>系統不剛性阻擋送單</strong>！本申請單將自動標記為<strong>【⚠️ 跨組特例調班】</strong>，提交後需經站點組長 (Leader) 初審確認現場備援，並由營運高管 (Manager) 終審特准後方可生效。
+              </p>
+              <ul className="mt-2 space-y-1 text-xs text-amber-900 pl-6 list-disc font-semibold">
+                {precheckResult.specialWarningList.map((warn, i) => (
                   <li key={i}>{warn}</li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          ) : (
+            /* 完全合規通過 */
+            <div className="p-3.5 rounded-xl border mb-4 bg-emerald-50/80 border-emerald-300 text-emerald-900">
+              <div className="flex items-center space-x-2 font-bold text-xs">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  ✓ 剛性合規安全預檢通過：{swapType === 'SELF_RESCHEDULE' ? '自調挪休' : '換班'}後符合《勞基法》第 36 條 7 休 1 且滿足站點顧站與支援門檻！
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end">
             <button
@@ -452,7 +482,9 @@ export default function ShiftSwapPortal({
               disabled={!precheckResult.isSafe}
               className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg font-bold text-xs shadow-sm transition-all ${
                 precheckResult.isSafe
-                  ? swapType === 'SELF_RESCHEDULE'
+                  ? precheckResult.hasSpecialWarning
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white cursor-pointer active:scale-95'
+                    : swapType === 'SELF_RESCHEDULE'
                     ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer active:scale-95'
                     : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer active:scale-95'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-75'
@@ -460,7 +492,13 @@ export default function ShiftSwapPortal({
             >
               <Send className="w-3.5 h-3.5" />
               <span>
-                {swapType === 'SELF_RESCHEDULE' ? '送出個人自調挪休審核單' : '送出二階審核申請'}
+                {!precheckResult.isSafe 
+                  ? '法規違規已鎖定' 
+                  : precheckResult.hasSpecialWarning 
+                  ? '送出特例調班二階審核申請' 
+                  : swapType === 'SELF_RESCHEDULE' 
+                  ? '送出個人自調挪休審核單' 
+                  : '送出二階審核申請'}
               </span>
             </button>
           </div>
@@ -521,6 +559,13 @@ export default function ShiftSwapPortal({
                         {isSelf ? '個人自調挪休' : '雙人班表對調'}
                       </span>
 
+                      {req.is_special_swap && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-600" />
+                          <span>⚠️ 跨組特例 (需組長高管特准)</span>
+                        </span>
+                      )}
+
                       <span className="text-xs font-extrabold text-slate-900">
                         {isSelf ? (
                           <span>
@@ -538,6 +583,20 @@ export default function ShiftSwapPortal({
                       申請時間: {new Date(req.created_at).toLocaleString('zh-TW')}
                     </span>
                   </div>
+
+                  {req.is_special_swap && req.special_warnings?.length > 0 && (
+                    <div className="mb-2.5 p-2.5 bg-amber-50/90 rounded-lg border border-amber-200 text-[11px] text-amber-900">
+                      <div className="font-bold flex items-center space-x-1 mb-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>特例調班審核提示（無常規支援資格或現場缺Solo人員）：</span>
+                      </div>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        {req.special_warnings.map((w, idx) => (
+                          <li key={idx}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="text-xs text-slate-600 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     事由: {req.reason}
