@@ -219,35 +219,76 @@ export default function App() {
 
     if (isApproved) {
       const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
-
-      const appShift = effectiveScheduleMap[req.applicant_id]?.[req.applicant_day];
-      const tarShift = effectiveScheduleMap[req.target_id]?.[req.target_day];
-
       const newOverrides = { ...scheduleOverrides };
-      if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
-      if (!newOverrides[req.target_id]) newOverrides[req.target_id] = {};
 
-      newOverrides[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-      newOverrides[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+      if (req.type === 'SELF_RESCHEDULE') {
+        // 個人自調挪休覆寫
+        if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
+        const empStation = allEmployees.find(e => e.emp_id === req.applicant_id)?.primary_station || 'ST_SERVICE';
+        
+        newOverrides[req.applicant_id][req.applicant_day] = {
+          shift_type: 'OFF',
+          station_id: null,
+          work_hours: 0,
+          note: `個人自調轉休 (原出勤日)`
+        };
 
-      setScheduleOverrides(newOverrides);
+        newOverrides[req.applicant_id][req.target_day] = {
+          shift_type: req.target_shift || 'B',
+          station_id: empStation,
+          work_hours: 8,
+          is_support: false,
+          note: `自 9/${req.applicant_day} 挪調出勤`
+        };
 
-      const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
-      afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
-      afterSnapshot[req.target_id][req.target_day] = newOverrides[req.target_id][req.target_day];
+        setScheduleOverrides(newOverrides);
 
-      const newLog = {
-        log_id: `LOG_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        action_type: 'SHIFT_SWAP',
-        operator_id: currentUser ? currentUser.emp_id : 'B111014',
-        operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
-        notes: `核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`,
-        before_snapshot: beforeSnapshot,
-        after_snapshot: afterSnapshot
-      };
+        const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
+        if (!afterSnapshot[req.applicant_id]) afterSnapshot[req.applicant_id] = {};
+        afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
+        afterSnapshot[req.applicant_id][req.target_day] = newOverrides[req.applicant_id][req.target_day];
 
-      setAuditLogs(prev => [newLog, ...prev]);
+        const newLog = {
+          log_id: `LOG_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action_type: 'SELF_RESCHEDULE',
+          operator_id: currentUser ? currentUser.emp_id : 'B111014',
+          operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+          notes: `核准個人自調挪休：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`,
+          before_snapshot: beforeSnapshot,
+          after_snapshot: afterSnapshot
+        };
+        setAuditLogs(prev => [newLog, ...prev]);
+      } else {
+        // 雙人對調覆寫
+        const appShift = effectiveScheduleMap[req.applicant_id]?.[req.applicant_day];
+        const tarShift = effectiveScheduleMap[req.target_id]?.[req.target_day];
+
+        if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
+        if (!newOverrides[req.target_id]) newOverrides[req.target_id] = {};
+
+        newOverrides[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+        newOverrides[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+
+        setScheduleOverrides(newOverrides);
+
+        const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
+        afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
+        afterSnapshot[req.target_id][req.target_day] = newOverrides[req.target_id][req.target_day];
+
+        const newLog = {
+          log_id: `LOG_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action_type: 'SHIFT_SWAP',
+          operator_id: currentUser ? currentUser.emp_id : 'B111014',
+          operator_name: currentUser ? currentUser.name : '林慶忠 (營運長)',
+          notes: `核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`,
+          before_snapshot: beforeSnapshot,
+          after_snapshot: afterSnapshot
+        };
+
+        setAuditLogs(prev => [newLog, ...prev]);
+      }
     }
 
     setSwapRequests(prev => prev.map(r => {

@@ -26,7 +26,7 @@
   - `src/components/ShiftSwap/ShiftSwapPortal.jsx`（表單介面與申請類型）
   - `src/data/swapStore.js`（預檢函式 `precheckSwapCompliance` 支援個人自調檢驗）
   - `src/App.jsx`（核決回呼邏輯 `handleFinalApprove` 支援個人自調覆寫）
-- **目前狀態**：`📋 已記錄 · 等候命令`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v1.4.0-issue001-done)`
 
 ### 📌 [需求 #002] 我的工作台「個人化特休與補休存摺明細介面（Leave & Comp Passbook）」
 
@@ -139,4 +139,5 @@
 | 2 | 2026-09-10 | PROGRESS.md 未執行工作全數完成 (Phase 2 雙向聯動 + Phase 3 GAS 7+1 初始化與部署手冊) | `v1.0.1-logged` | `v1.1.0-progress-completed` | 全模組完成度 100%，npm run build 通過，產出 DEPLOY_GUIDE.md。 |
 | 3 | 2026-09-10 | 【需求 #005】人事組織主檔支援清單編輯與清潔組完全雙向隔離 | `v1.1.0-progress-completed` | `v1.2.0-issue005-done` | 編輯/新增彈窗支援多選增減，清潔組雙向隔離鎖死，npm run build 通過。 |
 | 4 | 2026-09-10 | 【需求 #003】主管端實勤覆核面板重構 (起訖時間/35條休息/補休連動/日期鎖定) | `v1.2.0-issue005-done` | `v1.3.0-issue003-done` | 實作起訖/休息選單、勞基法35條防呆、差額連動補休/PT工時、未來日期反灰鎖定，npm run build 通過。 |
+| 5 | 2026-09-10 | 【需求 #001】線上調班申請支援個人挪休與自調班表 (SELF_RESCHEDULE) | `v1.3.0-issue003-done` | `v1.4.0-issue001-done` | 新增個人自調挪休通道、個人7休1預檢、站點缺工警示、二階終審自動覆寫與雙快照留痕，npm run build 通過。 |
 
