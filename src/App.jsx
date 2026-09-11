@@ -43,8 +43,18 @@ import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport
 import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
 
 export default function App() {
-  // 當前登入同仁 (null 表示未登入，預設呈現登入入口與身分切換卡)
-  const [currentUser, setCurrentUser] = useState(null);
+  // 當前登入同仁 (支援 localStorage 本機持久化，F5 重整保留登入狀態)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('xuelu_auth_user_v1');
+      if (savedUser) {
+        return JSON.parse(savedUser);
+      }
+    } catch (e) {
+      console.warn('載入登入狀態快取失敗:', e);
+    }
+    return null;
+  });
   const [isChangePinOpen, setIsChangePinOpen] = useState(false);
   const [isForcedPinChange, setIsForcedPinChange] = useState(false);
 
@@ -55,7 +65,16 @@ export default function App() {
   // 全月排班生命週期時限排程狀態 (Issue #016)
   const [currentSimulatedDate, setCurrentSimulatedDate] = useState('2026-09-10');
 
-  const [activeTab, setActiveTab] = useState('MY_DASHBOARD');
+  // 當前瀏覽功能分頁 (支援 localStorage 本機持久化，F5 重整保留在原來頁面)
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const savedTab = localStorage.getItem('xuelu_active_tab_v1');
+      if (savedTab) return savedTab;
+    } catch (e) {
+      console.warn('載入分頁狀態快取失敗:', e);
+    }
+    return 'MY_DASHBOARD';
+  });
   const [currentMonth, setCurrentMonth] = useState('2026-09');
   const [workHourModel, setWorkHourModel] = useState('REGULAR');
   const [selectedDay, setSelectedDay] = useState(1);
@@ -81,8 +100,17 @@ export default function App() {
   });
   const [allStations, setAllStations] = useState(STATIONS);
 
-  // 門戶中選取檢視的同仁身分
-  const [currentEmpId, setCurrentEmpId] = useState('B111155');
+  // 門戶中選取檢視的同仁身分 (優先讀取當前登入者)
+  const [currentEmpId, setCurrentEmpId] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('xuelu_auth_user_v1');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        return parsed?.emp_id || 'B111155';
+      }
+    } catch (e) {}
+    return 'B111155';
+  });
 
   // 全員劃休志願序與存摺狀態
   const [preferences, setPreferences] = useState(INITIAL_PREFERENCES);
@@ -1242,22 +1270,46 @@ export default function App() {
     setAuditLogs(prev => [rollbackLog, ...prev]);
   }, [auditLogs, effectiveScheduleMap, currentUser]);
 
-  // 登入認證回呼
+  // 登入認證回呼 (寫入 localStorage，確保 F5 重整不掉登入態)
   const handleLoginSuccess = useCallback((emp) => {
     setCurrentUser(emp);
     setCurrentEmpId(emp.emp_id);
-    setActiveTab('MY_DASHBOARD');
+    try {
+      localStorage.setItem('xuelu_auth_user_v1', JSON.stringify(emp));
+    } catch (e) {}
+
+    setActiveTab(prev => {
+      const targetTab = prev || 'MY_DASHBOARD';
+      try {
+        localStorage.setItem('xuelu_active_tab_v1', targetTab);
+      } catch (e) {}
+      return targetTab;
+    });
+
     if (emp.is_default_pin) {
       setIsForcedPinChange(true);
       setIsChangePinOpen(true);
     }
   }, []);
 
-  // 登出回呼
+  // 登出回呼 (清除本機登入快取)
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
+    try {
+      localStorage.removeItem('xuelu_auth_user_v1');
+      localStorage.removeItem('xuelu_active_tab_v1');
+    } catch (e) {}
     setActiveTab('SCHEDULE');
   }, []);
+
+  // 當使用者在系統內切換分頁時，即時持久化至 localStorage，F5 保留原頁面
+  React.useEffect(() => {
+    if (activeTab && currentUser) {
+      try {
+        localStorage.setItem('xuelu_active_tab_v1', activeTab);
+      } catch (e) {}
+    }
+  }, [activeTab, currentUser]);
 
   // 資安防護：門市現場公用平板 15 分鐘無操作自動登出 (Idle Timeout Guard)
   React.useEffect(() => {

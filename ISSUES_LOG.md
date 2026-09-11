@@ -885,5 +885,75 @@
     - `npm run build` 0 錯誤順利完成編譯。
 - **狀態驗收**：`✅ 已徹底改寫覆蓋並通過驗收 (v3.5.1-new-shift-rules-delivered)`
 
+---
+
+### 📌 [需求 #029] 全系統二階/三階視窗防截斷加固、F5重整狀態保留、廢除九宮格、排班週期全新流程改寫
+
+- **來源反饋**：現場主管驗收提出之 4 大核心問題與全系統擴展防護需求：
+  1. 人員資料表太長畫面放不下、拉不動按不到，請假等所有二階三階彈窗高度設定需全面檢視加固。
+  2. 網頁按 F5 不會保留在最後頁面，跳出重新輸入帳密，要求 F5 重新整理保留在原帳號與原頁面。
+  3. 登錄畫面無九宮格數字鍵盤輸入，主管指示直接廢案移除提示文字。
+  4. 排班週期流程全新規範改寫：
+     - 主管設定：每月 8-10 日
+     - 員工劃選：每月 11-14 日
+     - 組長初審：每月 15-18 日
+     - 高管初審：每月 19-20 日
+     - 全員簽回：每月 21-23 日（21 日開始全員簽回 23 日止）
+     - 全店產出：每月 24-25 日
+     - 出勤確認：當月底最後一天
+     - 考勤簽認：次月 2 日
+
+- **架構優化與改寫方案**：
+  1. **全系統二階三階彈窗高度滾動防截斷加固 (Scrollable Modal Architecture)**：
+     - 全面捨棄靜態未受限高度的設計，升級為標準三段式結構：
+       - 外層容器：`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto`，確保外層在任何裝置皆可捲動。
+       - 彈窗主體：`max-h-[88vh] flex flex-col my-auto overflow-hidden`，嚴格限制彈窗高度不超出視窗 88%。
+       - 表頭與底部：表頭固定在頂部；底部「取消 / 確認新增 / 儲存變更 / 送出請假」按鈕區強制宣告為 `shrink-0` 固定置底。
+       - 表單內容區：中間欄位宣告為 `flex-1 overflow-y-auto`，當同仁在手機、平板或小螢幕筆電操作時，表單內容獨立流暢滾動，按鈕永遠常駐可見可點。
+     - **涵蓋彈窗清單**：
+       - `LeaveApplicationModal.jsx`（請假申請單二階彈窗）
+       - `PersonnelManagement.jsx`（新增在勤同仁彈窗、編輯同仁資料彈窗）
+       - `MonthlyRulesModal.jsx`（各站法規參數與排班規則設定彈窗）
+       - `ActualHoursOverride.jsx`（營運高管三度確認安全鎖彈窗）
+       - `ShiftMasterManagement.jsx`（自訂營業班別彈窗）
+       - `ScheduleTable.jsx`（單格排班微調彈窗、高管批次審核彈窗）
+  2. **F5 重整狀態保留（`localStorage` 本機持久化）**：
+     - 在 `App.jsx` 中，`currentUser` 與 `activeTab` 改為延遲初始化函數優先讀取 `localStorage.getItem('xuelu_auth_user_v1')` 與 `xuelu_active_tab_v1`。
+     - 在登入成功、切換分頁時自動寫入同步快取；登出時清空快取。同仁或主管在任何頁面按下 F5 重新整理，直接保持當前同仁身分並停留在原功能分頁，免除重複輸入帳密困擾。
+  3. **登入畫面廢案移除九宮格提示**：
+     - 於 `LoginView.jsx` 移除「支援九宮格數字」提示，改為明確提示「請輸入 6 碼數字」，維持原廠原生數字鍵盤 `inputMode="numeric"`。
+  4. **排班生命週期流程引擎與日曆判定全新改寫**：
+     - 核心排程引擎 `schedulingTimelineEngine.js` 8 大階段全面改寫為：
+       - 階段 1：8-10日 主管設定 (`MANAGER_PRECONFIG`)
+       - 階段 2：11-14日 員工劃選 (`EMPLOYEE_PREFERENCE`)
+       - 階段 3：15-18日 組長初審 (`LEADER_REVIEW`)
+       - 階段 4：19-20日 高管初審 (`MANAGER_FINAL_REVIEW`)
+       - 階段 5：21-23日 全員簽回 (`SCHEDULE_SIGNOFF`)
+       - 階段 6：24-25日 全店產出 (`STORE_SCHEDULE_PUBLISH`)
+       - 階段 7：月底 出勤確認 (`MONTH_END_ACTUAL`)
+       - 階段 8：次月2日 考勤簽認 (`NEXT_MONTH_SIGNOFF`)
+     - `getTimelineStatus` 日期判定與 `checkActionTimelineEligibility` 權限時限檢查完全對齊新日程。
+     - `SchedulingTimelineStepper.jsx` 時光機快捷按鈕與 `ScheduleTable.jsx` 階段橫幅同步更新為 8 大新日程。
+
+- **影響檔案清單**：
+  - `src/components/Dashboard/LeaveApplicationModal.jsx`
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/components/Admin/MonthlyRulesModal.jsx`
+  - `src/components/WorkHours/ActualHoursOverride.jsx`
+  - `src/components/Admin/ShiftMasterManagement.jsx`
+  - `src/components/ScheduleTable.jsx`
+  - `src/App.jsx`
+  - `src/components/Auth/LoginView.jsx`
+  - `src/engine/schedulingTimelineEngine.js`
+  - `src/components/Timeline/SchedulingTimelineStepper.jsx`
+  - `scratch/test_v352_timeline_and_auth.mjs`
+
+- **驗證成果**：
+  - 單元測試 `test_v352_timeline_and_auth.mjs` 100% 通過（TIMELINE_STAGES 8 大階段、15 種日期判定、操作時限阻擋均完全命中）。
+  - Lucide 圖標掃描 `check_lucide_imports.mjs` 0 缺失。
+  - 前端專案打包 `npm run build` 0 錯誤順利完成（產出正式 production bundle）。
+
+- **狀態驗收**：`✅ 已徹底加固改寫並通過驗收 (v3.5.2-ui-modal-auth-timeline-delivered)`
+
 
 

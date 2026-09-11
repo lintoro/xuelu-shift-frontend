@@ -30,16 +30,16 @@ export default function SchedulingTimelineStepper({
   const currentStage = statusInfo.currentStage;
   const currentStep = currentStage?.step || 0;
 
-  // 快速切換模擬日期的預設情境
+  // 快速切換模擬日期的預設情境 (依照主管最新 8 大階段排程)
   const quickDatePresets = [
-    { label: '9/10 主管設定', date: '2026-09-10', desc: '調移/休假/指定組長' },
-    { label: '9/12 員工劃選', date: '2026-09-12', desc: '正職劃休/PT報班' },
-    { label: '9/18 組長初審', date: '2026-09-18', desc: '衝突透視/組長初核' },
-    { label: '9/20 高管覆審', date: '2026-09-20', desc: '全場調度/AI調優' },
-    { label: '9/24 排定截止', date: '2026-09-24', desc: '全館排定/鎖定發布' },
-    { label: '9/25 全員簽回', date: '2026-09-25', desc: '正式班表公告簽回' },
-    { label: '9/30 月底確認', date: '2026-09-30', desc: '出勤確認/實勤覆核' },
-    { label: '10/02 次月簽認', date: '2026-10-02', desc: '全月考勤電子簽認' }
+    { label: '9/08 主管設定', date: '2026-09-08', desc: '8-10日 規則/指派組長' },
+    { label: '9/11 員工劃選', date: '2026-09-11', desc: '11-14日 劃休/PT報班' },
+    { label: '9/15 組長初審', date: '2026-09-15', desc: '15-18日 衝突透視/初審' },
+    { label: '9/19 高管初審', date: '2026-09-19', desc: '19-20日 全場調度/初審' },
+    { label: '9/21 全員簽回', date: '2026-09-21', desc: '21-23日 全員班表簽回' },
+    { label: '9/24 全店產出', date: '2026-09-24', desc: '24-25日 全店班表產出' },
+    { label: '9/30 月底確認', date: '2026-09-30', desc: '月底 出勤確認/覆核' },
+    { label: '10/02 次月簽認', date: '2026-10-02', desc: '次月2日 考勤簽認' }
   ];
 
   const isManager = currentUser?.role === 'Manager';

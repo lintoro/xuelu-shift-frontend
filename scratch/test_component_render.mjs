@@ -1,7 +1,7 @@
 // 測試登入後全路徑 SSR 渲染，找出崩潰元件
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
-import { EMPLOYEES, STATIONS } from './src/data/mockMasterData.js';
+import { EMPLOYEES, STATIONS } from '../src/data/mockMasterData.js';
 
 // 模擬登入後的 currentUser
 const testUser = EMPLOYEES.find(e => e.emp_id === 'B111155');
@@ -9,23 +9,23 @@ console.log('模擬登入帳號:', testUser.name, testUser.role);
 
 // 逐一測試各核心子元件
 const testComponents = [
-  ['Header', () => import('./src/components/Header.jsx')],
-  ['SchedulingTimelineStepper', () => import('./src/components/Timeline/SchedulingTimelineStepper.jsx')],
-  ['MyDashboard', () => import('./src/components/Dashboard/MyDashboard.jsx')],
-  ['ScheduleTable', () => import('./src/components/ScheduleTable.jsx')],
-  ['AnnualHolidayTransfer', () => import('./src/components/Admin/AnnualHolidayTransfer.jsx')],
-  ['MonthlySettlementPanel', () => import('./src/components/MonthlySettlement/MonthlySettlementPanel.jsx')],
-  ['PersonnelManagement', () => import('./src/components/Admin/PersonnelManagement.jsx')],
-  ['ActualHoursOverride', () => import('./src/components/WorkHours/ActualHoursOverride.jsx')],
-  ['ShiftSwapPortal', () => import('./src/components/ShiftSwap/ShiftSwapPortal.jsx')],
-  ['AuditLogsPanel', () => import('./src/components/AuditLogs/AuditLogsPanel.jsx')],
-  ['FairnessMetricsPanel', () => import('./src/components/Fairness/FairnessMetricsPanel.jsx')],
-  ['CompliancePanel', () => import('./src/components/CompliancePanel.jsx')],
-  ['EngineDebugger', () => import('./src/components/EngineDebugger.jsx')],
-  ['AnomalyAlertBanner', () => import('./src/components/AnomalyAlertBanner.jsx')],
-  ['StationStatusOverview', () => import('./src/components/StationStatusOverview.jsx')],
-  ['GasConnectionModal', () => import('./src/components/Cloud/GasConnectionModal.jsx')],
-  ['ShiftMasterManagement', () => import('./src/components/Admin/ShiftMasterManagement.jsx')],
+  ['Header', () => import('../src/components/Header.jsx')],
+  ['SchedulingTimelineStepper', () => import('../src/components/Timeline/SchedulingTimelineStepper.jsx')],
+  ['MyDashboard', () => import('../src/components/Dashboard/MyDashboard.jsx')],
+  ['ScheduleTable', () => import('../src/components/ScheduleTable.jsx')],
+  ['AnnualHolidayTransfer', () => import('../src/components/Admin/AnnualHolidayTransfer.jsx')],
+  ['MonthlySettlementPanel', () => import('../src/components/MonthlySettlement/MonthlySettlementPanel.jsx')],
+  ['PersonnelManagement', () => import('../src/components/Admin/PersonnelManagement.jsx')],
+  ['ActualHoursOverride', () => import('../src/components/WorkHours/ActualHoursOverride.jsx')],
+  ['ShiftSwapPortal', () => import('../src/components/ShiftSwap/ShiftSwapPortal.jsx')],
+  ['AuditLogsPanel', () => import('../src/components/AuditLogs/AuditLogsPanel.jsx')],
+  ['FairnessMetricsPanel', () => import('../src/components/Fairness/FairnessMetricsPanel.jsx')],
+  ['CompliancePanel', () => import('../src/components/CompliancePanel.jsx')],
+  ['PersonalPreferences', () => import('../src/components/PersonalPreferences.jsx')],
+  ['HolidayConsentModal', () => import('../src/components/HolidayConsentModal.jsx')],
+  ['StationStatusOverview', () => import('../src/components/StationStatusOverview.jsx')],
+  ['GasConnectionModal', () => import('../src/components/Cloud/GasConnectionModal.jsx')],
+  ['ShiftMasterManagement', () => import('../src/components/Admin/ShiftMasterManagement.jsx')],
 ];
 
 let failCount = 0;

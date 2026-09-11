@@ -266,7 +266,7 @@ export default function PersonnelManagement({
                       <button
                         onClick={() => setEditingEmp({ ...emp })}
                         className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
-                        title="編輯同仁資訊"
+                        title="編輯同仁資料"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -288,216 +288,230 @@ export default function PersonnelManagement({
 
       {/* 新增同仁彈窗 */}
       {isAddingNew && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <form onSubmit={handleCreateEmp} className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-5 border border-slate-200 animate-scaleUp">
-            <h3 className="text-sm font-bold text-slate-900 mb-3 pb-2 border-b border-slate-200">
-              新增在勤同仁至組織名冊 (直連 Employees 表)
-            </h3>
-
-            <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">員工工號 (主鍵)</label>
-                <input
-                  type="text"
-                  required
-                  value={newEmpForm.emp_id}
-                  onChange={(e) => setNewEmpForm({ ...newEmpForm, emp_id: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded p-2 font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">同仁姓名</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="如：王大明"
-                  value={newEmpForm.name}
-                  onChange={(e) => setNewEmpForm({ ...newEmpForm, name: e.target.value })}
-                  className="w-full border border-slate-300 rounded p-2 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">業務角色</label>
-                <select
-                  value={newEmpForm.role}
-                  onChange={(e) => setNewEmpForm({ ...newEmpForm, role: e.target.value })}
-                  className="w-full border border-slate-300 rounded p-2"
-                >
-                  <option value="Staff">正職同仁 (Staff)</option>
-                  <option value="Leader">站點組長 (Leader)</option>
-                  <option value="PT">計時人員 (PT)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">主屬站點</label>
-                <select
-                  value={newEmpForm.primary_station}
-                  onChange={(e) => {
-                    const newPrimary = e.target.value;
-                    setNewEmpForm({ 
-                      ...newEmpForm, 
-                      primary_station: newPrimary,
-                      supported_stations: getUpdatedSupportedStations(newEmpForm.supported_stations, newPrimary)
-                    });
-                  }}
-                  className="w-full border border-slate-300 rounded p-2"
-                >
-                  {stations.map(st => (
-                    <option key={st.station_id} value={st.station_id}>{st.station_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">獨立顧站資格 (can_solo)</label>
-                <select
-                  value={newEmpForm.can_solo ? 'true' : 'false'}
-                  onChange={(e) => setNewEmpForm({ ...newEmpForm, can_solo: e.target.value === 'true' })}
-                  className="w-full border border-slate-300 rounded p-2"
-                >
-                  <option value="true">具備資格 (true)</option>
-                  <option value="false">不具備 (false)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">到職日 (週年特休計算)</label>
-                <input
-                  type="date"
-                  value={newEmpForm.hire_date}
-                  onChange={(e) => setNewEmpForm({ ...newEmpForm, hire_date: e.target.value })}
-                  className="w-full border border-slate-300 rounded p-2 font-mono"
-                />
-              </div>
-            </div>
-
-            {/* 新增同仁：跨組支援清單 (落實清潔組雙向隔離) */}
-            <div className="mb-4 text-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="font-bold text-slate-700 block">
-                  跨組支援清單 (supported_stations)
-                </label>
-                {newEmpForm.primary_station === 'ST_CLEAN' ? (
-                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                    特別單位：不支援外組
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
-                )}
-              </div>
-
-              {newEmpForm.primary_station === 'ST_CLEAN' && (
-                <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                {stations.map(st => {
-                  const isCleanUnit = st.station_id === 'ST_CLEAN';
-                  const isPrimary = st.station_id === newEmpForm.primary_station;
-                  const isCleanPrimary = newEmpForm.primary_station === 'ST_CLEAN';
-                  
-                  const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
-                  const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id));
-                  const isSolo = isPrimary 
-                    ? !!newEmpForm.can_solo 
-                    : (newEmpForm.solo_stations || []).includes(st.station_id);
-
-                  return (
-                    <div
-                      key={st.station_id}
-                      className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
-                        isDisabled
-                          ? isCleanUnit && !isCleanPrimary
-                            ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
-                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
-                          : isChecked
-                          ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <label className="flex items-center space-x-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={(e) => {
-                            const updated = toggleSupportedStation(
-                              newEmpForm.supported_stations,
-                              st.station_id,
-                              e.target.checked,
-                              newEmpForm.primary_station
-                            );
-                            const updatedSolo = e.target.checked 
-                              ? (newEmpForm.solo_stations || [])
-                              : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
-                            setNewEmpForm({ ...newEmpForm, supported_stations: updated, solo_stations: updatedSolo });
-                          }}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                        />
-                        <span className="font-bold truncate">
-                          {st.station_name}
-                          {isCleanUnit && !isCleanPrimary && (
-                            <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
-                          )}
-                          {isPrimary && (
-                            <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
-                          )}
-                        </span>
-                      </label>
-
-                      {/* 支援站點能否獨立開關 (由主管設定) */}
-                      {isChecked && !isCleanUnit && (
-                        <label 
-                          className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
-                            isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
-                          }`}
-                        >
-                          <span>{isSolo ? '🌟 可獨立(Solo)' : '協同支援(無Solo)'}</span>
-                          <input
-                            type="checkbox"
-                            checked={isSolo}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              if (isPrimary) {
-                                const newSolo = checked
-                                  ? Array.from(new Set([...(newEmpForm.solo_stations || []), st.station_id]))
-                                  : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
-                                setNewEmpForm({ ...newEmpForm, can_solo: checked, solo_stations: newSolo });
-                              } else {
-                                const currentSolo = newEmpForm.solo_stations || (newEmpForm.can_solo ? [newEmpForm.primary_station] : []);
-                                const newSolo = checked
-                                  ? Array.from(new Set([...currentSolo, st.station_id]))
-                                  : currentSolo.filter(id => id !== st.station_id);
-                                setNewEmpForm({ ...newEmpForm, solo_stations: newSolo });
-                              }
-                            }}
-                            className="w-3 h-3 text-amber-600 rounded cursor-pointer"
-                          />
-                        </label>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <form onSubmit={handleCreateEmp} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 animate-scaleUp flex flex-col max-h-[88vh] my-auto overflow-hidden">
+            {/* Header (固定置頂) */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="text-sm font-bold text-slate-900">
+                新增在勤同仁至組織名冊 (直連 Employees 表)
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsAddingNew(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body (滾動內容區) */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">員工工號 (主鍵)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newEmpForm.emp_id}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, emp_id: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded p-2 font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">同仁姓名</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="如：王大明"
+                    value={newEmpForm.name}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, name: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">業務角色</label>
+                  <select
+                    value={newEmpForm.role}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, role: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2"
+                  >
+                    <option value="Staff">正職同仁 (Staff)</option>
+                    <option value="Leader">站點組長 (Leader)</option>
+                    <option value="PT">計時人員 (PT)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">主屬站點</label>
+                  <select
+                    value={newEmpForm.primary_station}
+                    onChange={(e) => {
+                      const newPrimary = e.target.value;
+                      setNewEmpForm({ 
+                        ...newEmpForm, 
+                        primary_station: newPrimary,
+                        supported_stations: getUpdatedSupportedStations(newEmpForm.supported_stations, newPrimary)
+                      });
+                    }}
+                    className="w-full border border-slate-300 rounded p-2"
+                  >
+                    {stations.map(st => (
+                      <option key={st.station_id} value={st.station_id}>{st.station_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">獨立顧站資格 (can_solo)</label>
+                  <select
+                    value={newEmpForm.can_solo ? 'true' : 'false'}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, can_solo: e.target.value === 'true' })}
+                    className="w-full border border-slate-300 rounded p-2"
+                  >
+                    <option value="true">具備資格 (true)</option>
+                    <option value="false">不具備 (false)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">到職日 (週年特休計算)</label>
+                  <input
+                    type="date"
+                    value={newEmpForm.hire_date}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, hire_date: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* 新增同仁：跨組支援清單 (落實清潔組雙向隔離) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-slate-700 block">
+                    跨組支援清單 (supported_stations)
+                  </label>
+                  {newEmpForm.primary_station === 'ST_CLEAN' ? (
+                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                      特別單位：不支援外組
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
+                  )}
+                </div>
+
+                {newEmpForm.primary_station === 'ST_CLEAN' && (
+                  <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  {stations.map(st => {
+                    const isCleanUnit = st.station_id === 'ST_CLEAN';
+                    const isPrimary = st.station_id === newEmpForm.primary_station;
+                    const isCleanPrimary = newEmpForm.primary_station === 'ST_CLEAN';
+                    
+                    const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
+                    const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id));
+                    const isSolo = isPrimary 
+                      ? !!newEmpForm.can_solo 
+                      : (newEmpForm.solo_stations || []).includes(st.station_id);
+
+                    return (
+                      <div
+                        key={st.station_id}
+                        className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
+                          isDisabled
+                            ? isCleanUnit && !isCleanPrimary
+                              ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
+                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
+                            : isChecked
+                            ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <label className="flex items-center space-x-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onChange={(e) => {
+                              const updated = toggleSupportedStation(
+                                newEmpForm.supported_stations,
+                                st.station_id,
+                                e.target.checked,
+                                newEmpForm.primary_station
+                              );
+                              const updatedSolo = e.target.checked 
+                                ? (newEmpForm.solo_stations || [])
+                                : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
+                              setNewEmpForm({ ...newEmpForm, supported_stations: updated, solo_stations: updatedSolo });
+                            }}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                          />
+                          <span className="font-bold truncate">
+                            {st.station_name}
+                            {isCleanUnit && !isCleanPrimary && (
+                              <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
+                            )}
+                            {isPrimary && (
+                              <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
+                            )}
+                          </span>
+                        </label>
+
+                        {/* 支援站點能否獨立開關 (由主管設定) */}
+                        {isChecked && !isCleanUnit && (
+                          <label 
+                            className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
+                              isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            <span>{isSolo ? '🌟 可獨立(Solo)' : '協同支援(無Solo)'}</span>
+                            <input
+                              type="checkbox"
+                              checked={isSolo}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                if (isPrimary) {
+                                  const newSolo = checked
+                                    ? Array.from(new Set([...(newEmpForm.solo_stations || []), st.station_id]))
+                                    : (newEmpForm.solo_stations || []).filter(id => id !== st.station_id);
+                                  setNewEmpForm({ ...newEmpForm, can_solo: checked, solo_stations: newSolo });
+                                } else {
+                                  const currentSolo = newEmpForm.solo_stations || (newEmpForm.can_solo ? [newEmpForm.primary_station] : []);
+                                  const newSolo = checked
+                                    ? Array.from(new Set([...currentSolo, st.station_id]))
+                                    : currentSolo.filter(id => id !== st.station_id);
+                                  setNewEmpForm({ ...newEmpForm, solo_stations: newSolo });
+                                }
+                              }}
+                              className="w-3 h-3 text-amber-600 rounded cursor-pointer"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer (固定置底) */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end space-x-2 shrink-0 bg-slate-50/90 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setIsAddingNew(false)}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-100"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95"
               >
                 確認新增
               </button>
@@ -508,13 +522,24 @@ export default function PersonnelManagement({
 
       {/* 編輯同仁彈窗 */}
       {editingEmp && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <form onSubmit={handleSaveEdit} className="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 border border-slate-200 animate-scaleUp">
-            <h3 className="text-sm font-bold text-slate-900 mb-3 pb-2 border-b border-slate-200">
-              編輯同仁資料: {editingEmp.name} ({editingEmp.emp_id})
-            </h3>
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <form onSubmit={handleSaveEdit} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 animate-scaleUp flex flex-col max-h-[88vh] my-auto overflow-hidden">
+            {/* Header (固定置頂) */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="text-sm font-bold text-slate-900">
+                編輯同仁資料: {editingEmp.name} ({editingEmp.emp_id})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingEmp(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            <div className="space-y-3 mb-4 text-xs">
+            {/* Body (滾動內容區) */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-xs flex-1">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">姓名</label>
                 <input
@@ -714,17 +739,18 @@ export default function PersonnelManagement({
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            {/* Footer (固定置底) */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end space-x-2 shrink-0 bg-slate-50/90 rounded-b-2xl">
               <button
                 type="button"
                 onClick={() => setEditingEmp(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50"
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-100"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95"
               >
                 儲存變更
               </button>

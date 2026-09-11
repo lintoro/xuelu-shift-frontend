@@ -1037,10 +1037,10 @@ export default function ActualHoursOverride({
 
       {/* 營運高管三度確認安全鎖模態彈窗 (Triple-Confirmation Modal) */}
       {isTripleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-xl w-full p-6 text-slate-800 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-xl w-full max-h-[88vh] flex flex-col my-auto overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0 bg-slate-50/80">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 rounded-xl bg-rose-100 text-rose-700">
                   <ShieldAlert className="w-6 h-6 text-rose-600" />
@@ -1065,46 +1065,125 @@ export default function ActualHoursOverride({
             </div>
 
             {/* 步驟進度條 */}
-            <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className="grid grid-cols-3 gap-2 px-5 pt-4 shrink-0">
               <div className={`h-1.5 rounded-full ${tripleStep >= 1 ? 'bg-rose-600' : 'bg-slate-200'}`} />
               <div className={`h-1.5 rounded-full ${tripleStep >= 2 ? 'bg-rose-600' : 'bg-slate-200'}`} />
               <div className={`h-1.5 rounded-full ${tripleStep >= 3 ? 'bg-rose-600' : 'bg-slate-200'}`} />
             </div>
 
-            {/* 步驟 1: 違規事實核認 */}
-            {tripleStep === 1 && (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs">
-                  <div className="font-bold text-rose-950 mb-2 flex items-center space-x-1.5">
-                    <AlertTriangle className="w-4 h-4 text-rose-600" />
-                    <span>【第 1 次確認】系統檢驗出以下客觀違反《勞基法》事實：</span>
+            {/* 步驟內容區 (滾動區) */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* 步驟 1: 違規事實核認 */}
+              {tripleStep === 1 && (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs">
+                    <div className="font-bold text-rose-950 mb-2 flex items-center space-x-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      <span>【第 1 次確認】系統檢驗出以下客觀違反《勞基法》事實：</span>
+                    </div>
+                    <ul className="space-y-2 text-rose-800 list-disc pl-5">
+                      {laborViolationsList.map((vio, idx) => (
+                        <li key={idx} className="leading-relaxed font-semibold">{vio}</li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-2 text-rose-800 list-disc pl-5">
-                    {laborViolationsList.map((vio, idx) => (
-                      <li key={idx} className="leading-relaxed font-semibold">{vio}</li>
-                    ))}
-                  </ul>
+
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div><strong>覆核對象：</strong>{currentEmp.name} ({currentEmp.emp_id})</div>
+                    <div><strong>出勤日期：</strong>9 月 {selectedDay} 日</div>
+                    <div><strong>實勤打卡時段：</strong>{startTime} ~ {endTime} (跨度 {totalSpanHours}h, 實配休息 {breakHours}h, 淨實勤 {netActualHours}h)</div>
+                  </div>
+
+                  <label className="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={hasConfirmedStep1}
+                      onChange={(e) => setHasConfirmedStep1(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800">
+                      我已查閱上述違規情事，確認現場確實因營運突發不可抗力產生上述出勤事實。(第 1 次確認)
+                    </span>
+                  </label>
                 </div>
+              )}
 
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
-                  <div><strong>覆核對象：</strong>{currentEmp.name} ({currentEmp.emp_id})</div>
-                  <div><strong>出勤日期：</strong>9 月 {selectedDay} 日</div>
-                  <div><strong>實勤打卡時段：</strong>{startTime} ~ {endTime} (跨度 {totalSpanHours}h, 實配休息 {breakHours}h, 淨實勤 {netActualHours}h)</div>
+              {/* 步驟 2: 法律責任與報表加註宣告 */}
+              {tripleStep === 2 && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 space-y-2">
+                    <div className="font-bold flex items-center space-x-1.5 text-amber-900">
+                      <ShieldCheck className="w-4 h-4 text-amber-700" />
+                      <span>【第 2 次確認】法律責任、稽核追溯與未來報表加註提醒宣告：</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      1. <strong>全館排班總表 CSV</strong>：該同仁之當日儲存格將標記 <code>[⚠️超時違規(實{netActualHours}h)]</code>，且報表最末端將永久條列此筆高管強制核實明細。
+                    </p>
+                    <p className="leading-relaxed">
+                      2. <strong>考勤結算清冊 CSV</strong>：月底結算名冊將新增加註欄位，明列違反條款、核定主管姓名（{currentUser?.name || '陳鵬宇'}）與現場緊急事由。
+                    </p>
+                    <p className="leading-relaxed">
+                      3. <strong>中央稽核歷程 (Audit Trail)</strong>：此筆操作將連同時間戳記、操作者工號與終端資訊寫入不可竄改稽核日誌。
+                    </p>
+                  </div>
+
+                  <label className="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={hasConfirmedStep2}
+                      onChange={(e) => setHasConfirmedStep2(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800">
+                      我充分理解相關法律與稽核責任，同意於未來所有班表與結算報表中永久加註違規提醒。(第 2 次確認)
+                    </span>
+                  </label>
                 </div>
+              )}
 
-                <label className="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer transition-all">
-                  <input
-                    type="checkbox"
-                    checked={hasConfirmedStep1}
-                    onChange={(e) => setHasConfirmedStep1(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-slate-800">
-                    我已查閱上述違規情事，確認現場確實因營運突發不可抗力產生上述出勤事實。(第 1 次確認)
-                  </span>
-                </label>
+              {/* 步驟 3: 緊急事由填寫與最終授權放行 */}
+              {tripleStep === 3 && (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-xs">
+                    <div className="font-bold text-purple-950 mb-1 flex items-center space-x-1.5">
+                      <FileText className="w-4 h-4 text-purple-700" />
+                      <span>【第 3 次確認】請填寫現場不可抗力或突發緊急調度事由 (必填，至少 8 字)：</span>
+                    </div>
+                    <p className="text-purple-700 leading-relaxed text-[11px]">
+                      此項事由將直接印製於全館 CSV 班表、考勤結算報表與法規稽核報告中，供勞動主管機關與營運稽核室備查。
+                    </p>
+                  </div>
 
-                <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+                  <div>
+                    <textarea
+                      rows={3}
+                      value={emergencyReason}
+                      onChange={(e) => setEmergencyReason(e.target.value)}
+                      placeholder="如：現場設備突發故障搶修至深夜，現場無替換人力，經營運高管特准留守出勤並核實工時..."
+                      className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-none leading-relaxed"
+                    />
+                    <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+                      <span>字數需滿 8 字以上</span>
+                      <span className={emergencyReason.trim().length >= 8 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                        已輸入 {emergencyReason.trim().length} 字
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-900 font-bold flex items-center space-x-2">
+                    <Check className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>
+                      授權核定主管：{currentUser?.name || '陳鵬宇'} ({currentUser?.emp_id || 'B111155'} · 營運高管)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 底部按鈕區 (固定置底) */}
+            <div className="p-5 border-t border-slate-200 bg-slate-50/80 shrink-0 flex items-center justify-between">
+              {tripleStep === 1 && (
+                <>
                   <button
                     type="button"
                     onClick={() => setIsTripleModalOpen(false)}
@@ -1120,42 +1199,11 @@ export default function ActualHoursOverride({
                   >
                     下一步：法律責任與報表宣告 (1/3) →
                   </button>
-                </div>
-              </div>
-            )}
+                </>
+              )}
 
-            {/* 步驟 2: 法律責任與報表加註宣告 */}
-            {tripleStep === 2 && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 space-y-2">
-                  <div className="font-bold flex items-center space-x-1.5 text-amber-900">
-                    <ShieldCheck className="w-4 h-4 text-amber-700" />
-                    <span>【第 2 次確認】法律責任、稽核追溯與未來報表加註提醒宣告：</span>
-                  </div>
-                  <p className="leading-relaxed">
-                    1. <strong>全館排班總表 CSV</strong>：該同仁之當日儲存格將標記 <code>[⚠️超時違規(實{netActualHours}h)]</code>，且報表最末端將永久條列此筆高管強制核實明細。
-                  </p>
-                  <p className="leading-relaxed">
-                    2. <strong>考勤結算清冊 CSV</strong>：月底結算名冊將新增加註欄位，明列違反條款、核定主管姓名（{currentUser?.name || '陳鵬宇'}）與現場緊急事由。
-                  </p>
-                  <p className="leading-relaxed">
-                    3. <strong>中央稽核歷程 (Audit Trail)</strong>：此筆操作將連同時間戳記、操作者工號與終端資訊寫入不可竄改稽核日誌。
-                  </p>
-                </div>
-
-                <label className="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer transition-all">
-                  <input
-                    type="checkbox"
-                    checked={hasConfirmedStep2}
-                    onChange={(e) => setHasConfirmedStep2(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-slate-800">
-                    我充分理解相關法律與稽核責任，同意於未來所有班表與結算報表中永久加註違規提醒。(第 2 次確認)
-                  </span>
-                </label>
-
-                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+              {tripleStep === 2 && (
+                <>
                   <button
                     type="button"
                     onClick={() => setTripleStep(1)}
@@ -1171,47 +1219,11 @@ export default function ActualHoursOverride({
                   >
                     下一步：填寫事由與最終授權 (2/3) →
                   </button>
-                </div>
-              </div>
-            )}
+                </>
+              )}
 
-            {/* 步驟 3: 緊急事由填寫與最終授權放行 */}
-            {tripleStep === 3 && (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-xs">
-                  <div className="font-bold text-purple-950 mb-1 flex items-center space-x-1.5">
-                    <FileText className="w-4 h-4 text-purple-700" />
-                    <span>【第 3 次確認】請填寫現場不可抗力或突發緊急調度事由 (必填，至少 8 字)：</span>
-                  </div>
-                  <p className="text-purple-700 leading-relaxed text-[11px]">
-                    此項事由將直接印製於全館 CSV 班表、考勤結算報表與法規稽核報告中，供勞動主管機關與營運稽核室備查。
-                  </p>
-                </div>
-
-                <div>
-                  <textarea
-                    rows={3}
-                    value={emergencyReason}
-                    onChange={(e) => setEmergencyReason(e.target.value)}
-                    placeholder="如：現場設備突發故障搶修至深夜，現場無替換人力，經營運高管特准留守出勤並核實工時..."
-                    className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-none leading-relaxed"
-                  />
-                  <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1">
-                    <span>字數需滿 8 字以上</span>
-                    <span className={emergencyReason.trim().length >= 8 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
-                      已輸入 {emergencyReason.trim().length} 字
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-900 font-bold flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>
-                    授權核定主管：{currentUser?.name || '陳鵬宇'} ({currentUser?.emp_id || 'B111155'} · 營運高管)
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+              {tripleStep === 3 && (
+                <>
                   <button
                     type="button"
                     onClick={() => setTripleStep(2)}
@@ -1227,9 +1239,9 @@ export default function ActualHoursOverride({
                   >
                     ⚠️ 確認第 3 次最終授權 · 強制核定放行！
                   </button>
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

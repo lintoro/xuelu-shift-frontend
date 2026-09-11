@@ -174,15 +174,15 @@ export default function ScheduleTable({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-      {/* 排班時限階段專屬提示 (Issue #016) */}
-      {simDay >= 20 && simDay <= 23 && (
+      {/* 排班時限階段專屬提示 (Issue #016 & #029) */}
+      {simDay >= 19 && simDay <= 20 && (
         <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
-            <span className="font-bold">【階段 4/8 · 營運高管覆審期 (每月 20~23 日)】全場排班調度進行中</span>
+            <span className="font-bold">【階段 4/8 · 營運高管初審期 (每月 19~20 日)】全場排班調度進行中</span>
           </div>
           <span className="text-[11px] font-semibold text-amber-800">
-            請 Manager 於 24 日前覆核組長微調並完成全場排定定稿
+            請 Manager 於 20 日前覆核組長微調並產出班表以供 21 日全員簽回
           </span>
         </div>
       )}
@@ -580,9 +580,9 @@ export default function ScheduleTable({
 
       {/* 彈窗 1: 格子快速微調抽屜/彈窗 (Quick Shift Adjuster) */}
       {editingCell && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <form onSubmit={handleSaveAdjustmentSubmit} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 animate-scaleUp">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <form onSubmit={handleSaveAdjustmentSubmit} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[90vh] flex flex-col my-auto overflow-hidden border border-slate-200 animate-scaleUp">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
               <div className="flex items-center space-x-2">
                 <Edit3 className="w-4 h-4 text-indigo-600" />
                 <h4 className="text-xs font-bold text-slate-900">
@@ -592,13 +592,13 @@ export default function ScheduleTable({
               <button
                 type="button"
                 onClick={() => setEditingCell(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs mb-4">
+            <div className="p-4 space-y-3 text-xs flex-1 overflow-y-auto">
               <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <div className="flex justify-between items-center text-[11px] mb-1">
                   <span className="text-slate-500">原排定班別:</span>
@@ -673,12 +673,11 @@ export default function ScheduleTable({
               </div>
             </div>
 
-
-            <div className="flex justify-end space-x-2">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end space-x-2">
               <button
                 type="button"
                 onClick={() => setEditingCell(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold"
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold cursor-pointer"
               >
                 取消
               </button>
@@ -695,9 +694,9 @@ export default function ScheduleTable({
 
       {/* 彈窗 2: Manager 審核微調清單彈窗 (Approval Modal) */}
       {isReviewModalOpen && isManager && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 border border-slate-200 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[88vh] flex flex-col my-auto overflow-hidden border border-slate-200 animate-scaleUp">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5 text-amber-600" />
                 <h3 className="text-sm font-bold text-slate-900">
@@ -706,13 +705,13 @@ export default function ScheduleTable({
               </div>
               <button
                 onClick={() => setIsReviewModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs mb-4">
+            <div className="flex-1 overflow-y-auto p-5 divide-y divide-slate-100 text-xs">
               {pendingForManager.map(adj => (
                 <div key={adj.adj_id} className="py-2.5 flex items-center justify-between gap-3">
                   <div>
@@ -740,7 +739,7 @@ export default function ScheduleTable({
                       onClick={() => {
                         if (onRejectAdjustment) onRejectAdjustment(adj.adj_id);
                       }}
-                      className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px]"
+                      className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] cursor-pointer"
                     >
                       駁回
                     </button>
@@ -749,11 +748,11 @@ export default function ScheduleTable({
               ))}
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end space-x-2">
               <button
                 type="button"
                 onClick={() => setIsReviewModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs"
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs cursor-pointer"
               >
                 關閉
               </button>
@@ -767,7 +766,7 @@ export default function ScheduleTable({
                   setFeedbackMsg(`已成功全數核准 ${pendingForManager.length} 筆微調並套用入排班大表！`);
                   setTimeout(() => setFeedbackMsg(''), 3000);
                 }}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95"
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer"
               >
                 一鍵全部核准並套入班表
               </button>

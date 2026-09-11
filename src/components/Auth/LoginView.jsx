@@ -243,7 +243,7 @@ export default function LoginView({
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold text-slate-700">6 碼數字 PIN 碼</label>
                 <span className="text-[10px] text-slate-400">
-                  {empId && employees.find(e => e.emp_id === empId)?.is_default_pin ? '預設: 000000' : '支援九宮格數字'}
+                  {empId && employees.find(e => e.emp_id === empId)?.is_default_pin ? '預設: 000000' : '請輸入 6 碼數字'}
                 </span>
               </div>
               <div className="relative">

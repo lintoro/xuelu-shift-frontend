@@ -94,12 +94,12 @@ export default function LeaveApplicationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 animate-scaleUp">
-        {/* 表頭 */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 animate-scaleUp flex flex-col max-h-[88vh] my-auto overflow-hidden">
+        {/* 表頭 (固定置頂) */}
+        <div className="p-5 pb-3.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
               📝
             </div>
             <div>
@@ -112,134 +112,137 @@ export default function LeaveApplicationModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* 核心法規防呆提示卡 */}
-        <div className="mb-4 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start space-x-2.5">
-          <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-          <div className="space-y-0.5 text-[11px] text-indigo-900">
-            <span className="font-bold">營運考勤規則提醒：</span>
-            <p>
-              1. 依現場管理規範，事前請假<strong>只能申請今日之後的未來出勤日</strong>（已過去之缺勤事實請洽主管於「實勤覆核」中處理）。
-            </p>
-            <p>
-              2. 審核流程採<strong>【二重核可制】</strong>：送出後先由站點組長初審把關人力，再由營運主管 (Manager) 終審核發並自動更新班表與存摺。
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 請假日期選擇 */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              請假日期 (僅列出今日之後且已排班之出勤日)
-            </label>
-            {availableFutureWorkDays.length === 0 ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-bold">
-                ⚠️ 當月今日之後已無排定之出勤日（或已全為排休），無可請假日。
+        {/* 彈窗內容區 (滾動區) */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+            {/* 核心法規防呆提示卡 */}
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start space-x-2.5">
+              <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 text-[11px] text-indigo-900">
+                <span className="font-bold">營運考勤規則提醒：</span>
+                <p>
+                  1. 依現場管理規範，事前請假<strong>只能申請今日之後的未來出勤日</strong>（已過去之缺勤事實請洽主管於「實勤覆核」中處理）。
+                </p>
+                <p>
+                  2. 審核流程採<strong>【二重核可制】</strong>：送出後先由站點組長初審把關人力，再由營運主管 (Manager) 終審核發並自動更新班表與存摺。
+                </p>
               </div>
-            ) : (
-              <select
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold bg-white cursor-pointer"
-              >
-                {availableFutureWorkDays.map(item => (
-                  <option key={item.day} value={item.day}>
-                    {item.dateStr} (原排定: {item.shiftCode} 班 · 全日 8 小時)
-                  </option>
+            </div>
+
+            {/* 請假日期選擇 */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                請假日期 (僅列出今日之後且已排班之出勤日)
+              </label>
+              {availableFutureWorkDays.length === 0 ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-bold">
+                  ⚠️ 當月今日之後已無排定之出勤日（或已全為排休），無可請假日。
+                </div>
+              ) : (
+                <select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(Number(e.target.value))}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold bg-white cursor-pointer"
+                >
+                  {availableFutureWorkDays.map(item => (
+                    <option key={item.day} value={item.day}>
+                      {item.dateStr} (原排定: {item.shiftCode} 班 · 全日 8 小時)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* 假別選擇 */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                申請假別 (特休/補休核准後自動扣抵存摺)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { type: 'AL', name: '特休假 (AL)', sub: `餘額: ${balance.annualLeaveDays || 0} 天`, color: 'purple' },
+                  { type: 'CT', name: '補休假 (CT)', sub: `餘額: ${balance.compTimeHours || 0} 小時`, color: 'amber' },
+                  { type: 'PERSONAL', name: '事假 (扣全薪)', sub: '依出勤扣發', color: 'rose' },
+                  { type: 'SICK', name: '病假 (扣半薪)', sub: '出具就醫收據', color: 'blue' }
+                ].map(item => (
+                  <button
+                    type="button"
+                    key={item.type}
+                    onClick={() => setSelectedLeaveType(item.type)}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      selectedLeaveType === item.type
+                        ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600 text-indigo-950 font-bold'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <div className="text-xs">{item.name}</div>
+                    <div className="text-[10px] text-slate-500">{item.sub}</div>
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {/* 額度校驗警示 */}
+              <div className={`mt-2 p-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 ${
+                balanceCheck.isValid ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                {balanceCheck.isValid ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />}
+                <span>{balanceCheck.message}</span>
+              </div>
+            </div>
+
+            {/* 請假原因 */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                請假事由 (快捷下拉或手動輸入)
+              </label>
+              <div className="space-y-1.5">
+                <select
+                  value={reason}
+                  onChange={(e) => {
+                    if (e.target.value === 'CUSTOM') {
+                      setReason('');
+                    } else {
+                      setReason(e.target.value);
+                    }
+                  }}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-medium"
+                >
+                  <option value="個人家庭重要事務">🏠 個人家庭重要事務 (預設)</option>
+                  <option value="親友婚慶需返鄉出席">💒 親友婚慶需返鄉出席</option>
+                  <option value="身體不適需就醫休養">🏥 身體不適需就醫休養</option>
+                  <option value="辦理個人法律/行政證件">📄 辦理個人法律/行政證件</option>
+                  <option value="CUSTOM">✏️ 其他（手動輸入事由）</option>
+                </select>
+
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="若選「其他」或需補充，請在此輸入具體事由..."
+                  className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {feedback && (
+              <div className="p-2 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-lg">
+                {feedback}
+              </div>
             )}
           </div>
 
-          {/* 假別選擇 */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              申請假別 (特休/補休核准後自動扣抵存摺)
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { type: 'AL', name: '特休假 (AL)', sub: `餘額: ${balance.annualLeaveDays || 0} 天`, color: 'purple' },
-                { type: 'CT', name: '補休假 (CT)', sub: `餘額: ${balance.compTimeHours || 0} 小時`, color: 'amber' },
-                { type: 'PERSONAL', name: '事假 (扣全薪)', sub: '依出勤扣發', color: 'rose' },
-                { type: 'SICK', name: '病假 (扣半薪)', sub: '出具就醫收據', color: 'blue' }
-              ].map(item => (
-                <button
-                  type="button"
-                  key={item.type}
-                  onClick={() => setSelectedLeaveType(item.type)}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    selectedLeaveType === item.type
-                      ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600 text-indigo-950 font-bold'
-                      : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  <div className="text-xs">{item.name}</div>
-                  <div className="text-[10px] text-slate-500">{item.sub}</div>
-                </button>
-              ))}
-            </div>
-
-            {/* 額度校驗警示 */}
-            <div className={`mt-2 p-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 ${
-              balanceCheck.isValid ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800 border border-rose-200'
-            }`}>
-              {balanceCheck.isValid ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />}
-              <span>{balanceCheck.message}</span>
-            </div>
-          </div>
-
-          {/* 請假原因 */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              請假事由 (快捷下拉或手動輸入)
-            </label>
-            <div className="space-y-1.5">
-              <select
-                value={reason}
-                onChange={(e) => {
-                  if (e.target.value === 'CUSTOM') {
-                    setReason('');
-                  } else {
-                    setReason(e.target.value);
-                  }
-                }}
-                className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-medium"
-              >
-                <option value="個人家庭重要事務">🏠 個人家庭重要事務 (預設)</option>
-                <option value="親友婚慶需返鄉出席">💒 親友婚慶需返鄉出席</option>
-                <option value="身體不適需就醫休養">🏥 身體不適需就醫休養</option>
-                <option value="辦理個人法律/行政證件">📄 辦理個人法律/行政證件</option>
-                <option value="CUSTOM">✏️ 其他（手動輸入事由）</option>
-              </select>
-
-              <input
-                type="text"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="若選「其他」或需補充，請在此輸入具體事由..."
-                className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {feedback && (
-            <div className="p-2 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-lg">
-              {feedback}
-            </div>
-          )}
-
-          {/* 按鈕群 */}
-          <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+          {/* 按鈕群 (固定置底) */}
+          <div className="p-4 border-t border-slate-200 bg-slate-50/90 flex justify-end space-x-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 font-bold text-xs cursor-pointer"
             >
               取消
             </button>

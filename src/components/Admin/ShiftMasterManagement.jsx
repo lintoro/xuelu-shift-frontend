@@ -454,10 +454,10 @@ export default function ShiftMasterManagement({
 
       {/* 新增 / 編輯班別 Modal 彈窗 */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scale-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[88vh] flex flex-col my-auto border border-slate-200 overflow-hidden animate-scale-in">
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
               <div className="flex items-center space-x-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
                   <Clock className="w-5 h-5" />
@@ -478,163 +478,165 @@ export default function ShiftMasterManagement({
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmitForm} className="p-5 space-y-4">
-              {/* 班別代碼與名稱 */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    班別代碼 (Code) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formState.code}
-                    disabled={!!editingCode}
-                    onChange={(e) => setFormState({ ...formState, code: e.target.value.toUpperCase() })}
-                    placeholder="如 E、F、S1"
-                    maxLength={4}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-bold uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
-                    required
-                  />
-                  <span className="text-[10px] text-slate-400">大寫英數 1~4 碼</span>
-                </div>
+            <form onSubmit={handleSubmitForm} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* 班別代碼與名稱 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      班別代碼 (Code) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formState.code}
+                      disabled={!!editingCode}
+                      onChange={(e) => setFormState({ ...formState, code: e.target.value.toUpperCase() })}
+                      placeholder="如 E、F、S1"
+                      maxLength={4}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-bold uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                      required
+                    />
+                    <span className="text-[10px] text-slate-400">大寫英數 1~4 碼</span>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    班別名稱 (Name) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formState.name}
-                    onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                    placeholder="如 夜間打烊班、特賣短班"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    required
-                  />
-                  <span className="text-[10px] text-slate-400">營運白話名稱</span>
-                </div>
-              </div>
-
-              {/* 出勤起訖時間與休息時數 */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    開始出勤時間
-                  </label>
-                  <select
-                    value={formState.startTime}
-                    onChange={(e) => setFormState({ ...formState, startTime: e.target.value })}
-                    className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    {TIME_OPTIONS.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    結束出勤時間
-                  </label>
-                  <select
-                    value={formState.endTime}
-                    onChange={(e) => setFormState({ ...formState, endTime: e.target.value })}
-                    className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    {TIME_OPTIONS.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    休息時數 (小時)
-                  </label>
-                  <select
-                    value={formState.breakHours}
-                    onChange={(e) => setFormState({ ...formState, breakHours: Number(e.target.value) })}
-                    className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    <option value={0}>0 小時</option>
-                    <option value={0.5}>0.5 小時 (30分)</option>
-                    <option value={1}>1.0 小時 (60分)</option>
-                    <option value={1.5}>1.5 小時</option>
-                    <option value={2}>2.0 小時</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* 即時工時計算與勞基法 35 條防呆提示卡 */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] text-slate-500 block">在勤總跨度：{durationHours} 小時</span>
-                  <span className="text-xs font-bold text-slate-800">
-                    實際淨出勤工時：<strong className="text-indigo-600 text-sm font-black">{workHours}</strong> 小時
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">
-                    計入當月總工時
-                  </span>
-                </div>
-              </div>
-
-              {isRestBreached && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-2 text-xs text-amber-900">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="leading-tight">
-                    <strong>勞基法第 35 條防呆警示</strong>：連續工作跨度達 {durationHours} 小時，法定應配置至少 30 分鐘（0.5小時）休息時間，避免衍生勞資爭議。
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      班別名稱 (Name) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formState.name}
+                      onChange={(e) => setFormState({ ...formState, name: e.target.value })}
+                      placeholder="如 夜間打烊班、特賣短班"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      required
+                    />
+                    <span className="text-[10px] text-slate-400">營運白話名稱</span>
                   </div>
                 </div>
-              )}
 
-              {/* 視覺風格調色盤選取 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  排班大表標籤配色 (Badge Color)
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {COLOR_PRESETS.map((preset) => {
-                    const isSelected = formState.colorThemeId === preset.id;
-                    return (
-                      <button
-                        type="button"
-                        key={preset.id}
-                        onClick={() => setFormState({ ...formState, colorThemeId: preset.id })}
-                        className={`p-2 rounded-lg border text-left flex items-center space-x-2 transition-all cursor-pointer ${
-                          isSelected 
-                            ? `border-indigo-600 bg-indigo-50/50 ring-2 ${preset.ring}` 
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <span className={`w-5 h-5 rounded-md ${preset.badgeColor} flex items-center justify-center text-[10px] font-bold shrink-0`}>
-                          {formState.code || '班'}
-                        </span>
-                        <span className="text-[11px] font-semibold text-slate-700 truncate">
-                          {preset.name.split(' ')[0]}
-                        </span>
-                      </button>
-                    );
-                  })}
+                {/* 出勤起訖時間與休息時數 */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      開始出勤時間
+                    </label>
+                    <select
+                      value={formState.startTime}
+                      onChange={(e) => setFormState({ ...formState, startTime: e.target.value })}
+                      className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      結束出勤時間
+                    </label>
+                    <select
+                      value={formState.endTime}
+                      onChange={(e) => setFormState({ ...formState, endTime: e.target.value })}
+                      className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      休息時數 (小時)
+                    </label>
+                    <select
+                      value={formState.breakHours}
+                      onChange={(e) => setFormState({ ...formState, breakHours: Number(e.target.value) })}
+                      className="w-full px-2 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value={0}>0 小時</option>
+                      <option value={0.5}>0.5 小時 (30分)</option>
+                      <option value={1}>1.0 小時 (60分)</option>
+                      <option value={1.5}>1.5 小時</option>
+                      <option value={2}>2.0 小時</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 即時工時計算與勞基法 35 條防呆提示卡 */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">在勤總跨度：{durationHours} 小時</span>
+                    <span className="text-xs font-bold text-slate-800">
+                      實際淨出勤工時：<strong className="text-indigo-600 text-sm font-black">{workHours}</strong> 小時
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">
+                      計入當月總工時
+                    </span>
+                  </div>
+                </div>
+
+                {isRestBreached && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-2 text-xs text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="leading-tight">
+                      <strong>勞基法第 35 條防呆警示</strong>：連續工作跨度達 {durationHours} 小時，法定應配置至少 30 分鐘（0.5小時）休息時間，避免衍生勞資爭議。
+                    </div>
+                  </div>
+                )}
+
+                {/* 視覺風格調色盤選取 */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    排班大表標籤配色 (Badge Color)
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {COLOR_PRESETS.map((preset) => {
+                      const isSelected = formState.colorThemeId === preset.id;
+                      return (
+                        <button
+                          type="button"
+                          key={preset.id}
+                          onClick={() => setFormState({ ...formState, colorThemeId: preset.id })}
+                          className={`p-2 rounded-lg border text-left flex items-center space-x-2 transition-all cursor-pointer ${
+                            isSelected 
+                              ? `border-indigo-600 bg-indigo-50/50 ring-2 ${preset.ring}` 
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <span className={`w-5 h-5 rounded-md ${preset.badgeColor} flex items-center justify-center text-[10px] font-bold shrink-0`}>
+                            {formState.code || '班'}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-700 truncate">
+                            {preset.name.split(' ')[0]}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 說明備註 */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    班別說明與現場任務規劃
+                  </label>
+                  <textarea
+                    value={formState.description}
+                    onChange={(e) => setFormState({ ...formState, description: e.target.value })}
+                    rows={2}
+                    placeholder="說明此班別適用情境，例如：週五晚間特賣會人流疏導、假日跨店支援..."
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* 說明備註 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  班別說明與現場任務規劃
-                </label>
-                <textarea
-                  value={formState.description}
-                  onChange={(e) => setFormState({ ...formState, description: e.target.value })}
-                  rows={2}
-                  placeholder="說明此班別適用情境，例如：週五晚間特賣會人流疏導、假日跨店支援..."
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Modal Buttons */}
-              <div className="pt-2 flex items-center justify-end space-x-2.5">
+              {/* Modal Buttons (固定置底) */}
+              <div className="p-4 border-t border-slate-200 bg-slate-50 shrink-0 flex items-center justify-end space-x-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
