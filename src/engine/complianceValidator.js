@@ -94,22 +94,6 @@ export function validateScheduleCompliance({
         }
       }
 
-      // 檢查假日 C 班打烊規定
-      if (isWeekend && assignedCount > 0) {
-        const hasCShift = assignedToStation.some(emp => scheduleMap[emp.emp_id]?.[d]?.shift_type === 'C');
-        if (!hasCShift && station.station_id !== 'ST_CLEAN') {
-          // 清潔站除外，營業站點假日強制指定 C 班
-          issues.push({
-            type: 'MISSING_CLOSING_SHIFT',
-            severity: 'WARNING',
-            day: d,
-            station_id: station.station_id,
-            station_name: station.station_name,
-            message: `假日營業站點未排定 C 班專責打烊同仁`
-          });
-        }
-      }
-
       stationDailyStatus[station.station_id][d] = {
         level,
         count: assignedCount,
@@ -119,6 +103,112 @@ export function validateScheduleCompliance({
         supportOptions
       };
     });
+
+    // -------------------------------------------------------------
+    // 全新規則檢驗：
+    // 1. 假日 C 班打烊規定（分組聯防，每組僅需 1 位 C 班；清潔組純 A 班、服務台純 D/B 班免驗）
+    // -------------------------------------------------------------
+    if (isWeekend) {
+      // 分組 1：本鋪 (ST_MAIN_SHOP) + 小鋪 (ST_SUB_SHOP)
+      const shopGroupStaff = employees.filter(emp => {
+        const s = scheduleMap[emp.emp_id]?.[d];
+        return s && (s.station_id === 'ST_MAIN_SHOP' || s.station_id === 'ST_SUB_SHOP') && isWorkingShift(s.shift_type);
+      });
+      const hasShopGroupC = shopGroupStaff.some(emp => scheduleMap[emp.emp_id][d].shift_type === 'C');
+      if (shopGroupStaff.length > 0 && !hasShopGroupC) {
+        issues.push({
+          type: 'MISSING_CLOSING_SHIFT',
+          severity: 'WARNING',
+          day: d,
+          station_id: 'ST_MAIN_SHOP',
+          station_name: '門市選品組(本鋪/小鋪)',
+          message: `假日選品門市組（本鋪/小鋪）未排定 C 班專責打烊同仁`
+        });
+      }
+
+      // 分組 2：GAGOO (ST_Gagoo) + 餐飲 (ST_DINING)
+      const diningGroupStaff = employees.filter(emp => {
+        const s = scheduleMap[emp.emp_id]?.[d];
+        return s && (s.station_id === 'ST_Gagoo' || s.station_id === 'ST_DINING') && isWorkingShift(s.shift_type);
+      });
+      const hasDiningGroupC = diningGroupStaff.some(emp => scheduleMap[emp.emp_id][d].shift_type === 'C');
+      if (diningGroupStaff.length > 0 && !hasDiningGroupC) {
+        issues.push({
+          type: 'MISSING_CLOSING_SHIFT',
+          severity: 'WARNING',
+          day: d,
+          station_id: 'ST_Gagoo',
+          station_name: '美食餐飲組(GAGOO/餐飲)',
+          message: `假日美食餐飲組（GAGOO/餐飲）未排定 C 班專責打烊同仁`
+        });
+      }
+
+      // 檢查其他非分組營業站點（排除清潔組純A班、服務台純D/B班）
+      stations.forEach(station => {
+        if (['ST_CLEAN', 'ST_SERVICE', 'ST_MAIN_SHOP', 'ST_SUB_SHOP', 'ST_Gagoo', 'ST_DINING'].includes(station.station_id)) {
+          return;
+        }
+        if (station.requires_closing_shift) {
+          const assignedToStation = employees.filter(emp => scheduleMap[emp.emp_id]?.[d]?.station_id === station.station_id && isWorkingShift(scheduleMap[emp.emp_id][d]?.shift_type));
+          const hasC = assignedToStation.some(emp => scheduleMap[emp.emp_id][d].shift_type === 'C');
+          if (assignedToStation.length > 0 && !hasC) {
+            issues.push({
+              type: 'MISSING_CLOSING_SHIFT',
+              severity: 'WARNING',
+              day: d,
+              station_id: station.station_id,
+              station_name: station.station_name,
+              message: `假日營業站點未排定 C 班專責打烊同仁`
+            });
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 2. 營運支援人力檢驗：平日 1A 1B、假日 1A 1C
+    // 若有空班，精準產出 ADMIN_SHIFT_DEFICIT 警示供介面提示手動修正
+    // -------------------------------------------------------------
+    const adminStaffToday = employees.filter(emp => {
+      const s = scheduleMap[emp.emp_id]?.[d];
+      return s && s.station_id === 'ST_ADMIN' && isWorkingShift(s.shift_type);
+    });
+    const adminShifts = adminStaffToday.map(emp => scheduleMap[emp.emp_id][d].shift_type);
+    const hasA = adminShifts.includes('A');
+    const hasB = adminShifts.includes('B');
+    const hasC = adminShifts.includes('C');
+
+    if (isWeekend) {
+      const missing = [];
+      if (!hasA) missing.push('A班');
+      if (!hasC) missing.push('C班');
+      if (missing.length > 0) {
+        issues.push({
+          type: 'ADMIN_SHIFT_DEFICIT',
+          severity: 'WARNING',
+          day: d,
+          station_id: 'ST_ADMIN',
+          station_name: '營運處(支援)',
+          missingShifts: missing,
+          message: `假日營運支援空班缺工：缺少 ${missing.join(' 及 ')}（規定需求 1A 1C），請手動微調補班`
+        });
+      }
+    } else {
+      const missing = [];
+      if (!hasA) missing.push('A班');
+      if (!hasB) missing.push('B班');
+      if (missing.length > 0) {
+        issues.push({
+          type: 'ADMIN_SHIFT_DEFICIT',
+          severity: 'WARNING',
+          day: d,
+          station_id: 'ST_ADMIN',
+          station_name: '營運處(支援)',
+          missingShifts: missing,
+          message: `平日營運支援空班缺工：缺少 ${missing.join(' 及 ')}（規定需求 1A 1B），請手動微調補班`
+        });
+      }
+    }
   }
 
   // 2. 個人出勤法規檢驗（連續工作日、班距、總工時）
