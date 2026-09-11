@@ -33,11 +33,23 @@ export default function PersonnelManagement({
   // 站點代碼大小寫標準化匹配 (修復如 ST_Gagoo 與 ST_GAGOO 不一致問題)
   const normalizeStationId = (rawId) => {
     if (!rawId) return rawId;
+    
+    // 舊有站點代碼容錯映射表
+    const legacyMap = {
+      'ST_OPS': 'ST_ADMIN',
+      'ST_EXTREME': 'ST_EXPERIENCE',
+      'ST_SHOP_MAIN': 'ST_MAIN_SHOP',
+      'ST_SHOP_SUB': 'ST_SUB_SHOP'
+    };
+    
+    const upperId = rawId.toUpperCase();
+    const mappedId = legacyMap[upperId] || upperId;
+
     const matched = stations.find(s => 
-      s.station_id.toUpperCase() === rawId.toUpperCase() ||
-      s.station_name.toUpperCase() === rawId.toUpperCase()
+      s.station_id.toUpperCase() === mappedId ||
+      s.station_name.toUpperCase() === mappedId
     );
-    return matched ? matched.station_id : rawId;
+    return matched ? matched.station_id : (legacyMap[upperId] ? legacyMap[upperId] : rawId);
   };
 
   const getStationDisplayName = (rawId) => {

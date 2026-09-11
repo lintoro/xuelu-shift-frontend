@@ -333,7 +333,8 @@ function handleGetInitialData(yearMonth, session) {
       solo_stations: solo,
       can_solo: r[9] === true || r[9] === 'true',
       hire_date: r[10] ? (r[10] instanceof Date ? Utilities.formatDate(r[10], 'GMT+8', 'yyyy-MM-dd') : String(r[10])) : '',
-      status: r[12] || r[11] || 'Active'
+      status: r[12] || r[11] || 'Active',
+      is_self_scheduled: r[2] === 'Manager' || !!r[5]
     });
   }
 
@@ -857,8 +858,10 @@ function handleSavePersonnel(session, employeeData) {
   var data = sheet.getDataRange().getValues();
   var foundRow = -1;
 
+  var empId = String(employeeData.emp_id).trim();
+
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === employeeData.emp_id) {
+    if (String(data[i][0]).trim() === empId) {
       foundRow = i + 1;
       break;
     }
@@ -886,7 +889,7 @@ function handleSavePersonnel(session, employeeData) {
     var defaultSalt = Utilities.getUuid().substring(0, 8);
     var defaultHash = hashPin('000000', defaultSalt);
     sheet.appendRow([
-      employeeData.emp_id,
+      empId,
       employeeData.name,
       employeeData.role || 'Staff',
       defaultHash,
@@ -898,7 +901,7 @@ function handleSavePersonnel(session, employeeData) {
       !!employeeData.can_solo,
       employeeData.hire_date || '2026-09-01',
       new Date().toISOString(),
-      'Active'
+      employeeData.status || 'Active'
     ]);
   }
 
@@ -996,26 +999,56 @@ function handleSyncAll(session, payload) {
   if (payload.employees && Array.isArray(payload.employees)) {
     var empSheet = ss.getSheetByName('Employees');
     if (empSheet) {
-      var lastR = empSheet.getLastRow();
-      if (lastR > 1) empSheet.deleteRows(2, lastR - 1);
+      var data = empSheet.getDataRange().getValues();
+      var existingMap = {};
+      for (var i = 1; i < data.length; i++) {
+        var eid = String(data[i][0]).trim();
+        if (eid) existingMap[eid] = { row: i + 1, pin_hash: data[i][3], salt: data[i][4] };
+      }
+
       payload.employees.forEach(function(e) {
-        var salt = Utilities.getUuid().substring(0, 8);
-        var hash = hashPin('000000', salt);
-        empSheet.appendRow([
-          e.emp_id,
-          e.name,
-          e.role || 'Staff',
-          e.pin_hash || hash,
-          e.salt || salt,
-          !!e.is_admin,
-          e.primary_station,
-          JSON.stringify(e.supported_stations || [e.primary_station]),
-          JSON.stringify(e.solo_stations || []),
-          !!e.can_solo,
-          e.hire_date || '2026-09-01',
-          new Date().toISOString(),
-          e.status || 'Active'
-        ]);
+        var empId = String(e.emp_id).trim();
+        var exist = existingMap[empId];
+        var role = e.role || 'Staff';
+        var isAdmin = !!e.is_admin;
+        var primarySt = e.primary_station;
+        var suppSt = JSON.stringify(e.supported_stations || [e.primary_station]);
+        var soloSt = JSON.stringify(e.solo_stations || []);
+        var canSolo = !!e.can_solo;
+        var hireDate = e.hire_date || '2026-09-01';
+        var status = e.status || 'Active';
+
+        if (exist) {
+          // 若已存在，僅更新基本資料 (不覆寫 pin_hash/salt，避免重置密碼)
+          empSheet.getRange(exist.row, 2).setValue(e.name);
+          empSheet.getRange(exist.row, 3).setValue(role);
+          empSheet.getRange(exist.row, 6).setValue(isAdmin);
+          empSheet.getRange(exist.row, 7).setValue(primarySt);
+          empSheet.getRange(exist.row, 8).setValue(suppSt);
+          empSheet.getRange(exist.row, 9).setValue(soloSt);
+          empSheet.getRange(exist.row, 10).setValue(canSolo);
+          // 欄位 13: status
+          empSheet.getRange(exist.row, 13).setValue(status);
+        } else {
+          // 若不存在，新增員工並配置預設密碼
+          var newSalt = Utilities.getUuid().substring(0, 8);
+          var newHash = hashPin('000000', newSalt);
+          empSheet.appendRow([
+            empId,
+            e.name,
+            role,
+            e.pin_hash || newHash,
+            e.salt || newSalt,
+            isAdmin,
+            primarySt,
+            suppSt,
+            soloSt,
+            canSolo,
+            hireDate,
+            new Date().toISOString(),
+            status
+          ]);
+        }
       });
     }
   }
@@ -1167,14 +1200,14 @@ function setupSpreadsheet() {
   if (stSheet && stSheet.getLastRow() === 1) {
     var defaultStations = [
       ['ST_SERVICE', '服務台', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112001'],
-      ['ST_OPS', '營運處(支援)', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B111014'],
-      ['ST_EXTREME', '極限組', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112002'],
+      ['ST_ADMIN', '營運處(支援)', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B111014'],
+      ['ST_EXPERIENCE', '極限組', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112002'],
       ['ST_MSS', 'MSS', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112003'],
-      ['ST_SHOP_MAIN', '本鋪', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112004'],
-      ['ST_SHOP_SUB', '小舖', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112005'],
+      ['ST_MAIN_SHOP', '本鋪', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112004'],
+      ['ST_SUB_SHOP', '小舖', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112005'],
       ['ST_CLEAN', '清潔', 1, 1, '["B"]', '["A"]', 1, 1, 'B112006'],
       ['ST_DINING', '餐飲', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B112007'],
-      ['ST_GAGOO', 'Gagoo', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B113106']
+      ['ST_Gagoo', 'Gagoo', 1, 2, '["B"]', '["A","B","C"]', 1, 1, 'B113106']
     ];
     defaultStations.forEach(function(st) { stSheet.appendRow(st); });
   }
@@ -1205,9 +1238,9 @@ function setupSpreadsheet() {
       hash1,
       salt1,
       true, // 系統管理員 is_admin = true
-      'ST_OPS',
-      '["ST_OPS","ST_SERVICE","ST_DINING"]',
-      '["ST_OPS","ST_SERVICE"]',
+      'ST_ADMIN',
+      '["ST_ADMIN","ST_SERVICE","ST_DINING"]',
+      '["ST_ADMIN","ST_SERVICE"]',
       true,
       '2019-08-01',
       new Date().toISOString(),
@@ -1225,7 +1258,7 @@ function setupSpreadsheet() {
       salt2,
       true, // 系統管理員 is_admin = true
       'ST_ADMIN',
-      '["ST_ADMIN","ST_SERVICE","ST_SHOP_MAIN"]',
+      '["ST_ADMIN","ST_SERVICE","ST_MAIN_SHOP"]',
       '["ST_ADMIN","ST_SERVICE"]',
       true,
       '2020-03-01',

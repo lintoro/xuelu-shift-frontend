@@ -87,11 +87,7 @@ export default function App() {
       const saved = localStorage.getItem('xuelu_employees_v2') || localStorage.getItem('xuelu_employees_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.map(e => {
-          if (e.emp_id === 'B111155') return { ...e, role: 'Manager', is_admin: true, is_self_scheduled: true };
-          if (e.emp_id === 'B111014') return { ...e, role: 'Staff', is_admin: true, is_self_scheduled: false };
-          return e;
-        });
+        return parsed.map(e => e);
       }
       return EMPLOYEES;
     } catch {
@@ -1100,17 +1096,12 @@ export default function App() {
           const mergedEmployees = data.employees.map(cloudEmp => {
             const local = localMap[cloudEmp.emp_id];
             if (!local) return cloudEmp;
-            // 若本地有已更新之職等與自主排班屬性，保護本地設定不被舊雲端快照洗回
+            // 雲端資料視為真實來源，只有本地的密碼憑證保留
             return {
               ...cloudEmp,
-              role: local.role || cloudEmp.role,
-              is_self_scheduled: typeof local.is_self_scheduled !== 'undefined' ? local.is_self_scheduled : cloudEmp.is_self_scheduled,
-              is_admin: typeof local.is_admin !== 'undefined' ? local.is_admin : cloudEmp.is_admin,
-              primary_station: local.primary_station || cloudEmp.primary_station,
-              supported_stations: local.supported_stations || cloudEmp.supported_stations,
-              solo_stations: local.solo_stations || cloudEmp.solo_stations,
-              can_solo: typeof local.can_solo !== 'undefined' ? local.can_solo : cloudEmp.can_solo,
-              status: local.status || cloudEmp.status
+              pin_hash: local.pin_hash || cloudEmp.pin_hash,
+              salt: local.salt || cloudEmp.salt,
+              is_self_scheduled: typeof cloudEmp.is_self_scheduled !== 'undefined' ? cloudEmp.is_self_scheduled : local.is_self_scheduled
             };
           });
           try {
