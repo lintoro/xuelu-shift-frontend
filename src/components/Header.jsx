@@ -1,28 +1,7 @@
 import React from 'react';
-import { 
-  ShieldCheck, 
-  Calendar, 
-  Zap, 
-  LayoutGrid, 
-  HeartHandshake, 
-  Eye, 
-  ArrowLeftRight, 
-  History,
-  Users,
-  Clock,
-  Scale,
-  BarChart3,
-  User,
-  LogOut,
-  KeyRound,
-  FileCheck2,
-  Cloud,
-  CloudCheck,
-  CloudOff,
-  RotateCw
-} from 'lucide-react';
+import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap } from 'lucide-react';
 
-export default function Header({ 
+export default function Header({
   currentUser,
   currentMonth,
   onMonthChange,
@@ -34,6 +13,7 @@ export default function Header({
   onLogout,
   onOpenCloudModal,
   onRefreshFromCloud,
+  onOpenRulesModal,
   isCloudMode = false,
   isValid = true
 }) {
@@ -45,7 +25,7 @@ export default function Header({
   // 依雙軌解耦權限動態過濾 Tab 選單
   const allTabs = [
     { id: 'MY_DASHBOARD', label: '我的工作台', icon: User, show: true },
-    { id: 'SCHEDULE', label: '排班總表', icon: LayoutGrid, show: true },
+    { id: 'SCHEDULE', label: '排班總表', icon: LayoutGrid, show: isManager || isLeader },
     { id: 'LEAVE_PORTAL', label: isPT ? '意向報班' : '志願劃休', icon: HeartHandshake, show: !isManager || isPT },
     { id: 'CONFLICTS', label: '衝突透視', icon: Eye, show: isManager || isAdmin },
     { id: 'SWAPS', label: (isManager || isLeader || isAdmin) ? '調班二階審核' : '線上調班申請', icon: ArrowLeftRight, show: !isPT },
@@ -119,7 +99,7 @@ export default function Header({
             </button>
           )}
 
-          {/* 月份與工時模式 (僅 Manager / Admin 可調整工時模式) */}
+          {/* 月份選擇器 (全員可見) */}
           <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200 text-xs">
             <Calendar className="w-3.5 h-3.5 ml-1.5 mr-1 text-slate-500" />
             <select
@@ -132,7 +112,8 @@ export default function Header({
             </select>
           </div>
 
-          {(isManager || isAdmin) && (
+          {/* 工時法規模式 (僅 Manager 排班主管可調整全館工時法規模型，Staff Admin 排除) */}
+          {isManager && (
             <div className="flex items-center space-x-1 bg-amber-50 border border-amber-200 text-amber-900 px-2 py-1 rounded-lg text-xs">
               <select
                 value={workHourModel}
@@ -144,6 +125,19 @@ export default function Header({
                 <option value="FLEX_4_WEEK">四週變形 (30-1條 · 4週8休)</option>
               </select>
             </div>
+          )}
+
+          {/* Manager 專屬：每月排班劃休限制規則設定入口 */}
+          {isManager && onOpenRulesModal && (
+            <button
+              type="button"
+              onClick={onOpenRulesModal}
+              title="設定每月同仁志願劃休天數上限、週末假日上限與法定應休天數"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 transition cursor-pointer shadow-2xs active:scale-95"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-600" />
+              <span>劃休限制設定</span>
+            </button>
           )}
 
           {/* 使用者資訊與操作膠囊 */}

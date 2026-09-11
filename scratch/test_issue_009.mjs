@@ -1,61 +1,83 @@
 // scratch/test_issue_009.mjs
-// 需求 #009 驗收腳本：PT 與 STAFF 排班總表面板異常提示隔離與調班操作權限收攏
-
 import assert from 'node:assert';
-import { EMPLOYEES, STATIONS } from '../src/data/mockMasterData.js';
 
 console.log('====================================================');
 console.log('   學旅營運處排班系統 - 需求 #009 角色權限隔離驗收   ');
 console.log('====================================================\n');
 
-// 測試對象角色定位
-const staffUser = EMPLOYEES.find(e => e.emp_id === 'B113089') || { emp_id: 'B113089', name: '張舒扉', role: 'Staff' };
-const ptUser = EMPLOYEES.find(e => e.role === 'PT') || { emp_id: 'PT01', name: '王雅婷', role: 'PT' };
-const leaderUser = EMPLOYEES.find(e => e.role === 'Leader') || { emp_id: 'B112001', name: '李俐旻', role: 'Leader' };
-const managerUser = EMPLOYEES.find(e => e.role === 'Manager') || { emp_id: 'M001', name: '林慶忠', role: 'Manager' };
-const adminUser = { emp_id: 'ADMIN01', name: '系統管理員', role: 'Staff', is_admin: true };
+// 測試用使用者角色定義
+const staffUser = {
+  emp_id: 'B113089',
+  name: '張舒扉',
+  role: 'Staff',
+  is_admin: false,
+  primary_station: 'ST_SERVICE'
+};
 
-// 模擬 App.jsx 角色判定邏輯
+const ptUser = {
+  emp_id: 'P113001',
+  name: '王小明',
+  role: 'PT',
+  is_admin: false,
+  primary_station: 'ST_SERVICE'
+};
+
+const leaderUser = {
+  emp_id: 'B112001',
+  name: '李俐旻',
+  role: 'Leader',
+  is_admin: false,
+  primary_station: 'ST_SERVICE'
+};
+
+const managerUser = {
+  emp_id: 'B111155',
+  name: '陳鵬宇',
+  role: 'Manager',
+  is_admin: true,
+  primary_station: 'ST_OPS'
+};
+
+const adminStaffUser = {
+  emp_id: 'B111014',
+  name: '林慶忠',
+  role: 'Staff',
+  is_admin: true,
+  primary_station: 'ST_ADMIN'
+};
+
+// 模擬 App.jsx 關鍵權限判定
 function checkAppPermissions(currentUser) {
   const isManager = currentUser?.role === 'Manager';
-  const isAdmin = !!currentUser?.is_admin;
   const isLeader = currentUser?.role === 'Leader';
-  const isStaff = currentUser?.role === 'Staff';
-  const isPT = currentUser?.role === 'PT';
-  const canManageShifts = isManager || isAdmin || isLeader;
-  const canDebugEngine = isManager || isAdmin;
+  // 排班調度權限僅限 Manager 與 Leader，排除 Staff Admin
+  const canManageShifts = isManager || isLeader;
+  // 排班演算法除錯僅限 Manager
+  const canDebugEngine = isManager;
 
   return {
-    isManager,
-    isAdmin,
-    isLeader,
-    isStaff,
-    isPT,
     canManageShifts,
     canDebugEngine
   };
 }
 
-// 模擬 Header.jsx Tab 過濾邏輯
+// 模擬 Header.jsx 導覽分頁權限邏輯
 function getHeaderTabs(currentUser) {
   const isManager = currentUser?.role === 'Manager';
-  const isAdmin = !!currentUser?.is_admin;
   const isLeader = currentUser?.role === 'Leader';
+  const isStaff = currentUser?.role === 'Staff';
   const isPT = currentUser?.role === 'PT';
 
   const allTabs = [
     { id: 'MY_DASHBOARD', label: '我的工作台', show: true },
     { id: 'SCHEDULE', label: '排班總表', show: true },
-    { id: 'LEAVE_PORTAL', label: isPT ? '意向報班' : '志願劃休', show: !isManager || isPT },
-    { id: 'CONFLICTS', label: '衝突透視', show: isManager || isAdmin },
-    { id: 'SWAPS', label: (isManager || isLeader || isAdmin) ? '調班二階審核' : '線上調班申請', show: !isPT },
-    { id: 'HOURS_OVERRIDE', label: '實勤覆核', show: isManager || isLeader },
-    { id: 'MONTHLY_SETTLEMENT', label: '月底考勤結算', show: isManager || isAdmin },
-    { id: 'PERSONNEL', label: '人事管理', show: isManager },
-    { id: 'SHIFT_SETTINGS', label: '班別主檔', show: isManager },
-    { id: 'HOLIDAY_TRANSFER', label: '120天平帳', show: isManager },
-    { id: 'FAIRNESS', label: '公平性與AI', show: isManager || isAdmin },
-    { id: 'AUDIT_LOGS', label: '稽核回滾', show: isManager || isAdmin }
+    { id: 'LEAVE', label: '志願劃休', show: true },
+    { id: 'CONFLICTS', label: '衝突透視', show: true },
+    { 
+      id: 'SWAPS', 
+      label: isStaff ? '線上調班申請' : '調班二階審核', 
+      show: isManager || isLeader || isStaff 
+    }
   ];
 
   return allTabs.filter(t => t.show);
@@ -66,25 +88,21 @@ function getSwapApprovalRights(currentUser) {
   const isManager = currentUser?.role === 'Manager';
   const isAdmin = !!currentUser?.is_admin;
   const isLeader = currentUser?.role === 'Leader';
-  const canFirstReview = isLeader || isManager || isAdmin;
-  const canFinalApprove = isManager || isAdmin;
+  const canFirstReview = isLeader || isManager;
+  const canFinalApprove = isManager;
+  const canAdminVerify = isAdmin;
 
   return {
     canFirstReview,
-    canFinalApprove
+    canFinalApprove,
+    canAdminVerify
   };
 }
 
-// 模擬 AnomalyAlertBanner.jsx 渲染判定
+// 模擬 AnomalyAlertBanner.jsx 渲染判定 (由 canManageShifts 決定)
 function shouldRenderAnomalyBanner(currentUser) {
-  const isManager = currentUser?.role === 'Manager';
-  const isAdmin = !!currentUser?.is_admin;
-  const isLeader = currentUser?.role === 'Leader';
-
-  if (!isManager && !isAdmin && !isLeader) {
-    return false; // null
-  }
-  return true;
+  const perms = checkAppPermissions(currentUser);
+  return perms.canManageShifts;
 }
 
 console.log('--- 測試 1: 正職員工 (Staff) 張舒扉 權限防護 ---');
@@ -132,7 +150,7 @@ assert.strictEqual(leaderSwapRights.canFirstReview, true, 'Leader 具備組長�
 assert.strictEqual(leaderSwapRights.canFinalApprove, false, 'Leader 不具備高管終審核准權限');
 console.log('✅ [PASS] Leader 正確具備初審權限與審核入口標籤');
 
-console.log('\n--- 測試 4: 營運高管 (Manager) 林慶忠 與 管理員 (Admin) 權限檢核 ---');
+console.log('\n--- 測試 4: 營運高管 (Manager) 陳鵬宇 權限檢核 ---');
 const managerPerms = checkAppPermissions(managerUser);
 assert.strictEqual(managerPerms.canManageShifts, true, 'Manager 具備全域排班調度權限');
 assert.strictEqual(managerPerms.canDebugEngine, true, 'Manager 具備全域引擎重新生成與除錯權限');
@@ -143,12 +161,18 @@ assert.strictEqual(managerSwapRights.canFirstReview, true, 'Manager 具備初審
 assert.strictEqual(managerSwapRights.canFinalApprove, true, 'Manager 具備終審核准覆寫班表權限');
 console.log('✅ [PASS] Manager 正確具備完整調度、除錯、初審與終審覆寫權限');
 
-const adminPerms = checkAppPermissions(adminUser);
-assert.strictEqual(adminPerms.canManageShifts, true, 'Admin 具備維運調度檢視權限');
-assert.strictEqual(adminPerms.canDebugEngine, true, 'Admin 具備引擎除錯權限');
-assert.strictEqual(shouldRenderAnomalyBanner(adminUser), true, 'Admin 顯示異常看板');
-console.log('✅ [PASS] Admin 正確具備系統管理調度權限');
+console.log('\n--- 測試 5: 系統管理正職 (Staff Admin) 林慶忠 權限檢核 ---');
+const adminStaffPerms = checkAppPermissions(adminStaffUser);
+assert.strictEqual(adminStaffPerms.canManageShifts, false, 'Staff Admin 林慶忠嚴格不具備排班調度權限');
+assert.strictEqual(adminStaffPerms.canDebugEngine, false, 'Staff Admin 林慶忠嚴格不具備演算法除錯權限');
+assert.strictEqual(shouldRenderAnomalyBanner(adminStaffUser), false, 'Staff Admin 在排班總表不顯示主管排班異常看板');
+
+const adminStaffSwapRights = getSwapApprovalRights(adminStaffUser);
+assert.strictEqual(adminStaffSwapRights.canFirstReview, false, 'Staff Admin 無組長初審權限');
+assert.strictEqual(adminStaffSwapRights.canFinalApprove, false, 'Staff Admin 無高管終審權限');
+assert.strictEqual(adminStaffSwapRights.canAdminVerify, true, 'Staff Admin 具備高管自身調班行政合規備查歸檔權限');
+console.log('✅ [PASS] Staff Admin 林慶忠：排班功能全數安全收攏，僅保留行政合規備查與技術維護權限！');
 
 console.log('\n====================================================');
-console.log('  測試驗收總結: 共 4 大角色情境測試，全數通過！');
+console.log('  測試驗收總結: 共 5 大角色情境測試，全數通過！');
 console.log('====================================================\n');

@@ -263,6 +263,9 @@ export const ApiService = {
       case 'admin.holidayTransfer':
         return { success: true };
 
+      case 'auth.updatePasswordHash':
+        return { success: true };
+
       case 'admin.syncAll':
         return { success: true, timestamp: new Date().toISOString() };
 
@@ -370,5 +373,15 @@ export const ApiService = {
   // 班表回滾
   async rollbackSchedule(logId, token = 'session_active') {
     return this.callRpc('audit.rollback', { log_id: logId, token: token });
+  },
+
+  // 同步更新同仁加鹽雜湊密碼至雲端資料庫
+  async updatePasswordHash(empId, pinHash, salt, token = 'session_active') {
+    return this.callRpc('auth.updatePasswordHash', {
+      emp_id: empId,
+      pin_hash: pinHash,
+      salt: salt,
+      token: token
+    });
   }
 };

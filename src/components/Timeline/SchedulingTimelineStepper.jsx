@@ -42,6 +42,8 @@ export default function SchedulingTimelineStepper({
     { label: '10/02 次月簽認', date: '2026-10-02', desc: '全月考勤電子簽認' }
   ];
 
+  const isManager = currentUser?.role === 'Manager';
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-6 transition">
       {/* 頂部橫幅：當前階段概況與時光機展開按鈕 */}
@@ -80,23 +82,26 @@ export default function SchedulingTimelineStepper({
             <span>任務說明</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setShowSimulator(prev => !prev)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
-              showSimulator
-                ? 'bg-amber-400 text-slate-950 shadow-amber-400/20'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-            }`}
-          >
-            <FastForward className="w-3.5 h-3.5" />
-            <span>時光機模擬切換</span>
-          </button>
+          {/* 僅營運高管 Manager 具備排班時光機模擬除錯與切換權限，Staff Admin 排除 */}
+          {isManager && (
+            <button
+              type="button"
+              onClick={() => setShowSimulator(prev => !prev)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                showSimulator
+                  ? 'bg-amber-400 text-slate-950 shadow-amber-400/20'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              }`}
+            >
+              <FastForward className="w-3.5 h-3.5" />
+              <span>時光機模擬切換</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 展開之時光機 (Date Travel Simulator) 面板 */}
-      {showSimulator && (
+      {/* 展開之時光機 (Date Travel Simulator) 面板 (僅 Manager 可見) */}
+      {isManager && showSimulator && (
         <div className="px-5 py-3.5 bg-amber-500/10 border-b border-amber-500/20 animate-fadeIn text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-200">

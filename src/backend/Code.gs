@@ -139,6 +139,10 @@ function doPost(e) {
         result = handleRollback(session, params.log_id);
         break;
 
+      case 'auth.updatePasswordHash':
+        result = handleUpdatePasswordHash(params.emp_id, params.pin_hash, params.salt);
+        break;
+
       // 7. 營運核心設定端點
       case 'admin.savePersonnel':
         var session = validateToken(params.token);
@@ -313,6 +317,8 @@ function handleGetInitialData(yearMonth, session) {
       emp_id: r[0],
       name: r[1],
       role: r[2],
+      pin_hash: r[3] || '',
+      salt: r[4] || '',
       is_admin: !!r[5],
       primary_station: r[6],
       supported_stations: supp,
@@ -355,11 +361,15 @@ function handleGetInitialData(yearMonth, session) {
   for (var sIdx = 1; sIdx < shiftData.length; sIdx++) {
     var sRow = shiftData[sIdx];
     if (!sRow[0]) continue;
+
+    var fmtStart = sRow[2] instanceof Date ? Utilities.formatDate(sRow[2], 'GMT+8', 'HH:mm') : String(sRow[2] || '-');
+    var fmtEnd = sRow[3] instanceof Date ? Utilities.formatDate(sRow[3], 'GMT+8', 'HH:mm') : String(sRow[3] || '-');
+
     shiftTypes.push({
       code: sRow[0],
       name: sRow[1],
-      startTime: sRow[2],
-      endTime: sRow[3],
+      startTime: fmtStart,
+      endTime: fmtEnd,
       breakHours: Number(sRow[4] || 1),
       workHours: Number(sRow[5] || 8),
       bgColor: sRow[6] || '#f1f5f9',
@@ -851,6 +861,12 @@ function handleSavePersonnel(session, employeeData) {
   if (foundRow > 0) {
     // 更新既有同仁
     sheet.getRange(foundRow, 2).setValue(employeeData.name);
+    if (employeeData.role) {
+      sheet.getRange(foundRow, 3).setValue(employeeData.role);
+    }
+    if (typeof employeeData.is_admin !== 'undefined') {
+      sheet.getRange(foundRow, 6).setValue(!!employeeData.is_admin);
+    }
     sheet.getRange(foundRow, 7).setValue(employeeData.primary_station);
     sheet.getRange(foundRow, 8).setValue(supportedStr);
     sheet.getRange(foundRow, 9).setValue(soloStr);
@@ -866,7 +882,7 @@ function handleSavePersonnel(session, employeeData) {
       employeeData.role || 'Staff',
       defaultHash,
       defaultSalt,
-      false, // is_admin
+      !!employeeData.is_admin,
       employeeData.primary_station,
       supportedStr,
       soloStr,
@@ -878,7 +894,32 @@ function handleSavePersonnel(session, employeeData) {
   }
 
   logAuditEvent(session, 'PERSONNEL_UPDATE', '更新/新增同仁資料: ' + employeeData.name + ' (' + employeeData.emp_id + ')', null, employeeData);
-  return { success: true };
+  return { success: true, emp_id: employeeData.emp_id };
+}
+
+// 更新同仁加鹽雜湊密碼
+function handleUpdatePasswordHash(empId, pinHash, salt) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Employees');
+  if (!sheet) throw new Error('找不到 Employees 表單！');
+
+  var data = sheet.getDataRange().getValues();
+  var foundRow = -1;
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === empId) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+
+  if (foundRow > 0) {
+    sheet.getRange(foundRow, 4).setValue(pinHash);
+    sheet.getRange(foundRow, 5).setValue(salt);
+    return { success: true, emp_id: empId };
+  } else {
+    throw new Error('找不到工號為 ' + empId + ' 之同仁！');
+  }
 }
 
 // 維護自訂班別主檔

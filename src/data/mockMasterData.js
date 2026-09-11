@@ -4,7 +4,7 @@ export const STATIONS = [
   {
     station_id: 'ST_ADMIN',
     station_name: '營運處(支援)',
-    leader_emp_id: 'B111014', // 林慶忠
+    leader_emp_id: null, // 營運處支援無基層站點組長 (由營運高管統籌)
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,

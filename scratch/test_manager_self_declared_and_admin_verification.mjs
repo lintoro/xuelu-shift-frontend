@@ -40,51 +40,49 @@ function createSwapRequest({ currentEmp, swapType, applicantDay, targetDay, targ
       status: 'PENDING',
       notes: ''
     } : {
-      reviewer_id: 'B111014',
-      reviewer_name: '林慶忠 (營運主管)',
+      reviewer_id: 'B111155',
+      reviewer_name: '陳鵬宇 (營運主管)',
       status: 'PENDING',
       notes: ''
     }
   };
 }
 
-// 2. 模擬 ShiftSwapPortal 卡片按鈕權限判定
-function getReviewActionPermission(req, currentEmp) {
-  const isLeader = currentEmp?.role === 'Leader';
-  const isManager = currentEmp?.role === 'Manager';
-  const isAdmin = !!currentEmp?.is_admin;
+// 2. 模擬 ShiftSwapPortal 審核操作按鈕邏輯
+function getReviewActionPermission(req, reviewer) {
+  const isApplicant = req.applicant_id === reviewer.emp_id;
+  const isTarget = req.target_id === reviewer.emp_id;
+  const isLeader = reviewer.role === 'Leader';
+  const isManager = reviewer.role === 'Manager';
+  const isAdmin = !!reviewer.is_admin;
 
-  const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && req.status !== 'APPROVED' && req.status !== 'REJECTED');
-  const isSelfSwap = req.applicant_id === currentEmp?.emp_id || req.target_emp_id === currentEmp?.emp_id;
-
-  if (isPendingAdminVerify) {
-    if (isSelfSwap) {
-      return { canAdminArchive: false, reason: 'SELF_DECLARATION_BLOCKED' };
-    }
-    if (isLeader && !isAdmin) {
-      return { canAdminArchive: false, reason: 'LEADER_NO_PERMISSION' };
-    }
-    if (isAdmin) {
-      return { canAdminArchive: true, reason: 'ADMIN_CAN_VERIFY_AND_ARCHIVE' };
-    }
-    return { canAdminArchive: false, reason: 'NO_PERMISSION' };
+  // 利益迴避原則：申請人本人不得審核
+  if (isApplicant) {
+    return { canApprove: false, canAdminArchive: false, reason: 'SELF_DECLARATION_BLOCKED' };
   }
 
-  return { canAdminArchive: false, reason: 'NORMAL_FLOW' };
+  // 最高主管自主申報且待 Admin 備查案件
+  if (req.is_manager_self_declared && req.status === 'PENDING_ADMIN_VERIFY') {
+    if (isAdmin) {
+      return { canApprove: true, canAdminArchive: true, reason: 'ADMIN_CAN_VERIFY_AND_ARCHIVE' };
+    }
+    return { canApprove: false, canAdminArchive: false, reason: 'LEADER_NO_PERMISSION' };
+  }
+
+  return { canApprove: false, canAdminArchive: false, reason: 'OTHER' };
 }
 
-// 3. 模擬 ActualHoursOverride 的 Admin 備查篩選演算法
+// 3. 模擬 ActualHoursOverride.jsx 覆核名單邏輯
 function getActualReviewableEmployees(employees, currentUser) {
-  if (!currentUser) return [];
   const isLeader = currentUser?.role === 'Leader';
   const isManager = currentUser?.role === 'Manager' || !!currentUser?.is_admin;
   const isAdmin = !!currentUser?.is_admin;
 
   return employees.filter(emp => {
-    // 1. 排除操作者本人 (禁止自我覆核)
+    // 利益迴避：嚴格排除操作者本人
     if (emp.emp_id === currentUser.emp_id) return false;
 
-    // 2. 排除自排免審高管 (若當前操作者為 Admin 且對象為 Manager，則開放進行行政合規備查歸檔)
+    // 排除自排免審高管 (若當前操作者為 Admin 且對象為 Manager，則開放行政合規備查)
     if (emp.is_self_scheduled && !(isAdmin && emp.role === 'Manager')) return false;
 
     if (isLeader) {
@@ -104,15 +102,15 @@ function getActualReviewableEmployees(employees, currentUser) {
 // -------------------------------------------------------------
 // 測試開始
 // -------------------------------------------------------------
-const linManager = EMPLOYEES.find(e => e.emp_id === 'B111014'); // 林慶忠 (Manager, is_admin: false)
-const liLeader = EMPLOYEES.find(e => e.emp_id === 'B112001');   // 李俐旻 (Leader, is_admin: false)
-const chenAdmin = EMPLOYEES.find(e => e.emp_id === 'B111155');  // 陳鵬宇 (Staff + Admin)
+const chenManager = EMPLOYEES.find(e => e.emp_id === 'B111155'); // 陳鵬宇 (Manager, 營運高管最高主管)
+const liLeader = EMPLOYEES.find(e => e.emp_id === 'B112001');   // 李俐旻 (Leader, 服務台組長)
+const linAdmin = EMPLOYEES.find(e => e.emp_id === 'B111014');   // 林慶忠 (Staff + Admin 系統管理與備查員)
 
-assert.ok(linManager && liLeader && chenAdmin, '三名測試關鍵同仁資料必須存在');
+assert.ok(chenManager && liLeader && linAdmin, '三名測試關鍵同仁資料必須存在');
 
-console.log('▶ 測試 1: 最高主管 (林慶忠) 發起自調挪休與對調之自主申報通道');
+console.log('▶ 測試 1: 最高主管 (陳鵬宇) 發起自調挪休與對調之自主申報通道');
 const managerSelfReq = createSwapRequest({
-  currentEmp: linManager,
+  currentEmp: chenManager,
   swapType: 'SELF_RESCHEDULE',
   applicantDay: 10,
   targetDay: 14,
@@ -126,9 +124,9 @@ assert.strictEqual(managerSelfReq.final_review.reviewer_id, 'ADMIN', '終審指�
 console.log('  ✓ 最高主管自主申報通道建立成功，狀態流轉至【待 Admin 行政合規備查】！');
 
 console.log('\n▶ 測試 2: 最高主管自主申報之三方權限防弊隔離檢驗');
-// 2.1 林慶忠自己檢視
-const permSelf = getReviewActionPermission(managerSelfReq, linManager);
-assert.strictEqual(permSelf.canAdminArchive, false, '林慶忠不可自我備查歸檔');
+// 2.1 陳鵬宇自己檢視
+const permSelf = getReviewActionPermission(managerSelfReq, chenManager);
+assert.strictEqual(permSelf.canAdminArchive, false, '陳鵬宇不可自我備查歸檔');
 assert.strictEqual(permSelf.reason, 'SELF_DECLARATION_BLOCKED', '應標記自身申報迴避');
 console.log('  ✓ 成功防止球員兼裁判：最高主管不可自我備查歸檔 (自身申報迴避)');
 
@@ -138,27 +136,27 @@ assert.strictEqual(permLeader.canAdminArchive, false, '組長不可備查最高�
 assert.strictEqual(permLeader.reason, 'LEADER_NO_PERMISSION', '組長無權審查最高主管');
 console.log('  ✓ 成功防止下屬越權：站點組長無法審核最高主管申報');
 
-// 2.3 系統管理員陳鵬宇 (Admin) 檢視
-const permAdmin = getReviewActionPermission(managerSelfReq, chenAdmin);
+// 2.3 系統管理員林慶忠 (Admin) 檢視
+const permAdmin = getReviewActionPermission(managerSelfReq, linAdmin);
 assert.strictEqual(permAdmin.canAdminArchive, true, 'Admin 擁有專屬備查歸檔操作權限');
 assert.strictEqual(permAdmin.reason, 'ADMIN_CAN_VERIFY_AND_ARCHIVE', '符合形式備查與歸檔');
-console.log('  ✓ 系統管理員陳鵬宇 (Admin) 具備【檢驗合規並備查歸檔】專屬權限！');
+console.log('  ✓ 系統管理員林慶忠 (Admin) 具備【檢驗合規並備查歸檔】專屬權限！');
 
 console.log('\n▶ 測試 3: 實勤覆核面板中，Admin 對最高主管之行政合規備查驗證');
-// 3.1 李俐旻 (Leader) 的覆核名單中不可出現林慶忠
+// 3.1 李俐旻 (Leader) 的覆核名單中不可出現陳鵬宇
 const leaderReviewList = getActualReviewableEmployees(EMPLOYEES, liLeader);
-assert.ok(!leaderReviewList.some(e => e.emp_id === 'B111014'), '組長名單絕不可出現 Manager 林慶忠');
-console.log('  ✓ 組長李俐旻覆核名單排除最高主管林慶忠 (禁止向上越權)');
+assert.ok(!leaderReviewList.some(e => e.emp_id === 'B111155'), '組長名單絕不可出現 Manager 陳鵬宇');
+console.log('  ✓ 組長李俐旻覆核名單排除最高主管陳鵬宇 (禁止向上越權)');
 
-// 3.2 林慶忠 (Manager) 自己的覆核名單中不可出現自己
-const managerReviewList = getActualReviewableEmployees(EMPLOYEES, linManager);
-assert.ok(!managerReviewList.some(e => e.emp_id === 'B111014'), '經理名單絕不可出現自己');
-console.log('  ✓ 最高主管林慶忠覆核名單排除自己 (禁止自我覆核)');
+// 3.2 陳鵬宇 (Manager) 自己的覆核名單中不可出現自己
+const managerReviewList = getActualReviewableEmployees(EMPLOYEES, chenManager);
+assert.ok(!managerReviewList.some(e => e.emp_id === 'B111155'), '經理名單絕不可出現自己');
+console.log('  ✓ 最高主管陳鵬宇覆核名單排除自己 (禁止自我覆核)');
 
-// 3.3 陳鵬宇 (Admin) 的覆核名單中【必須開放】林慶忠
-const adminReviewList = getActualReviewableEmployees(EMPLOYEES, chenAdmin);
-const canAdminReviewManager = adminReviewList.some(e => e.emp_id === 'B111014');
-assert.strictEqual(canAdminReviewManager, true, 'Admin 必須可覆核最高主管林慶忠之出勤合規性');
-console.log('  ✓ 系統管理員陳鵬宇 (Admin) 覆核名單成功納入最高主管林慶忠 (落實雙人控制 Dual Control)！');
+// 3.3 林慶忠 (Admin) 的覆核名單中【必須開放】陳鵬宇
+const adminReviewList = getActualReviewableEmployees(EMPLOYEES, linAdmin);
+const canAdminReviewManager = adminReviewList.some(e => e.emp_id === 'B111155');
+assert.strictEqual(canAdminReviewManager, true, 'Admin 必須可覆核最高主管陳鵬宇之出勤合規性');
+console.log('  ✓ 系統管理員林慶忠 (Admin) 覆核名單成功納入最高主管陳鵬宇 (落實雙人控制 Dual Control)！');
 
 console.log('\n🎉 所有【最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制】單元測試全數通過！');

@@ -120,9 +120,18 @@ export function exportScheduleToCsv({
       const shift = scheduleMap[emp.emp_id]?.[d];
       if (!shift || !shift.shift_type) {
         row.push(emp.is_self_scheduled ? '自主排定' : '-');
-      } else if (shift.shift_type === 'OFF') {
+      } else if (shift.shift_type === 'REG_OFF') {
+        offDays++;
+        row.push('例');
+      } else if (shift.shift_type === 'OFF' || shift.shift_type === 'REST_OFF') {
         offDays++;
         row.push('休');
+      } else if (shift.shift_type === 'AL') {
+        offDays++;
+        row.push('特');
+      } else if (shift.shift_type === 'CT') {
+        offDays++;
+        row.push('補');
       } else if (shift.shift_type === 'TERM_OFF') {
         offDays++;
         row.push('離職');

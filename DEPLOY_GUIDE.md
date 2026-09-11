@@ -199,3 +199,29 @@ git push origin main
    - Android：點擊右上角三點選單 $\rightarrow$ 選擇 **「安裝應用程式」** 或 **「加到主畫面」**。
 3. 手機桌面上將呈現「雪鹿排班」獨立 App 圖示，點擊即可全螢幕原生體驗，隨時隨地查看班表、申請調班與簽署國假同意書！
 
+---
+
+## 六、 v3.4.0 營運核心升級與 Google Apps Script (Code.gs) 重新發布備忘
+
+在 `v3.4.0-operations-consolidation-done` 版本中，針對後端 [`src/backend/Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs) 進行了重大核心修復與端點擴充。**強烈建議至 GAS 編輯器更新代碼並發布「新版本」**：
+
+### 1. 後端關鍵更新清單
+1. **修正現有人事更新漏存 `role` Bug (`handleSavePersonnel`)**：
+   - 修正試算表 `Employees` 更新時未寫入第 3 欄 (`role`) 的嚴重問題，使 PT/Staff/Leader/Manager 職等升遷能在 Google 試算表中持久化。
+2. **新增密碼 Hash 雲端持久化 API (`auth.updatePasswordHash`)**：
+   - 路由：`auth.updatePasswordHash`
+   - 功能：接收 `emp_id`、`pin_hash`、`salt`，精準定位同仁在 `Employees` 表格中的列，更新第 9 欄與第 10 欄，確保使用者修改密碼後不因刷新或上下傳資料而失效。
+3. **初始名冊回傳保留密碼與鹽值 (`handleGetInitialData`)**：
+   - 修正初始名冊拉取時將 `pin_hash` 與 `salt` 設為空值導致前端覆蓋本機已改密碼的瑕疵。
+4. **班別時間字串淨化**：
+   - 時間解析全面轉為 `HH:mm` 台灣標準時區格式，杜絕 Google Sheets 導出 Date 物件時序列化為 `1899-12-30T...` 之歷史幽靈時間問題。
+
+### 2. GAS 重新發布 SOP
+1. 開啟 Google 試算表 $\rightarrow$ 擴充功能 $\rightarrow$ **Apps Script**。
+2. 複製本地最新 [`src/backend/Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs) 內容，全部覆蓋 GAS 編輯器，按 `Ctrl + S` 儲存。
+3. 點擊右上角 **「部署」 $\rightarrow$ 「管理部署作業」**。
+4. 點選現有 Web 應用程式右上方 **鉛筆圖示（編輯）**。
+5. **「版本」下拉選單務必選取「建立新版本 (New version)」**，並填寫說明（如：`v3.4.0 密碼持久化與職等同步修正`）。
+6. 點擊 **「部署」** 完成，前端系統即全面連通最新後端功能。
+
+

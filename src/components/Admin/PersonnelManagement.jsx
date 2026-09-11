@@ -30,6 +30,22 @@ export default function PersonnelManagement({
 
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
 
+  // 站點代碼大小寫標準化匹配 (修復如 ST_Gagoo 與 ST_GAGOO 不一致問題)
+  const normalizeStationId = (rawId) => {
+    if (!rawId) return rawId;
+    const matched = stations.find(s => 
+      s.station_id.toUpperCase() === rawId.toUpperCase() ||
+      s.station_name.toUpperCase() === rawId.toUpperCase()
+    );
+    return matched ? matched.station_id : rawId;
+  };
+
+  const getStationDisplayName = (rawId) => {
+    if (!rawId) return '-';
+    const norm = normalizeStationId(rawId);
+    return stationMap[norm] || rawId;
+  };
+
   // 處理主屬站點變更（落實清潔組雙向隔離規則）
   const getUpdatedSupportedStations = (prevSupported, newPrimary) => {
     if (newPrimary === 'ST_CLEAN') {
@@ -65,9 +81,22 @@ export default function PersonnelManagement({
   const handleSaveEdit = (e) => {
     e.preventDefault();
     if (!editingEmp) return;
-    onUpdateEmployee(editingEmp);
+    const cleanPrimary = normalizeStationId(editingEmp.primary_station);
+    const cleanSupported = Array.from(new Set(
+      (editingEmp.supported_stations || [cleanPrimary]).map(st => normalizeStationId(st))
+    ));
+    const cleanSolo = Array.from(new Set(
+      (editingEmp.solo_stations || []).map(st => normalizeStationId(st))
+    ));
+    const finalEmp = {
+      ...editingEmp,
+      primary_station: cleanPrimary,
+      supported_stations: cleanSupported,
+      solo_stations: cleanSolo
+    };
+    onUpdateEmployee(finalEmp);
     setEditingEmp(null);
-    setFeedbackMsg(`已成功更新同仁 ${editingEmp.name} (${editingEmp.emp_id}) 資料！`);
+    setFeedbackMsg(`已成功更新同仁 ${finalEmp.name} (${finalEmp.emp_id}) 資料！`);
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
@@ -204,20 +233,20 @@ export default function PersonnelManagement({
                     </span>
                   </td>
                   <td className="p-2.5 font-semibold text-slate-700">
-                    {stationMap[emp.primary_station] || emp.primary_station}
+                    {getStationDisplayName(emp.primary_station)}
                   </td>
                   <td className="p-2.5 text-slate-700 max-w-[220px]">
-                    {emp.supported_stations?.map(st => {
+                    {Array.from(new Set((emp.supported_stations || []).map(st => normalizeStationId(st)))).map(st => {
                       const isSolo = canEmployeeSoloAtStation(emp, st);
                       return (
                         <span key={st} className="inline-flex items-center space-x-1 mr-1.5 mb-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          <span className="font-semibold text-slate-800">{stationMap[st] || st}</span>
+                          <span className="font-semibold text-slate-800">{getStationDisplayName(st)}</span>
                           <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSolo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
                             {isSolo ? '可獨立' : '僅協同'}
                           </span>
                         </span>
                       );
-                    }) || '-'}
+                    })}
                   </td>
                   <td className="p-2.5">
                     <span className={`font-semibold text-xs ${emp.can_solo ? 'text-emerald-600' : 'text-slate-400'}`}>
@@ -494,6 +523,37 @@ export default function PersonnelManagement({
                   onChange={(e) => setEditingEmp({ ...editingEmp, name: e.target.value })}
                   className="w-full border border-slate-300 rounded p-2 font-bold"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">業務職等 / 角色 (支援轉正或晉升)</label>
+                <select
+                  value={editingEmp.role || 'Staff'}
+                  onChange={(e) => setEditingEmp({ 
+                    ...editingEmp, 
+                    role: e.target.value,
+                    is_self_scheduled: e.target.value === 'Manager'
+                  })}
+                  className="w-full border border-slate-300 rounded p-2 font-bold text-slate-800 bg-amber-50/50 focus:bg-white"
+                >
+                  <option value="PT">⏱️ 計時人員 (PT 工讀生)</option>
+                  <option value="Staff">👤 正職同仁 (Staff)</option>
+                  <option value="Leader">🛡️ 站點組長 (Leader)</option>
+                  <option value="Manager">👑 營運高管 (Manager)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2 pt-0.5 pb-0.5">
+                <input
+                  type="checkbox"
+                  id="edit_emp_is_admin"
+                  checked={!!editingEmp.is_admin}
+                  onChange={(e) => setEditingEmp({ ...editingEmp, is_admin: e.target.checked })}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="edit_emp_is_admin" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                  賦予系統管理員權限 (★ Admin - 試算表備查與數據維護)
+                </label>
               </div>
 
               <div>

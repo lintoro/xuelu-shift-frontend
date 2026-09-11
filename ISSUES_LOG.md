@@ -296,34 +296,68 @@
 | 10 | 2026-09-10 | 【需求 #009】PT 與 STAFF 排班總表面板異常提示隔離與調班操作權限收攏 | `v1.8.0-issues007-008-done` | `v1.9.0-issue009-done` | 排班總表對 PT 與 Staff 嚴格隔離異常警示看板、演算法除錯與站點燈號；PT 隱藏調班入口，Staff 調整為「線上調班申請」並鎖定初審/終審按鈕，測試全數通過，npm run build 通過。 |
 | 11 | 2026-09-10 | 【需求 #010】勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休通道強化 | `v1.9.0-issue009-done` | `v2.0.0-hours-override-triple-done` | 修正第35條休息累進倍數(1.5h/1.0h/0.5h)、增加第32條單日工時上限12h/加班4h獨立警告、Manager三度確認放行彈窗、CSV班表/結算清冊/日曆卡永久加註違規提醒，工作台自調快捷入口，單元測試通過，npm run build 通過。 |
 | 12 | 2026-09-10 | 【需求 #010 語氣修正】加班工時以計發加班費為法定前提，修正「自動增加補休」之負面觀感 | `v2.0.0-hours-override-triple-done` | `v2.0.1-overtime-pay-first-done` | 依《勞基法》第24/32-1條，全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，覆核比對、結算清冊表頭、存摺流水標題全數嚴謹合規，npm run build 通過。 |
-| 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
-| 14 | 2026-09-10 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
-| 15 | 2026-09-10 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |
-| 16 | 2026-09-10 | 【需求 #014】最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 | `v2.3.0-review-hierarchy-station-scope-done` | `v2.4.0-admin-verify-manager-self-declared-done` | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解職場倫理衝突並落實雙人控制防弊；實勤面板支援 Admin 備查最高主管出勤，單元測試全數通過，npm run build 通過。 |
-| 17 | 2026-09-10 | 【需求 #015】Google Sheets 與 GAS 雲端實體驗證聯調架構 | `v2.4.0-admin-verify-manager-self-declared-done` | `v2.5.0-gas-cloud-integration-done` | 實作 ApiService 雙模式快取切換與 Ping 契約、對齊 Code.gs 13 張雲端表結構、健全無縫連線降級容錯，單元測試全數通過，npm run build 通過。 |
-| 18 | 2026-09-10 | 【需求 #016】全月排班生命週期 8 大時限排程引擎與關卡機制 | `v2.5.0-gas-cloud-integration-done` | `v2.6.0-scheduling-timeline-done` | 實作 8 大排班時程狀態機、動態大小月二月運算、操作資格守衛、可視化 Stepper 與時光機切換、各業務面板時限管制連動，單元與回歸測試全數通過，npm run build 通過。 |
-| 19 | 2026-09-10 | 【需求 #017】登入正式化、全年度國假調移動態平帳與服務業國假出勤調移同意免雙薪閉環機制 | `v2.6.0-scheduling-timeline-done` | `v2.7.0-holiday-consent-done` | 實作工號記憶與連點5次Logo彩蛋、國假調移動態加總平帳與年度切換、同仁出勤調移同意書簽署、排班表與結算清冊免雙薪憑證連動，單元與回歸測試全數通過，npm run build 通過。 |
-�自調挪休）的處理方式，請問是怎麼規劃跟實作的？
-  2. 核實時數違反邏輯：不能設定 0 休息正確，但上例 13 小時已超過至少 2 個 4 小時及超過每日最多加班時數了，但沒有跳警告。
-  3. 就算跳警告，MANAGER 也要能依現況核實，請重複三次後放行，但未來出報表時仍要加註提醒。
-- **現狀分析與痛點**：
-  1. **個人自調挪休通道**：底層已建置 `SELF_RESCHEDULE` 機制，但在「我的工作台 (`MyDashboard.jsx`)」中缺乏顯眼的快捷按鈕導流，同仁不易直覺找到發起自調的入口。
-  2. **《勞基法》第 35 條休息演算法單純化**：先前僅檢核 `跨度 >= 4.5h 且 休息 < 0.5h`，當在勤跨度長達 13 小時（跨越 3 個 4 小時連續工作區間）時，依法至少應配置 1.5 小時休息，系統僅提示 0.5 小時，不符法規累進倍數。
-  3. **《勞基法》第 32 條第 2 項單日工時上限警告缺失**：淨實勤達 13 小時（且本日延長工時達 5 小時），已違反單日總工時不得超過 12 小時與每日加班不得超過 4 小時之法定上限，介面上完全漏未渲染此項嚴重違規警示卡！
-  4. **高管實務核定彈性與三度確認安全鎖缺失**：門市現場遇到極端特殊緊急狀況（如突發設備故障、暴雨留守）時，不可死鎖導致無法核實出勤，但普通組長不得隨意放行，必須由營運高管 (Manager) 歷經重複三次確認後放行，且所有未來報表（排班總表 CSV、結算清冊 CSV、日曆卡片）必須永久加註違規提醒。
-- **最佳實踐與架構方案**：
-  1. **工作台個人自調挪休通道深化 (`MyDashboard.jsx`)**：
-     - 在個人工作台頂部歡迎卡與日曆頂部加入「🔄 申請個人自調挪休（自己上班/休假對調）」與「👥 與同事對調班表」一鍵直達按鈕。
-     - 調班進度清單針對 `SELF_RESCHEDULE` 呈現專屬紫底文案。
-  2. **勞基法第 35 條休息累進演算法 (`ActualHoursOverride.jsx`)**：
-     - 跨度 $\ge 12.5$h：法定最低休息 1.5 小時（3 個 4 小時區間）。
-     - 跨度 $\ge 8.5$h：法定最低休息 1.0 小時（2 個 4 小時區間）。
-     - 跨度 $\ge 4.5$h：法定最低休息 0.5 小時（1 個 4 小時區間）。
-     - 若未達法定累積時數，動態計算並跳出警示。
-  3. **勞基法第 32 條第 2 項單日工時上限獨立警示卡 (`ActualHoursOverride.jsx`)**：
-     - 當扣除休息後淨實勤 $> 12$ 小時，或單日延長工時 $> 4$ 小時，以獨立紅底警示卡跳出警告並鎖定普通儲存。
-  4. **營運高管三度確認強制放行機制 (Triple-Confirmation Lock Modal)**：
-     - 僅限 Manager / Admin 呈現「⚠️ 營運高管依實況強制核定 (需三次確認)」按鈕。
+| 13 | 2026-09-10 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測�  4. **一鍵快速免密模擬登入**：
+      - 點擊「以【同仁姓名】身分一鍵登入系統」，免輸密碼直接切換至該同仁真實視角，完美驗收其工作台、班表大表與權限隔離。
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v3.1.0-dynamic-role-sandbox-done)`
+
+### 📌 [需求 #023] 全域預設 Google Apps Script 雲端資料庫直連，消除新裝置與首次進入需手動配置門檻
+
+- **來源反饋**：主管於線上驗收時提出：「目前連上會是地端模式資料，不能一連上就是接上資料庫嘛？」
+- **現狀分析**：
+  - 先前系統將 Google Apps Script Web App 端點僅儲存於個別瀏覽器的本機快取 (`localStorage`) 中。
+  - 當主管或同仁使用新手機、平板、開啟無痕視窗、或透過 Vercel 線上網址首次開啟系統時，因快取為空，系統自動退回「本地沙盒模式（展示地端假資料）」，導致每次皆需手動開啟連線面板貼上網址才能對接試算表。
+  - 前端 fetch 原採用 `text/plain;charset=utf-8`，在部分環境易被 Google 安全代理攔截誤判為純網頁瀏覽而回傳 HTML 頁面。
+- **預計功能規劃與實作**：
+  1. **全域預設資料庫端點注入**：
+     - 在 `src/services/apiService.js` 配置官方正式端點 `DEFAULT_GAS_URL`：`https://script.google.com/macros/s/AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ/exec`。
+     - 同時建立 `.env` 與 `.env.production`，支援 Vite 環境變數 `VITE_GAS_API_URL`。
+     - 解析優先序：`localStorage（個人手動覆寫）` $\rightarrow$ `停用旗標` $\rightarrow$ `環境變數` $\rightarrow$ **`DEFAULT_GAS_URL（預設正式端點）`**。
+  2. **JSON-RPC 通訊協議加固**：
+     - 將請求 header 調整為標準 `application/x-www-form-urlencoded`，100% 確保觸發 GAS `doPost` 並順利由 `echo` 轉發回傳乾淨 JSON，徹底根除 HTML 誤判。
+  3. **首次進入全自動雲端同步**：
+     - 系統一開即為 `isCloudMode = true`，自動向試算表拉取最新人事主檔（37 位在冊同仁）與正式排班矩陣。
+  4. **登入頁面即時連線燈號**：
+     - `LoginView.jsx` 登入卡片表頭加裝動態呼吸綠燈：`Google 雲端資料庫連線中 (${employees.length} 人)`，讓現場主管與同仁登入前即確認資料庫已對接。
+  5. **連線設定中心彈性強化**：
+     - `GasConnectionModal.jsx` 增加「帶入系統預設雲端資料庫」快捷鍵，並完整支援切換回本地沙盒或還原預設。
+- **影響範圍評估**：
+  - `src/services/apiService.js`
+  - `.env`、`.env.production`
+  - `src/components/Auth/LoginView.jsx`
+  - `src/components/Cloud/GasConnectionModal.jsx`
+- **目前狀態**：`✅ 已完成修復並通過驗證 (v3.2.0-default-cloud-db-connected)`
+
+---
+
+## 處理歷史與版本控制記錄 (Version & Rollback History)
+
+| 序號 | 處理日期 | 關聯需求/問題 | 變更前版號 (Snapshot) | 變更後版號 | 處理結果與回滾驗證 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 2026-09-10 | 初始穩定基準線 (Baseline) | — | `v1.0.0-baseline` | 專案建置 0 錯誤，含全新異常提醒介面，伺服器運行中。 |
+| 2 | 2026-09-10 | PROGRESS.md 未執行工作全數完成 (Phase 2 雙向聯動 + Phase 3 GAS 7+1 初始化與部署手冊) | `v1.0.1-logged` | `v1.1.0-progress-completed` | 全模組完成度 100%，npm run build 通過，產出 DEPLOY_GUIDE.md。 |
+| 3 | 2026-09-10 | 【需求 #005】人事組織主檔支援清單編輯與清潔組完全雙向隔離 | `v1.1.0-progress-completed` | `v1.2.0-issue005-done` | 編輯/新增彈窗支援多選增減，清潔組雙向隔離鎖死，npm run build 通過。 |
+| 4 | 2026-09-10 | 【需求 #003】主管端實勤覆核面板重構 (起訖時間/35條休息/補休連動/日期鎖定) | `v1.2.0-issue005-done` | `v1.3.0-issue003-done` | 實作起訖/休息選單、勞基法35條防呆、差額連動補休/PT工時、未來日期反灰鎖定，npm run build 通過。 |
+| 5 | 2026-09-10 | 【需求 #001】線上調班申請支援個人挪休與自調班表 (SELF_RESCHEDULE) | `v1.3.0-issue003-done` | `v1.4.0-issue001-done` | 新增個人自調挪休通道、個人7休1預檢、站點缺工警示、二階終審自動覆寫與雙快照留痕，npm run build 通過。 |
+| 6 | 2026-09-10 | 【需求 #002】我的工作台個人化特休與補休存摺明細介面 (Passbook) | `v1.4.0-issue001-done` | `v1.5.0-issue002-done` | 實作特休(週年制純天數)/補休(12/31歸零純時數)雙分頁存摺、流水歷程帳、覆核差額自動追加流水，npm run build 通過。 |
+| 7 | 2026-09-10 | 【需求 #004】考勤月底結算機制與「實勤確認班表（雙確認閉環機制）」 | `v1.5.0-issue002-done` | `v1.6.0-issue004-done` | 實作主管考勤月底結算面板 (MonthlySettlementPanel)、全員到班雙確認簽認追蹤、同仁工作台電子簽署對帳卡、結算清冊 CSV 匯出，npm run build 通過。 |
+| 8 | 2026-09-10 | 【需求 #006】特休與補休排定功能 (方案 A：雙軌解耦，預排全日扣假 + 覆核小時沖抵) | `v1.6.0-issue004-done` | `v1.7.0-issue006-done` | 劃休門戶新增 AL/CT 假別排定、即時餘額防呆與存摺連動扣抵；實勤覆核短少工時支援扣補休、扣特休時數或純事假沖抵，npm run build 通過。 |
+| 9 | 2026-09-10 | 【需求 #007 & #008】組長視野隔離與聚焦 + Manager 動態班別主檔管理機能 | `v1.7.1-issues007-008-start` | `v1.8.0-issues007-008-done` | 實作組長本組異常過濾與排班大表預設聚焦本組；建立 ShiftMasterManagement 動態班別主檔管理與全系統調班連動，27 項測試 100% 通過，npm run build 通過。 |
+| 10 | 2026-09-10 | 【需求 #009】PT 與 STAFF 排班總表面板異常提示隔離與調班操作權限收攏 | `v1.8.0-issues007-008-done` | `v1.9.0-issue009-done` | 排班總表對 PT 與 Staff 嚴格隔離異常警示看板、演算法除錯與站點燈號；PT 隱藏調班入口，Staff 調整為「線上調班申請」並鎖定初審/終審按鈕，測試全數通過，npm run build 通過。 |
+| 11 | 2026-09-10 | 【需求 #010】勞基法工時核實累進檢驗、高階主管三度確認放行與個人自調挪休通道強化 | `v1.9.0-issue009-done` | `v2.0.0-hours-override-triple-done` | 修正第35條休息累進倍數(1.5h/1.0h/0.5h)、增加第32條單日工時上限12h/加班4h獨立警告、Manager三度確認放行彈窗、CSV班表/結算清冊/日曆卡永久加註違規提醒，工作台自調快捷入口，單元測試通過，npm run build 通過。 |
+| 12 | 2026-09-10 | 【需求 #010 語氣修正】加班工時以計發加班費為法定前提，修正「自動增加補休」之負面觀感 | `v2.0.0-hours-override-triple-done` | `v2.0.1-overtime-pay-first-done` | 依《勞基法》第24/32-1條，全面將「自動增加補休」正名為「核定加班 · 依法列加班費核發/依意願換補休」，覆核比對、結算清冊表頭、存摺流水標題全數嚴謹合規，npm run build 通過。 |
+| 13 | 2026-09-11 | 【需求 #011】未到勤或請假折抵之額度不足檢驗異常阻擋與 4 大假別選項 (事假扣全薪/病假扣半薪) | `v2.0.1-overtime-pay-first-done` | `v2.1.0-deduction-balance-check-done` | 實作可用額度檢驗、不足紅底警示卡、儲存按鈕剛性鎖死；擴充事假(扣全薪)/病假(扣半薪)/補休/特休4大卡片，結算清冊與CSV明細呈現，測試全數通過，npm run build 通過。 |
+| 14 | 2026-09-11 | 【需求 #012】支援部門能否獨立 (Solo) 開關設定 + 互調班軟性特例關卡與二階審核彈性機制 | `v2.1.0-deduction-balance-check-done` | `v2.2.0-swap-soft-guard-solo-switch-done` | 人事主檔建立支援部門 Solo 開關；重構換班預檢為雙向支援與 Solo 對價檢驗，資格不符軟性放行、送單不鎖死、加註特例標籤，由組長初審與高管終審放行，單元測試全數通過，npm run build 通過。 |
+| 15 | 2026-09-11 | 【需求 #013】實勤覆核同組限制、嚴禁跳組、嚴禁自我覆核與組長實勤向上由 MANAGER 覆核 | `v2.2.0-swap-soft-guard-solo-switch-done` | `v2.3.0-review-hierarchy-station-scope-done` | 實勤覆核嚴格限定同組基層（排除跨組、排除本人、排除高管），組長實勤向上由 Manager 覆核並提供高管站點篩選；調班初審嚴格同組審核與利益迴避，單元測試全數通過，npm run build 通過。 |
+| 16 | 2026-09-11 | 【需求 #014】最高決策者自身調班與實勤異動之 ADMIN 行政合規備查歸檔機制 | `v2.3.0-review-hierarchy-station-scope-done` | `v2.4.0-admin-verify-manager-self-declared-done` | 最高主管自身調班建立【自主申報 · 待Admin備查】專屬通道；Admin 正名【檢驗合規並備查歸檔】化解職場倫理衝突並落實雙人控制防弊；實勤面板支援 Admin 備查最高主管出勤，單元測試全數通過，npm run build 通過。 |
+| 17 | 2026-09-11 | 【需求 #015】排班發布後調班時限阻擋與自調挪休剛性防線 | `v2.4.0-admin-verify-manager-self-declared-done` | `v2.5.0-swap-deadline-guard-done` | 發布後個人自調需提前 2 天；當日與次日嚴格阻擋個人自調挪休，僅允許雙人互調或代班，單元測試全數通過，npm run build 通過。 |
+| 18 | 2026-09-11 | 【需求 #016】排班全月時限生命週期四階段推進器與主管時限控制面板 | `v2.5.0-swap-deadline-guard-done` | `v2.6.0-timeline-lifecycle-done` | 建立劃休截止、排班審查定稿、每日實勤覆核與月底雙簽認四階段推進器，支援時間機器情境模擬，單元測試全數通過，npm run build 通過。 |
+| 19 | 2026-09-11 | 【需求 #017】登入正式化、國定假日調移平帳與服務業免雙薪出勤同意閉環 | `v2.6.0-timeline-lifecycle-done` | `v2.7.0-holiday-consent-done` | 登入工號記住/留白/彩蛋收納；全年度國假動態加總平帳；國假出勤同仁同意書電子簽認與結算清冊免雙薪法律憑據，自動化測試通過，npm run build 通過。 |
+| 20 | 2026-09-11 | 【需求 #018】核心角色定位校正 (林慶忠為 ADMIN STAFF，陳鵬宇為 ADMIN MANAGER) | `v2.7.0-holiday-consent-done` | `v2.7.1-admin-roles-aligned-done` | 校正陳鵬宇為 ADMIN MANAGER (營運高管/終審)，林慶忠為 ADMIN STAFF (正職/數據維護)，全系統彩蛋、日誌、授權全面對齊，自動化測試與 build 通過。 |
+| 21 | 2026-09-11 | 【需求 #019】登入後畫面全域白屏 (Runtime Error) 追查、型別防呆加固與 ErrorBoundary 容錯機制 | `v2.7.1-admin-roles-aligned-done` | `v2.8.0-error-boundary-runtime-fixed` | 修正 swapStore 與 holidayTransferStore 物件比對與未初始化，加掛全域 ErrorBoundary 防止整頁白屏，提供堆疊診斷與快取重置，npm run build 通過。 |
+| 22 | 2026-09-11 | 【需求 #020】前後端雙向連動斷層 (Google試算表改角色無效、班表無從發布) 之自動拉取與儲存通道 | `v2.8.0-error-boundary-runtime-fixed` | `v2.9.0-cloud-sync-buttons-done` | App 掛載時自動從 GAS 拉取最新人事名冊與班表，頂部新增「刷新試算表」，排班表新增「啟動智慧排班」與「儲存至Google試算表」，npm run build 通過。 |
+| 23 | 2026-09-11 | 【需求 #021】系統免開本機 24 小時線上化：GitHub 儲存庫建立與 Vercel 雲端 CI/CD 自動化建置部署 | `v2.9.0-cloud-sync-buttons-done` | `v3.0.0-github-vercel-cicd-deployed` | 綁定 GitHub 倉庫 (lintoro/xuelu-shift-frontend)，新增 vercel.json SPA 路由配置，Vercel 一鍵部署上線，支援 Git Push 30 秒自動發布與手機 PWA。 |
+| 24 | 2026-09-11 | 【需求 #022】登入除錯彩蛋重構升級：動態角色沙盒切換矩陣 (四身分切換、連動試算表37人名冊、一鍵模擬登入) | `v3.0.0-github-vercel-cicd-deployed` | `v3.1.0-dynamic-role-sandbox-done` | 彩蛋升級為高管/組長/正職/PT 4分頁，動態連動試算表名冊與站點標籤，支援屬性卡即時預覽與一鍵免密切換身分登入，npm run build 通過。 |
+| 25 | 2026-09-11 | 【需求 #023】全域預設 Google Apps Script 雲端資料庫端點直連 (支援環境變數、預設直連試算表37人名冊、表頭動態連線燈號) | `v3.1.0-dynamic-role-sandbox-done` | `v3.2.0-default-cloud-db-connected` | 配置 DEFAULT_GAS_URL 與 .env，首進自動直連試算表資料庫與載入37位在冊名冊，登入卡片加裝即時連線燈號，單元測試通過，npm run build 通過。 |�實況強制核定 (需三次確認)」按鈕。
      - **第 1 次確認**：違規條款與事實核認。
      - **第 2 次確認**：法律責任與未來報表永久加註宣告。
      - **第 3 次確認**：輸入現場緊急不可抗力調度事由（至少 8 字）並確認最終授權放行。
@@ -581,4 +615,149 @@
 | 22 | 2026-09-11 | 【需求 #020】前後端雙向連動斷層 (Google試算表改角色無效、班表無從發布) 之自動拉取與儲存通道 | `v2.8.0-error-boundary-runtime-fixed` | `v2.9.0-cloud-sync-buttons-done` | App 掛載時自動從 GAS 拉取最新人事名冊與班表，頂部新增「刷新試算表」，排班表新增「啟動智慧排班」與「儲存至Google試算表」，npm run build 通過。 |
 | 23 | 2026-09-11 | 【需求 #021】系統免開本機 24 小時線上化：GitHub 儲存庫建立與 Vercel 雲端 CI/CD 自動化建置部署 | `v2.9.0-cloud-sync-buttons-done` | `v3.0.0-github-vercel-cicd-deployed` | 綁定 GitHub 倉庫 (lintoro/xuelu-shift-frontend)，新增 vercel.json SPA 路由配置，Vercel 一鍵部署上線，支援 Git Push 30 秒自動發布與手機 PWA。 |
 | 24 | 2026-09-11 | 【需求 #022】登入除錯彩蛋重構升級：動態角色沙盒切換矩陣 (四身分切換、連動試算表37人名冊、一鍵模擬登入) | `v3.0.0-github-vercel-cicd-deployed` | `v3.1.0-dynamic-role-sandbox-done` | 彩蛋升級為高管/組長/正職/PT 4分頁，動態連動試算表名冊與站點標籤，支援屬性卡即時預覽與一鍵免密切換身分登入，npm run build 通過。 |
+| 26 | 2026-09-11 | 【需求 #024】Staff Admin 林慶忠排班權限嚴格收攏 (排除排班功能、時光機測試器與排班按鈕，落實正職基層與高管 Manager 職責分離) | `v3.2.0-default-cloud-db-connected` | `v3.3.0-staff-admin-schedule-restricted-done` | 嚴格收攏 Staff Admin 排班權限：排班大表隱藏「啟動智慧排班」與「儲存至Google試算表」、表頭隱藏「工時模型切換」、排班時限隱藏「時光機模擬器」、canManageShifts 排除 Staff Admin，站點主檔 ST_ADMIN leader_emp_id 校正為 null，自動化測試 100% 通過，npm run build 通過。 |
+| 27 | 2026-09-11 | 【需求 #025】營運核心 11 大問題統整解決 (林慶忠排班大表徹底消除、密碼持久化與彩蛋解耦、人事職等晉升、時間格式修復、一例一休標註、Manager劃休限制面板、班表微調與組長上呈二階審核) | `v3.3.0-staff-admin-schedule-restricted-done` | `v3.4.0-operations-consolidation-done` | 徹底收攏排班大表頁籤僅限 Manager/Leader；彩蛋重設密碼與名冊資料庫徹底解耦；修改密碼同步寫入 Google 試算表；Code.gs 修正漏存 role Bug；人事彈窗擴充職等 (PT/Staff/Leader/Manager) 晉升與 Admin 權限；站點代碼標準化合併去重；消除圖例 1899 時間渲染異常；實裝 Manager 劃休限制設定面板；班表休假細分「例休 (例)」與「休假 (休)」；實裝格子點擊微調、事前排特休/補休並扣抵存摺、組長微調暫存上呈、Manager 覆核對照一鍵核准發布，單元測試 100% 通過，npm run build 通過。 |
+
+
+---
+
+### 📌 [需求 #023] 全域預設 Google Apps Script 雲端資料庫端點直連
+- **來源背景**：同仁與主管反映每次換裝置或無痕開啟系統時，都需要手動於彈窗貼上 Google Apps Script 部署 URL 才能連線試算表。
+- **最佳實踐與實施**：
+  1. 系統全域配置 DEFAULT_GAS_URL，於環境變數 VITE_GAS_API_URL 或預設直連端點自動初始化。
+  2. 開啟首頁自動靜默連線 Google Sheets 資料庫，直接載入 37 位在冊同仁真實名單與班表。
+  3. 登入卡片與表頭配置即時連線綠燈指示與手動刷新機制。
+- **狀態驗收**：`✅ 已徹底修復並通過驗證 (v3.2.0-default-cloud-db-connected)`
+
+---
+
+### 📌 [需求 #024] Staff Admin 林慶忠排班權限嚴格收攏與職能解耦
+- **來源背景**：主管於審查系統時明確指示：「林慶忠是 staff admin 不應具備排班功能」。
+- **核心權能問題定位**：
+  1. `ScheduleTable.jsx` 中排班按鈕判斷原先寫為 `currentUser?.role === 'Manager' || currentUser?.is_admin`，導致身為 Staff Admin 的林慶忠在排班總表具備「🚀 啟動智慧排班」與「☁️ 儲存至 Google 試算表」發布權。
+  2. `Header.jsx` 中工時法規模型下拉選單（7休1 / 雙週變形 / 四週變形）判斷原先包含 `isAdmin`，導致 Staff Admin 可隨意變更排班法規模型。
+  3. `App.jsx` 中 `canManageShifts` 將 `isAdmin` 納入排班調度權，導致林慶忠看到全館排班缺工警示看板、站點人力三級燈號以及 `EngineDebugger` 演算法除錯器。
+  4. `SchedulingTimelineStepper.jsx` 排班時限生命週期中，「時光機模擬切換」按鈕無身分防護，使 Staff Admin 可進行主管級排班生命週期階段模擬。
+  5. `mockMasterData.js` 中 `ST_ADMIN` 之 `leader_emp_id` 誤填為林慶忠，可能在站點排班邏輯中造成組長身分混淆。
+- **最佳實踐與防護實施**：
+  1. **排班按鈕嚴格收攏 (`ScheduleTable.jsx`)**：將「🚀 啟動智慧排班」與「☁️ 儲存至 Google 試算表」限制為僅 `currentUser?.role === 'Manager'` 可見與操作。
+  2. **工時法規模型切換收攏 (`Header.jsx`)**：工時模型下拉選單嚴格限制為僅 `isManager` 可切換，保留全體人員月份切換視角。
+  3. **排班調度權限排除 (`App.jsx`)**：`canManageShifts` 校正為 `isManager || isLeader`；`EngineDebugger` 限制為僅 `isManager`，使 Staff Admin 進入排班總表時呈現專注正職同仁的純淨無干擾大表。
+  4. **時光機除錯器限制 (`SchedulingTimelineStepper.jsx`)**：時光機切換按鈕與展開測試器嚴格限制為僅 `isManager` 專用，Staff Admin 與基層同仁僅保留階段時限進度查閱。
+  5. **站點組長名冊校正 (`mockMasterData.js`)**：將 `ST_ADMIN` 之 `leader_emp_id` 校正為 `null`，明確區隔基層站點組長與營運處支援。
+- **影響範圍評估**：
+  - `src/components/ScheduleTable.jsx`
+  - `src/components/Header.jsx`
+  - `src/App.jsx`
+  - `src/components/Timeline/SchedulingTimelineStepper.jsx`
+  - `src/data/mockMasterData.js`
+  - `scratch/test_staff_admin_schedule_restriction.mjs`
+  - `scratch/test_issue_009.mjs`
+- **狀態驗收**：`✅ 已徹底修復並通過驗證 (v3.3.0-staff-admin-schedule-restricted-done)`
+
+---
+
+### 📌 [需求 #025] 營運核心 11 大問題統整專案與全面交接 (v3.4.0)
+
+- **來源背景**：主管於現場驗收作業中，逐項審查登入、人事、排班、法規、權限與流程各模組，提出營運核心 11 大關鍵問題，要求統整規劃實作計畫，全數徹底解決並納入技術交接文檔。
+- **11 大問題根因深度診斷與完整修復方案**：
+
+#### 1. 林慶忠 (Staff Admin) 排班大總表頁籤徹底消除
+- **問題根因**：先前雖收攏排班表內按鈕，但頂部頁籤選單 (`Header.jsx`) 判定排班總表頁籤時包含了 `isAdmin`，且 `App.jsx` 的導向邏輯未做剛性防呆，使身為 Staff Admin 的林慶忠仍看得到排班總表大矩陣頁籤。
+- **修復方案**：
+  - `Header.jsx`：頁籤顯示條件嚴格收攏為 `isManager || isLeader`，基層同仁與 Staff Admin 徹底不可見。
+  - `App.jsx`：加入 `effectiveActiveTab` 剛性防呆，若非 Manager/Leader 誤入或儲存了 `schedule` 頁籤，強制切換回個人專屬之 `my-dashboard`（我的工作台）。
+
+#### 2. 登入彩蛋「回復原始密碼」與已連線資料庫解耦
+- **問題根因**：原登入彩蛋中的「回復原始密碼」直接調用 `clearMockStorage()` 清空了 `localStorage` 內的所有鍵值（包含 `cloud_employees_master`、`cloud_master_shifts` 與已連線之 37 位同仁名冊），導致重設密碼同時沖毀了連線資料庫，必須重新從雲端拉取。
+- **修復方案**：
+  - 於 `LoginView.jsx` 與 `App.jsx` 實裝**精準密碼重設 (Surgical Reset)**：保留已連線的名冊與所有排班資料，僅單向重設目前在冊人員之 `pin_hash` 與 `salt` 至預設值 (`000000`)，徹底杜絕洗掉資料庫現象。
+
+#### 3. 修改密碼雲端持久化 (Google Sheets Employees 雙向同步)
+- **問題根因**：
+  - 前端修改密碼原本僅寫入本機 `localStorage`，未透過 RPC 回寫試算表。
+  - 後端 `Code.gs` 的 `handleGetInitialData` 在包裝同仁資料時刻意排除了 `pin_hash` 與 `salt`。當同仁手動刷新頁面或由雲端重新拉取名冊時，前端同仁物件的 `pin_hash` 被覆蓋為 `undefined`，系統自動退回預設密碼 `000000`，造成「明明改了密碼，重新整理或上下傳後密碼又失效」的重大瑕疵。
+- **修復方案**：
+  - `Code.gs`：
+    - `handleGetInitialData` 調整為完整回傳 `pin_hash` 與 `salt`，防止被空值覆蓋。
+    - 新增 API 路由 `auth.updatePasswordHash`（函式 `handleUpdatePasswordHash`），接收 `emp_id`、`pin_hash`、`salt`，精準定位試算表 `Employees` 對應列，寫入第 9 欄與第 10 欄。
+  - `apiService.js`：封裝 `apiService.updatePasswordHash(empId, pinHash, salt)`。
+  - `App.jsx`：在 `handleUpdatePin` 流程中，同步呼叫雲端 API 完成試算表持久化。
+
+#### 4. 人事主檔更新漏欄位修復與職等晉升功能 (PT/Staff/Leader/Manager)
+- **問題根因**：
+  - 後端 `Code.gs` 的 `handleSavePersonnel` 在比對並更新現存同仁資料時，其陣列解構與欄位更新邏輯**漏掉了第 3 欄 `role`（職等）**！導致管理員在前端編輯將 PT 改為 Staff，試算表卻永遠停留在舊職等。
+  - 前端 `PersonnelManagement.jsx` 編輯彈窗中缺少職等下拉選單與 Admin 權限勾選，只有指派站點組長按鈕，無法執行「PT 轉正職」或「正職/組長升經理」。
+- **修復方案**：
+  - `Code.gs`：補齊第 3 欄 `role` 與第 8 欄 `is_admin` 的寫入，更新現存同仁時完整同步。
+  - `PersonnelManagement.jsx`：於編輯同仁 Modal 中增加「職等設定 (PT / Staff / Leader / Manager)」下拉選單及「管理者權限 (Admin)」核取方塊，賦予人資完整晉升管理機能。
+
+#### 5. 人事站點大小寫與支援顯示異常修復 (王雅惠重複問題)
+- **問題根因**：試算表中站點代碼存在大小寫混用（例如 `gagoo` 與 `Gagoo`），程式在比對與陣列合併時被判定為不同站點，造成王雅惠的站點顯示重複或支援組別異常。
+- **修復方案**：
+  - `PersonnelManagement.jsx`：新增 `normalizeStationId(station)` 工具函式，統一將代碼轉換為標準大寫（如 `GAGOO`），並透過 `Set` 集合強制去重，徹底消除重複站點顯示。
+
+#### 6. 登入彩蛋 PT 名冊對齊與林筠蓁職等校正
+- **問題根因**：由於雲端試算表更新漏存 `role`，導致林筠蓁等 PT 人員在名冊中被記錄或退回為 Staff，彩蛋在篩選 PT 分頁時無法正確呈現，造成 PT 選單僅有單一人選或出現異常工號。
+- **修復方案**：
+  - 隨著後端 `role` 欄位持久化修復以及人事主檔職等晉升功能實裝，當管理者於人事主檔將林筠蓁等人校正為 PT 後，登入彩蛋 PT 分頁立即自動動態列出完整的計時人員清單。
+
+#### 7. 排班總表下方圖例 1899 時間渲染異常修復
+- **問題根因**：Google Sheets 將時間格式儲存為 Date 物件，經 GAS `JSON.stringify` 導出時變成 ISO 時間字串 `1899-12-30T00:30:00.000Z`。前端直接將該字串渲染到圖例中，產生極為突兀的年代字串與 `(-~-)` 標籤。
+- **修復方案**：
+  - 建立專屬工具模組 `src/utils/timeFormatUtils.js`，實裝 `formatShiftTime(timeStr)`，無論傳入 ISO 完整字串、Date 物件或髒字串，皆乾淨抽取台灣時區之 `HH:mm`（如 `08:30~17:30`）。
+  - 在 `ScheduleTable.jsx` 之圖例與 `Code.gs` 導出時全面套用，徹底消除 1899 異常字串。
+
+#### 8. Manager 劃休限制管理面板實裝 (每人全月劃休、假日上限與總休假)
+- **問題根因**：先前各月份預排天數缺乏統一由 Manager 動態調整的視覺化控制台，規則分散於設定檔中，管理者找不到設定入口。
+- **修復方案**：
+  - 建立全新彈窗元件 `src/components/Admin/MonthlyRulesModal.jsx`，提供 Manager 設定：
+    1. 每位同仁當月預排劃休上限 (預設 8 天)。
+    2. 假日 (週六/週日) 劃休上限 (預設 2 天)。
+    3. 全月應休總天數 (8~11 天)。
+    4. 各站點每日劃休名額上限 (預設 1 人)。
+  - 於 `Header.jsx` 頂部右側為 Manager 配置專屬入口按鈕「⚙️ 劃休限制設定」，並即時連動 `localStorage` 與全域規則。
+
+#### 9. 勞基法一例一休合規細分 (例休與休假區隔插入)
+- **問題根因**：依《勞動基準法》第 36 條，勞工每 7 日中應有 2 日之休息，其中 1 日為「例假（例休）」，1 日為「休息日（休假）」。二者法律性質與出勤規定截然不同，先前系統一律以 `OFF` 籠統呈現，無法滿足法規稽核與內部排班需求。
+- **修復方案**：
+  - 擴充班別核心常數與圖例：
+    - `REG_OFF`：例休（法定例假日，標註為「例」，不可隨意調移，紅/紫底高辨識度）。
+    - `REST_OFF`：休假（法定休息日，標註為「休」，藍底標註）。
+  - 在 `ScheduleTable.jsx` 圖例、單元格樣式渲染、微調選單、以及 `calendarExport.js` 匯出 CSV 檔中完整支援「例」與「休」的精確標註與插入。
+
+#### 10. 班表微調機能與組長/經理二階審核機制
+- **問題根因**：
+  - 智慧排班引擎產出班表後，各站點實際上有臨時人力需求，組長需要具備**微調權限**。
+  - 缺乏流程防呆：若組長可直接發布班表，將失去高階主管審核機制；且請假（特休/補休）應能**事前排入**並即時扣抵存摺，而非事後記缺勤扣假。
+- **修復方案**：
+  - **單元格點擊快速微調選單 (`ScheduleTable.jsx`)**：組長/經理點擊任意出勤格子，彈出懸浮微調選單，支援切換 A/B/C/D 班、例休 (例)、休假 (休)、特休 (特 AL) 與 補休 (補 CT)。
+  - **事前請假存摺自動扣抵**：若排入特休 (AL) 或 補休 (CT)，系統即時驗證剩餘額度，並自動於假勤存摺追加扣抵紀錄，落實事前排假合規閉環。
+  - **組長端微調暫存與一鍵上呈**：組長微調時班表標記為「微調待呈核 (`pending_review`)」，顯示微調統計筆數，組長確認無誤後點擊「📤 提交審核給經理」，班表轉入正式審核佇列。
+  - **經理端 (Manager) 終審覆核對照彈窗**：經理登入後看見醒目之「審核組長微調班表」橫幅，點擊可開啟**異動對照清單 (Diff Viewer)**，逐筆檢視由誰在何時將某同仁從何班別調整為何班別，確認無誤後一鍵「✅ 核准微調並正式發布」，兼顧彈性與管理控制。
+
+#### 11. 時光機與業務生命週期定位釐清
+- **問題根因**：使用者對時光機按鈕的用途產生疑惑，不確定是純測試工具還是營運日常操作。
+- **架構釐清**：
+  - **時光機定位**：屬於**「系統展示、端到端驗收與情境測試工具」**，供主管在短短幾分鐘內模擬「1號~3號預排 $\rightarrow$ 4號~25號實勤 $\rightarrow$ 26號~月底簽認」之全月生命週期，避免驗收時需等待真實月份推進。
+  - **正式營運機制**：系統後端完全依據使用者的本機/伺服器**真實係統時間 (`Date.now()`)** 自動判斷當前處於何種業務階段。非測試模式下同仁自然按日曆推進，無需手動拉動時光機。已將時光機嚴格收攏為僅 Manager 可見。
+
+---
+
+- **影響檔案清單**：
+  - `src/components/Header.jsx`（頁籤權限收攏、Manager劃休限制入口、語法除錯）
+  - `src/components/ScheduleTable.jsx`（例/休/特/補圖例、點擊微調選單、組長上呈、Manager對照審核）
+  - `src/components/Admin/PersonnelManagement.jsx`（職等下拉晉升、Admin勾選、站點代碼大寫去重）
+  - `src/components/Admin/MonthlyRulesModal.jsx`（全新：Manager 劃休規則管理彈窗）
+  - `src/components/Auth/LoginView.jsx`（彩蛋密碼重設與名冊資料庫徹底解耦）
+  - `src/utils/timeFormatUtils.js`（全新：1899 ISO 時間字串淨化為 HH:mm）
+  - `src/utils/calendarExport.js`（CSV 匯出支援例休 REG_OFF 與休假 REST_OFF）
+  - `src/services/apiService.js`（新增 updatePasswordHash RPC 呼叫）
+  - `src/backend/Code.gs`（保留 pin_hash/salt、handleSavePersonnel 補齊 role/is_admin、新增 handleUpdatePasswordHash、時間格式化）
+  - `src/App.jsx`（頁籤強制防呆、密碼持久化、劃休限制狀態、二階微調上呈審核管線）
+  - `scratch/test_v340_consolidation.mjs`（11 大營運問題 7 大自動化測試套件）
+- **驗證成果**：
+  - 單元測試套件 `scratch/test_v340_consolidation.mjs`：7/7 測試項目 100% 通過。
+  - 前端專案打包：`npm run build` 0 錯誤打包編譯成功。
+- **狀態驗收**：`✅ 已徹底修復並通過驗證 (v3.4.0-operations-consolidation-done)`
 

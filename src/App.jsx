@@ -22,6 +22,7 @@ import MonthlySettlementPanel from './components/MonthlySettlement/MonthlySettle
 import ShiftMasterManagement from './components/Admin/ShiftMasterManagement.jsx';
 import GasConnectionModal from './components/Cloud/GasConnectionModal.jsx';
 import SchedulingTimelineStepper from './components/Timeline/SchedulingTimelineStepper.jsx';
+import MonthlyRulesModal from './components/Admin/MonthlyRulesModal.jsx';
 
 import { ApiService } from './services/apiService.js';
 import { DEFAULT_SHIFT_TYPES } from './types/scheduler.js';
@@ -37,6 +38,7 @@ import { INITIAL_SWAP_REQUESTS, INITIAL_AUDIT_LOGS } from './data/swapStore.js';
 import { generateSeedSchedule } from './engine/schedulerEngine.js';
 import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
+import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
 
 export default function App() {
   // 當前登入同仁 (null 表示未登入，預設呈現登入入口與身分切換卡)
@@ -56,6 +58,7 @@ export default function App() {
   const [workHourModel, setWorkHourModel] = useState('REGULAR');
   const [selectedDay, setSelectedDay] = useState(1);
   const [isResignedActive, setIsResignedActive] = useState(false);
+  const [isMonthlyRulesOpen, setIsMonthlyRulesOpen] = useState(false);
 
   // 動態人事主檔 (支援 localStorage 本機持久化，升級 v2 校正 Admin Manager/Staff)
   const [allEmployees, setAllEmployees] = useState(() => {
@@ -166,12 +169,173 @@ export default function App() {
   const [isSettlementPublished, setIsSettlementPublished] = useState(false);
   const [signOffList, setSignOffList] = useState({});
 
+  // Manager 每月排班劃休自訂規則 (max_preferred_days, max_weekend_days 等)
+  const [monthlyCustomRules, setMonthlyCustomRules] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_monthly_custom_rules_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleSaveMonthlyRules = useCallback((newRules) => {
+    setMonthlyCustomRules(prev => {
+      const updated = {
+        ...prev,
+        [currentMonth]: newRules
+      };
+      try {
+        localStorage.setItem('xuelu_monthly_custom_rules_v1', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('localStorage save failed', e);
+      }
+      return updated;
+    });
+  }, [currentMonth]);
+
   // 規則組合
   const currentRules = useMemo(() => ({
     ...DEFAULT_MONTHLY_RULES,
+    ...(monthlyCustomRules[currentMonth] || {}),
     target_year_month: currentMonth,
     work_hour_model: workHourModel
-  }), [currentMonth, workHourModel]);
+  }), [currentMonth, workHourModel, monthlyCustomRules]);
+
+  // 排班微調紀錄狀態 (Schedule Adjustments)
+  const [pendingAdjustments, setPendingAdjustments] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_schedule_adjustments_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('xuelu_schedule_adjustments_v1', JSON.stringify(pendingAdjustments));
+    } catch (e) {
+      console.warn('localStorage save failed', e);
+    }
+  }, [pendingAdjustments]);
+
+  // 儲存微調 (Leader 暫存 / Manager 直接套用)
+  const handleSaveAdjustment = useCallback((adj) => {
+    setPendingAdjustments(prev => {
+      const filtered = prev.filter(a => !(a.emp_id === adj.emp_id && a.day === adj.day));
+      return [...filtered, adj];
+    });
+
+    // 若為 Manager 調整，直接覆寫套用入班表
+    if (adj.status === 'APPROVED_DIRECT') {
+      setScheduleOverrides(prev => ({
+        ...prev,
+        [adj.emp_id]: {
+          ...(prev[adj.emp_id] || {}),
+          [adj.day]: {
+            shift_type: adj.new_shift,
+            station_id: adj.primary_station,
+            note: adj.reason
+          }
+        }
+      }));
+
+      // 若為特休 (AL) 或補休 (CT)，自動在存摺追加事前扣抵流水記錄
+      if (adj.new_shift === 'AL' || adj.new_shift === 'CT') {
+        const isAl = adj.new_shift === 'AL';
+        const newTx = {
+          tx_id: `TX_ADJ_${Date.now()}`,
+          emp_id: adj.emp_id,
+          leave_type: isAl ? 'ANNUAL_LEAVE' : 'COMP_TIME',
+          action: 'DEDUCT',
+          amount: isAl ? -1 : -8,
+          unit: isAl ? 'DAYS' : 'HOURS',
+          date: `${currentMonth}-${String(adj.day).padStart(2, '0')}`,
+          ref_doc_id: adj.adj_id,
+          operator_id: currentUser?.emp_id || 'MANAGER',
+          notes: `排班直接排定請休：${adj.reason}`,
+          timestamp: new Date().toISOString()
+        };
+        setPassbookTransactions(prev => [newTx, ...prev]);
+      }
+    }
+  }, [currentMonth, currentUser]);
+
+  // 組長一鍵上呈微調給 Manager
+  const handleSubmitAdjustmentsToManager = useCallback((stationId) => {
+    setPendingAdjustments(prev => prev.map(adj => {
+      if (adj.status === 'DRAFT_LEADER' && (!stationId || adj.primary_station === stationId)) {
+        return { ...adj, status: 'SUBMITTED' };
+      }
+      return adj;
+    }));
+    alert('已成功將本組班表微調上呈給經理 (Manager) 審核！');
+  }, []);
+
+  // Manager 一鍵全數核准微調並套入大表
+  const handleBatchApproveAdjustments = useCallback((adjList) => {
+    const approvedIds = new Set(adjList.map(a => a.adj_id));
+    setPendingAdjustments(prev => prev.map(a => approvedIds.has(a.adj_id) ? { ...a, status: 'APPROVED' } : a));
+
+    // 批次覆寫 scheduleOverrides
+    setScheduleOverrides(prev => {
+      const nextOverrides = { ...prev };
+      adjList.forEach(adj => {
+        nextOverrides[adj.emp_id] = {
+          ...(nextOverrides[adj.emp_id] || {}),
+          [adj.day]: {
+            shift_type: adj.new_shift,
+            station_id: adj.primary_station,
+            note: adj.reason
+          }
+        };
+      });
+      return nextOverrides;
+    });
+
+    // 批次扣抵特休或補休
+    const newTxs = [];
+    adjList.forEach(adj => {
+      if (adj.new_shift === 'AL' || adj.new_shift === 'CT') {
+        const isAl = adj.new_shift === 'AL';
+        newTxs.push({
+          tx_id: `TX_ADJ_${Date.now()}_${adj.emp_id}_${adj.day}`,
+          emp_id: adj.emp_id,
+          leave_type: isAl ? 'ANNUAL_LEAVE' : 'COMP_TIME',
+          action: 'DEDUCT',
+          amount: isAl ? -1 : -8,
+          unit: isAl ? 'DAYS' : 'HOURS',
+          date: `${currentMonth}-${String(adj.day).padStart(2, '0')}`,
+          ref_doc_id: adj.adj_id,
+          operator_id: currentUser?.emp_id || 'MANAGER',
+          notes: `經理核定排班直接請休：${adj.reason}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    if (newTxs.length > 0) {
+      setPassbookTransactions(prev => [...newTxs, ...prev]);
+    }
+
+    // 記錄不可抹滅之 Audit Log
+    const newLog = {
+      log_id: `LOG_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'SCHEDULE_ADJUSTMENTS_APPROVED',
+      operator_id: currentUser?.emp_id || 'B111155',
+      operator_name: currentUser?.name || '陳鵬宇 (營運長)',
+      notes: `經理核准 ${adjList.length} 筆站點組長上呈之班表微調並正式發布入全館班表`,
+      before_snapshot: null,
+      after_snapshot: adjList
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [currentMonth, currentUser]);
+
+  // 駁回單筆微調
+  const handleRejectAdjustment = useCallback((adjId) => {
+    setPendingAdjustments(prev => prev.map(a => a.adj_id === adjId ? { ...a, status: 'REJECTED' } : a));
+  }, []);
 
   // 離職名冊（測試用）
   const resignationData = useMemo(() => {
@@ -1024,16 +1188,26 @@ export default function App() {
       after_snapshot: null
     };
     setAuditLogs(prev => [newLog, ...prev]);
+
+    // 同步更新至 Google 試算表
+    if (ApiService.isCloudMode()) {
+      ApiService.updatePasswordHash(empId, newPinHash, newSalt).catch(e => console.warn('[雲端同步] 密碼更新失敗:', e));
+    }
   }, [allEmployees]);
 
-  // 重設測試展示資料回出廠值
+  // 重設測試密碼回預設值 (000000) - 絕不覆蓋現有名冊與資料庫
   const handleResetDemoData = useCallback(() => {
-    if (window.confirm('確定要將所有帳號密碼與人事主檔重設回系統出廠預設值嗎？')) {
-      localStorage.removeItem('xuelu_employees_v1');
-      localStorage.removeItem('xuelu_audit_logs_v1');
-      setAllEmployees(EMPLOYEES);
-      setAuditLogs(INITIAL_AUDIT_LOGS);
-      alert('已成功重設為初始預設值！所有帳號密碼已還原為 000000。');
+    if (window.confirm('確定要將所有同仁密碼重設為預設值 (000000) 嗎？\n（此操作僅重設密碼雜湊，不會清除現有人事名冊與雲端資料庫連線）')) {
+      setAllEmployees(prev => prev.map(e => ({
+        ...e,
+        pin_code: '000000',
+        pin_hash: DEFAULT_PIN_HASH,
+        salt: DEFAULT_SALT,
+        is_default_pin: true,
+        failed_attempts: 0,
+        lock_until: null
+      })));
+      alert('已成功將所有同仁密碼重設為預設值 (000000)！現有名冊與雲端資料庫保持完整。');
     }
   }, []);
 
@@ -1075,8 +1249,11 @@ export default function App() {
   const isLeader = currentUser.role === 'Leader';
   const isStaff = currentUser.role === 'Staff';
   const isPT = currentUser.role === 'PT';
-  // 是否具備全館或站點排班調度權（Manager/Admin 具備全域調度權，Leader 具備本組調度權；PT 與 Staff 無調班調度權）
-  const canManageShifts = isManager || isAdmin || isLeader;
+  // 是否具備全館或站點排班調度權（Manager 具備全域調度權，Leader 具備本組調度權；Staff Admin 與基層 Staff/PT 嚴格排除）
+  const canManageShifts = isManager || isLeader;
+
+  // 安全防呆：非 Manager 且非 Leader 嚴格阻擋進入排班總表大矩陣，自動回退我的工作台
+  const effectiveActiveTab = (activeTab === 'SCHEDULE' && !canManageShifts) ? 'MY_DASHBOARD' : activeTab;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -1087,12 +1264,13 @@ export default function App() {
         onMonthChange={setCurrentMonth}
         workHourModel={workHourModel}
         onModelChange={setWorkHourModel}
-        activeTab={activeTab}
+        activeTab={effectiveActiveTab}
         onTabChange={setActiveTab}
         onOpenChangePin={() => { setIsForcedPinChange(false); setIsChangePinOpen(true); }}
         onLogout={handleLogout}
         onOpenCloudModal={() => setIsCloudModalOpen(true)}
         onRefreshFromCloud={handleManualRefreshFromCloud}
+        onOpenRulesModal={() => setIsMonthlyRulesOpen(true)}
         isCloudMode={isCloudMode}
         isValid={validation.isValid}
       />
@@ -1107,7 +1285,7 @@ export default function App() {
         />
 
         {/* TAB 0: 我的專屬工作台 (Personal Dashboard) */}
-        {activeTab === 'MY_DASHBOARD' && (
+        {effectiveActiveTab === 'MY_DASHBOARD' && (
           <MyDashboard
             currentUser={currentUser}
             scheduleMap={effectiveScheduleMap}
@@ -1127,10 +1305,10 @@ export default function App() {
         )}
 
         {/* TAB 1: 全館排班總表 (Schedule Matrix) */}
-        {activeTab === 'SCHEDULE' && (
+        {effectiveActiveTab === 'SCHEDULE' && (
           <>
-            {/* 僅高階主管 Manager 或 系統管理員 Admin 可檢視與操作演算法引擎除錯 */}
-            {(isManager || isAdmin) && (
+            {/* 僅營運高管 Manager 可檢視與操作排班演算法引擎除錯，Staff Admin 嚴格排除 */}
+            {isManager && (
               <EngineDebugger
                 onRunEngine={handleRunEngine}
                 metrics={scheduleResult}
@@ -1180,6 +1358,12 @@ export default function App() {
               shiftTypes={shiftTypes}
               currentSimulatedDate={currentSimulatedDate}
               holidayConsents={holidayConsents}
+              pendingAdjustments={pendingAdjustments}
+              onSaveAdjustment={handleSaveAdjustment}
+              onBatchApproveAdjustments={handleBatchApproveAdjustments}
+              onRejectAdjustment={handleRejectAdjustment}
+              onSubmitAdjustmentsToManager={handleSubmitAdjustmentsToManager}
+              leaveBalances={leaveBalances}
             />
 
             {/* 勞基法合規證明書：僅主管與組長檢視法規審查細項 */}
@@ -1193,7 +1377,7 @@ export default function App() {
         )}
 
         {/* TAB 2: 同仁志願劃休 / 報班門戶 */}
-        {activeTab === 'LEAVE_PORTAL' && (
+        {effectiveActiveTab === 'LEAVE_PORTAL' && (
           <>
             <EmployeeSelector
               employees={allEmployees}
@@ -1238,7 +1422,7 @@ export default function App() {
         )}
 
         {/* TAB 3: 主管劃休衝突透視鏡 */}
-        {activeTab === 'CONFLICTS' && (
+        {effectiveActiveTab === 'CONFLICTS' && (
           <LeaveConflictInspector
             preferences={preferences}
             dailyQuotas={dailyQuotas}
@@ -1248,7 +1432,7 @@ export default function App() {
         )}
 
         {/* TAB 4: 調班申請與二階審核 */}
-        {activeTab === 'SWAPS' && (
+        {effectiveActiveTab === 'SWAPS' && (
           <ShiftSwapPortal
             employees={allEmployees}
             stations={allStations}
@@ -1265,7 +1449,7 @@ export default function App() {
         )}
 
         {/* TAB 5: 主管實勤微調覆核 (HOURS_OVERRIDE) */}
-        {activeTab === 'HOURS_OVERRIDE' && (
+        {effectiveActiveTab === 'HOURS_OVERRIDE' && (
           <ActualHoursOverride
             employees={allEmployees}
             stations={allStations}
@@ -1277,7 +1461,7 @@ export default function App() {
         )}
 
         {/* TAB 6: 人事主檔動態管理 (Personnel Admin) */}
-        {activeTab === 'PERSONNEL' && (
+        {effectiveActiveTab === 'PERSONNEL' && (
           <PersonnelManagement
             employees={allEmployees}
             stations={allStations}
@@ -1289,7 +1473,7 @@ export default function App() {
         )}
 
         {/* TAB 6-2: 營業班別主檔動態維護 (需求 #008 Manager 專屬規劃) */}
-        {activeTab === 'SHIFT_SETTINGS' && (
+        {effectiveActiveTab === 'SHIFT_SETTINGS' && (
           <ShiftMasterManagement
             shiftTypes={shiftTypes}
             onSaveShiftType={handleSaveShiftType}
@@ -1300,7 +1484,7 @@ export default function App() {
         )}
 
         {/* TAB 7: 全年度國定假日專案調移平帳 (年度放假平帳管理) */}
-        {activeTab === 'HOLIDAY_TRANSFER' && (
+        {effectiveActiveTab === 'HOLIDAY_TRANSFER' && (
           <AnnualHolidayTransfer
             employees={allEmployees}
             scheduleMap={effectiveScheduleMap}
@@ -1311,7 +1495,7 @@ export default function App() {
         )}
 
         {/* TAB 8: 排班公平性量化指標與 AI 調優 */}
-        {activeTab === 'FAIRNESS' && (
+        {effectiveActiveTab === 'FAIRNESS' && (
           <FairnessMetricsPanel
             employees={allEmployees}
             scheduleMap={effectiveScheduleMap}
@@ -1321,7 +1505,7 @@ export default function App() {
         )}
 
         {/* TAB 9: 稽核快照與回滾中心 */}
-        {activeTab === 'AUDIT_LOGS' && (
+        {effectiveActiveTab === 'AUDIT_LOGS' && (
           <AuditLogsPanel
             auditLogs={auditLogs}
             onRollback={handleRollback}
@@ -1329,7 +1513,7 @@ export default function App() {
         )}
 
         {/* TAB 10: 考勤月底結算與實勤雙確認閉環 (需求 #004) */}
-        {activeTab === 'MONTHLY_SETTLEMENT' && (
+        {effectiveActiveTab === 'MONTHLY_SETTLEMENT' && (
           <MonthlySettlementPanel
             employees={allEmployees}
             stations={allStations}
@@ -1363,6 +1547,15 @@ export default function App() {
         }}
         onPullFromCloud={handlePullFromCloud}
         onPushToCloud={handlePushToCloud}
+      />
+
+      {/* Manager 每月排班劃休限制設定面板 */}
+      <MonthlyRulesModal
+        isOpen={isMonthlyRulesOpen}
+        onClose={() => setIsMonthlyRulesOpen(false)}
+        rules={currentRules}
+        onSaveRules={handleSaveMonthlyRules}
+        currentMonth={currentMonth}
       />
 
       {/* 底部資訊 */}
