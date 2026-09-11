@@ -347,6 +347,15 @@ export const ApiService = {
     });
   },
 
+  // 站點組長動態選派儲存
+  async saveStationLeader(stationId, leaderEmpId, token = 'session_active') {
+    return this.callRpc('admin.saveStationLeader', {
+      station_id: stationId,
+      leader_emp_id: leaderEmpId,
+      token: token
+    });
+  },
+
   // 一鍵全量同步本地資料至 Google 試算表
   async syncAllToCloud(payload, token = 'session_active') {
     return this.callRpc('admin.syncAll', {

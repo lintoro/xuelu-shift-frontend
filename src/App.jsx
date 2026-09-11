@@ -98,7 +98,24 @@ export default function App() {
       return EMPLOYEES;
     }
   });
-  const [allStations, setAllStations] = useState(STATIONS);
+  // 站點組織主檔 (支援 localStorage 本機持久化，F5 重整保留動態指派組長)
+  const [allStations, setAllStations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_stations_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(st => ({
+            ...st,
+            leader_emp_id: st.leader_emp_id || st.leader_id || null
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('載入站點主檔快取失敗:', e);
+    }
+    return STATIONS;
+  });
 
   // 門戶中選取檢視的同仁身分 (優先讀取當前登入者)
   const [currentEmpId, setCurrentEmpId] = useState(() => {
@@ -1081,7 +1098,22 @@ export default function App() {
         setAllEmployees(data.employees);
       }
       if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
-        setAllStations(data.stations);
+        setAllStations(prev => {
+          const prevMap = Object.fromEntries(prev.map(p => [p.station_id, p.leader_emp_id || p.leader_id]));
+          const normalized = data.stations.map(st => {
+            const cloudLeader = st.leader_emp_id || st.leader_id || '';
+            const leader = (cloudLeader && cloudLeader.trim()) ? cloudLeader.trim() : (prevMap[st.station_id] || null);
+            return {
+              ...st,
+              leader_emp_id: leader,
+              leader_id: leader
+            };
+          });
+          try {
+            localStorage.setItem('xuelu_stations_v1', JSON.stringify(normalized));
+          } catch (e) {}
+          return normalized;
+        });
       }
       if (data.shiftTypes && Array.isArray(data.shiftTypes) && data.shiftTypes.length > 0) {
         const shiftsObj = {};
@@ -1168,7 +1200,17 @@ export default function App() {
   }, []);
 
   const handleUpdateStationLeader = useCallback((stationId, newLeaderId) => {
-    setAllStations(prev => prev.map(st => st.station_id === stationId ? { ...st, leader_emp_id: newLeaderId } : st));
+    setAllStations(prev => {
+      const next = prev.map(st => st.station_id === stationId ? { ...st, leader_emp_id: newLeaderId, leader_id: newLeaderId } : st);
+      try {
+        localStorage.setItem('xuelu_stations_v1', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    if (ApiService.isCloudMode()) {
+      ApiService.saveStationLeader(stationId, newLeaderId).catch(e => console.warn('[雲端同步] 站點組長儲存通知:', e));
+    }
   }, []);
 
   // 營業班別主檔管理回呼 (需求 #008 Manager 專屬規劃與稽核日誌連動)

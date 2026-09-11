@@ -160,6 +160,14 @@ function doPost(e) {
         result = handleSaveShiftTypes(session, params.shift_types);
         break;
 
+      case 'admin.saveStationLeader':
+        var session = validateToken(params.token);
+        if (session.role !== 'Manager' && !session.is_admin) {
+          throw new Error('403 Forbidden: 僅營運高管具備指定組長權限！');
+        }
+        result = handleSaveStationLeader(session, params.station_id, params.leader_emp_id);
+        break;
+
       case 'admin.holidayTransfer':
         var session = validateToken(params.token);
         if (session.role !== 'Manager') {
@@ -350,7 +358,8 @@ function handleGetInitialData(yearMonth, session) {
       weekend_open_shifts: weOpen,
       weekday_primary_min: Number(s[6] || 0),
       weekend_primary_min: Number(s[7] || 0),
-      leader_id: s[8] || ''
+      leader_id: s[8] || '',
+      leader_emp_id: s[8] || ''
     });
   }
 
@@ -959,6 +968,23 @@ function handleSaveShiftTypes(session, shiftTypes) {
 function handleHolidayTransfer(session, transferData) {
   logAuditEvent(session, 'HOLIDAY_TRANSFER', '執行國定假日調移平帳', null, transferData);
   return { success: true };
+}
+
+// 站點組長動態指派儲存至 Stations 工作表
+function handleSaveStationLeader(session, stationId, leaderEmpId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Stations');
+  if (!sheet) return { success: false, message: '找不到 Stations 表單' };
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === stationId) {
+      sheet.getRange(i + 1, 9).setValue(leaderEmpId || '');
+      logAuditEvent(session, 'UPDATE_STATION_LEADER', '主管指派站點【' + data[i][1] + '】組長為 ' + (leaderEmpId || '未指定'), null, { station_id: stationId, leader_emp_id: leaderEmpId });
+      return { success: true, station_id: stationId, leader_emp_id: leaderEmpId };
+    }
+  }
+  return { success: false, message: '找不到對應站點' };
 }
 
 // 全量雙向備份同步函式 (一鍵將本地狀態覆寫至雲端)

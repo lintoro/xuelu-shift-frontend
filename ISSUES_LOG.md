@@ -955,5 +955,48 @@
 
 - **狀態驗收**：`✅ 已徹底加固改寫並通過驗收 (v3.5.2-ui-modal-auth-timeline-delivered)`
 
+---
+
+### 📌 [需求 #030] 各組別排班組長動態選派 F5 重新整理丟失與全選林慶忠問題徹底修復
+
+- **來源反饋**：現場主管操作回報「各組別排班組長設定 按 F5 重登進來就跑掉了，全部變成林慶忠 (B111014)」，附截圖佐證。
+- **根本原因深度排查**：
+  1. **後端與前端欄位屬性名稱不一致（`leader_id` vs `leader_emp_id`）**：
+     - Google Apps Script 後端 `Code.gs` 在 `handleGetInitialData` 中，讀取 `Stations` 工作表第 9 欄時，打包之 JSON 物件鍵值為 `leader_id: s[8] || ''`。
+     - 前端所有介面組件（`STATIONS`、`PersonnelManagement.jsx`、`ScheduleTable.jsx`、`AnomalyAlertBanner.jsx`）全部使用 **`leader_emp_id`**。
+     - 當處於雲端同步模式時，頁面載入/F5 重新整理執行 `handlePullFromCloud()`，從雲端拉取覆寫 `allStations`，導致所有站點的 `station.leader_emp_id` 全變成了 `undefined`！
+  2. **HTML / React `<select>` 的 Fallback 渲染機制**：
+     - 在 `PersonnelManagement.jsx` 中：
+       ```jsx
+       <select value={station.leader_emp_id} onChange=...>
+         {employees.filter(e => !e.is_self_scheduled && e.role !== 'PT').map(...)}
+       </select>
+       ```
+     - 當 `station.leader_emp_id` 為 `undefined`，且選單中無匹配值時，瀏覽器標準渲染行為會強制「選中並顯示第一個 `<option>`」！
+     - 而名冊中第一位符合正職身分的同仁正是 **林慶忠 (B111014)**，導致所有 9 個站點組長全部在畫面上被誤渲染為林慶忠！
+  3. **前端缺少 `localStorage` 持久化與雲端儲存**：
+     - `App.jsx` 的 `allStations` 僅使用記憶體 state（`useState(STATIONS)`），主管在面板變更組長時，`handleUpdateStationLeader` 僅更新記憶體 state，未寫入 `localStorage`，也沒有調用雲端儲存端點。一按 F5 重整，記憶體資料全數遺失。
+- **修復與加固架構**：
+  1. **雙向相容雲端與本地欄位**：
+     - `Code.gs` 的 `handleGetInitialData` 改為同時回傳 `leader_id` 與 `leader_emp_id`。
+     - `App.jsx` 的 `handlePullFromCloud` 在取得 `data.stations` 時，執行正規化 `leader_emp_id: st.leader_emp_id || st.leader_id || null`；若雲端為空值則保留本地指派，絕不強制沖銷。
+  2. **`localStorage` 本機持久化**：
+     - `App.jsx` 的 `allStations` 改為延遲初始化，優先讀取 `localStorage.getItem('xuelu_stations_v1')`。
+     - 主管每次動態指派組長時，`handleUpdateStationLeader` 即時寫入 `localStorage`，並於雲端模式下透過 `ApiService.saveStationLeader` 送交雲端保存。
+  3. **`<select>` 容錯與未指派選項**：
+     - `PersonnelManagement.jsx` 下拉選單 `value` 改為 `station.leader_emp_id || station.leader_id || ''`。
+     - 新增 `<option value="">(未指派/主管統籌)</option>`，徹底杜絕因空值被強制 fallback 到第一筆同仁（林慶忠）的渲染錯誤。
+- **影響檔案清單**：
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/App.jsx`
+  - `src/services/apiService.js`
+  - `src/backend/Code.gs`
+  - `scratch/test_v353_station_leader_persistence.mjs`
+- **驗證成果**：
+  - 自動化單元測試 `test_v353_station_leader_persistence.mjs` 100% 通過（9 大站點預設組長對齊、雲端正規化、主管指派變更與持久化模擬均無誤）。
+  - Lucide 圖標掃描 `check_lucide_imports.mjs` 0 缺失。
+  - 前端專案打包 `npm run build` 0 錯誤順利完成編譯。
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.3-station-leader-persistence-delivered)`
+
 
 

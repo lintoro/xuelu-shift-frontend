@@ -171,26 +171,35 @@ export default function PersonnelManagement({
             <span>各組別當月排班組長 (Leader) 動態選派</span>
           </h3>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300">
-            ★ 每月 10 日開始高管排班設定期：指定完成各組別當月組長
+            ★ 每月 8-10 日主管排班設定期：指定完成各組別當月組長
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
-          {stations.map(station => (
-            <div key={station.station_id} className="bg-white p-2 rounded-lg border border-slate-200">
-              <div className="text-[11px] font-bold text-slate-800 mb-1 truncate">
-                {station.station_name}
+          {stations.map(station => {
+            const currentLeaderId = station.leader_emp_id || station.leader_id || '';
+            return (
+              <div key={station.station_id} className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                <div className="text-[11px] font-bold text-slate-800 mb-1 truncate flex items-center justify-between">
+                  <span>{station.station_name}</span>
+                  {currentLeaderId && (
+                    <span className="text-[9px] px-1 py-0.2 bg-amber-50 text-amber-700 rounded font-bold border border-amber-200">
+                      組長在勤
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={currentLeaderId}
+                  onChange={(e) => onUpdateStationLeader(station.station_id, e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded p-1 text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="">(未指派/主管統籌)</option>
+                  {employees.filter(e => !e.is_self_scheduled && e.role !== 'PT').map(e => (
+                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>
+                  ))}
+                </select>
               </div>
-              <select
-                value={station.leader_emp_id}
-                onChange={(e) => onUpdateStationLeader(station.station_id, e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded p-1 text-[11px] font-semibold text-slate-700 focus:outline-none cursor-pointer"
-              >
-                {employees.filter(e => !e.is_self_scheduled && e.role !== 'PT').map(e => (
-                  <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>
-                ))}
-              </select>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
