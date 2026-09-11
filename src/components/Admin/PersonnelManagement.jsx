@@ -234,7 +234,24 @@ export default function PersonnelManagement({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {employees.map(emp => {
+            {[...employees].sort((a, b) => {
+              // 1. 依主屬站點排序
+              const stA = normalizeStationId(a.primary_station) || '';
+              const stB = normalizeStationId(b.primary_station) || '';
+              if (stA !== stB) return stA.localeCompare(stB);
+
+              // 2. 依業務角色排序 (高管 > 組長 > 正職 > PT，賦予權重排序更直觀，若使用者要 A-Z 則 localeCompare)
+              // 這裡採用自定義權重讓階層更清楚：Manager(1) -> Leader(2) -> Staff(3) -> PT(4)
+              const roleWeight = { 'Manager': 1, 'Leader': 2, 'Staff': 3, 'PT': 4 };
+              const weightA = roleWeight[a.role] || 99;
+              const weightB = roleWeight[b.role] || 99;
+              if (weightA !== weightB) return weightA - weightB;
+
+              // 3. 依工號排序
+              const idA = a.emp_id || '';
+              const idB = b.emp_id || '';
+              return idA.localeCompare(idB);
+            }).map(emp => {
               const isManager = emp.role === 'Manager' || emp.is_self_scheduled;
               const isInactive = emp.status !== 'Active';
 
