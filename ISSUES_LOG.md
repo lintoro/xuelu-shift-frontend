@@ -617,6 +617,8 @@
 | 24 | 2026-09-11 | 【需求 #022】登入除錯彩蛋重構升級：動態角色沙盒切換矩陣 (四身分切換、連動試算表37人名冊、一鍵模擬登入) | `v3.0.0-github-vercel-cicd-deployed` | `v3.1.0-dynamic-role-sandbox-done` | 彩蛋升級為高管/組長/正職/PT 4分頁，動態連動試算表名冊與站點標籤，支援屬性卡即時預覽與一鍵免密切換身分登入，npm run build 通過。 |
 | 26 | 2026-09-11 | 【需求 #024】Staff Admin 林慶忠排班權限嚴格收攏 (排除排班功能、時光機測試器與排班按鈕，落實正職基層與高管 Manager 職責分離) | `v3.2.0-default-cloud-db-connected` | `v3.3.0-staff-admin-schedule-restricted-done` | 嚴格收攏 Staff Admin 排班權限：排班大表隱藏「啟動智慧排班」與「儲存至Google試算表」、表頭隱藏「工時模型切換」、排班時限隱藏「時光機模擬器」、canManageShifts 排除 Staff Admin，站點主檔 ST_ADMIN leader_emp_id 校正為 null，自動化測試 100% 通過，npm run build 通過。 |
 | 27 | 2026-09-11 | 【需求 #025】營運核心 11 大問題統整解決 (林慶忠排班大表徹底消除、密碼持久化與彩蛋解耦、人事職等晉升、時間格式修復、一例一休標註、Manager劃休限制面板、班表微調與組長上呈二階審核) | `v3.3.0-staff-admin-schedule-restricted-done` | `v3.4.0-operations-consolidation-done` | 徹底收攏排班大表頁籤僅限 Manager/Leader；彩蛋重設密碼與名冊資料庫徹底解耦；修改密碼同步寫入 Google 試算表；Code.gs 修正漏存 role Bug；人事彈窗擴充職等 (PT/Staff/Leader/Manager) 晉升與 Admin 權限；站點代碼標準化合併去重；消除圖例 1899 時間渲染異常；實裝 Manager 劃休限制設定面板；班表休假細分「例休 (例)」與「休假 (休)」；實裝格子點擊微調、事前排特休/補休並扣抵存摺、組長微調暫存上呈、Manager 覆核對照一鍵核准發布，單元測試 100% 通過，npm run build 通過。 |
+| 28 | 2026-09-11 | 【維護 #026】修復 Header.jsx 遺漏 HeartHandshake 圖標 import 導致之 Runtime Error | `v3.4.0-operations-consolidation-done` | `v3.4.1-header-hearthandshake-import-fixed` | 補齊 Header.jsx 頂部 import { HeartHandshake }；撰寫 check_lucide_imports.mjs 掃描全系統圖標引用完整性，npm run build 通過並自動發布 Vercel。 |
+
 
 
 ---
