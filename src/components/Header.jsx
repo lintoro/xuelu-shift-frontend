@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap } from 'lucide-react';
+import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap, HeartHandshake } from 'lucide-react';
 
 export default function Header({
   currentUser,
