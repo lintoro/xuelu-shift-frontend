@@ -763,3 +763,88 @@
   - 前端專案打包：`npm run build` 0 錯誤打包編譯成功。
 - **狀態驗收**：`✅ 已徹底修復並通過驗證 (v3.4.0-operations-consolidation-done)`
 
+---
+
+### 📌 [需求 #027] 方洲算理（閉店排班引擎）、假勤解耦、劃休月份鎖定與事前請假二重核可制 (v3.5.0)
+
+- **來源反饋**：主管於營運現場驗收時提出 5 大核心營運演進需求：
+  1. 特休/補休日數不包含在每月固定選休假內（解耦計算）。
+  2. 劃休應只能劃下個月休假，已經排定好的月份不能再申請劃休，改用調班請假模式。
+  3. 請假方法採用二重核可制（同仁送單 $\rightarrow$ 組長初審 $\rightarrow$ 經理終審），且只能請當月未來臨的日子，過去缺勤走實勤覆核。
+  4. 調班與微調理由彈性優化：不剛性必填，提供「主管職權調整」等快捷預設選項與下拉選單。
+  5. 方洲算理（閉店排班模型）：平日營業到 18:00 原則上不排 C 班；假日與特殊日子延長至 19:00 閉店，依站點屬性（是否需要閉店班）動態指派 C 班清帳鎖門。
+
+- **詳細修復與功能實裝方案**：
+
+#### 1. 特休與補休解耦常規劃休額度
+- **問題根因**：原先劃休介面中，特休 (AL) 與補休 (CT) 被納入同仁每月預排 8 天與假日 2 天的配額計算，導致同仁請特休時反而壓縮了法定例休/休息日預選空間。
+- **修復方案**：
+  - 在 `src/components/LeavePortal/RegularStaffPicker.jsx` 中，將劃休配額檢核改為**僅針對常規休假 (OFF)** 做計算（上限 8 天、假日 2 天）。
+  - 特休 (AL) 與 補休 (CT) **獨立依據同仁個人假勤存摺餘額檢核**（剩餘特休天數、剩餘補休時數），只要存摺額度足夠即可額外申請排假，完全不扣減每月常規預選額度。
+
+#### 2. 劃休門戶時限剛性鎖定
+- **問題根因**：同仁若能隨意修改當前或過去月份的劃休偏好，將導致已生成的正式班表與即時出勤紀錄產生衝突混亂。
+- **修復方案**：
+  - 在 `RegularStaffPicker.jsx` 中導入**剛性月份檢核**：劃休門戶限定僅開放「下一個月（Next Month）」。
+  - 若使用者查看當月（如 `2026-09`）或過去月份，系統頂部立即跳出醒目警示橫幅「🔒 該月份班表已排定／發布，劃休功能已鎖定唯讀」，全面禁用點選儲存，並引導同仁改用【📝 線上請假】或【🔄 線上調班】管道辦理異動。
+
+#### 3. 事前線上請假單與二重核可制 (同仁 $\rightarrow$ 組長初審 $\rightarrow$ 經理終審)
+- **問題根因**：原先同仁在排班完成後臨時請假，只能仰賴事後主管在工時覆核時手動扣抵，缺乏嚴謹的事前申請、站點人力協調及經理准駁流。
+- **修復方案**：
+  - **資料結構擴充**：於 `src/data/leaveStore.js` 建立 `INITIAL_LEAVE_APPLICATIONS`，規範單號、日期、請假類別（特休 AL、補休 CT、事假、病假）、審核狀態（`PENDING_LEADER` $\rightarrow$ `PENDING_MANAGER` $\rightarrow$ `APPROVED` / `REJECTED`）與稽核軌跡。
+  - **事前請假申請彈窗 (`src/components/Dashboard/LeaveApplicationModal.jsx`)**：
+    - **時限限制**：限選「當月未來臨之出勤工作日 (`date > today` 且非休假日)」，嚴禁請今日以前之日期；已過去之缺席剛性引導至主管實勤覆核。
+    - **存摺額度即時連動**：選擇特休/補休時，彈窗動態展示個人存摺剩餘時數與可用餘額，餘額不足立即阻擋送出。
+  - **二階線上簽核入口 (`src/components/ShiftSwap/ShiftSwapPortal.jsx`)**：
+    - 新增「同仁事前請假審核」分頁。
+    - **第一階（組長初審）**：站點組長針對站內同仁進行初審，評估站點留守人力是否充足；核准後狀態轉為 `PENDING_MANAGER` 並記錄初審意向。
+    - **第二階（經理終審）**：營運高管進行全場終審放行；點擊「👑 經理終審核准」後，系統**自動將該日班表覆寫為該假別代碼**（AL/CT 等）、**從假勤存摺扣減時數**，並寫入不可抹滅的雙快照審計日誌。
+
+#### 4. 調班與微調理由彈性優化 (取消剛性必填、預設快捷選項)
+- **問題根因**：先前在 `ScheduleTable` 單元格微調與 `ShiftSwapPortal` 調班申請中，理由輸入框設定為 `required` 剛性必填，增加現場管理操作負擔。
+- **修復方案**：
+  - 移除所有 `required` 屬性。
+  - 於單元格微調彈窗預設載入「主管職權調整」，並提供常用下拉快捷選單（「站點人力機動支援」、「同仁行程協調」、「主管職權調整」、「業務特殊需求」），同時保留具體文字輸入彈性。
+  - 於調班申請表單中亦提供快捷理由下拉選單，預設帶入「個人行程協商」或「主管職權調整」。
+
+#### 5. 方洲算理：每日營業時間與閉店排班演算模型
+- **算理模型**：
+  - **營業時間規則**：
+    - 常態平日（週一至週五）：18:00 閉店（全館剛性禁止排 C 班，清潔組排 A 班 08:30~17:30，其餘排 A/B 班）。
+    - 假日（週六、週日）與特殊活動日：延長營業至 19:00 閉店。
+  - **站點閉店屬性 (`STATIONS`)**：
+    - `requires_closing_shift: true`：服務台 (`ST_SERVICE`)、本鋪 (`ST_MAIN_SHOP`)、MSS (`ST_MSS`)、清潔組 (`ST_CLEAN`) 等核心防護與收銀站點，延時閉店日必須指派 C 班 (11:00~19:30) 執行鎖門、對帳、垃圾清運與閉館安檢。
+    - `requires_closing_shift: false`：極限組 (`ST_EXPERIENCE`)、小鋪、餐飲、Gagoo 等體驗與展區站點，於 18:00~19:00 隨人潮清場打烊，不排 C 班，分配 A/B 班以避免無效在勤工時浪費。
+  - **演算引擎實裝 (`src/engine/schedulerEngine.js`)**：
+    - 建立 `selectShiftForStation(station, isExtendedClosing, isClosingSlot)` 決策函式。
+    - 在每日派工迴圈中精準辨識日期營業時間（支援平日/假日預設與 Manager 特殊延時指定 `daily_closing_overrides` / `special_closing_dates`）。
+    - 在指派 C 班時，優先篩選具備 `can_solo` 資格之正職/組長，確保閉館安全防護無空窗。
+  - **管理介面 (`src/components/Admin/MonthlyRulesModal.jsx`)**：
+    - 增設「🏛️ 方洲算理：每日營業時間與閉店班排程」設定區塊，供經理視覺化設定平日/假日預設閉店時間及特定日延時設定。
+
+- **影響檔案清單**：
+  - `src/data/mockMasterData.js`（站點主檔擴充 `requires_closing_shift` 與 `closing_min_staff`；規則主檔擴充閉店時間）
+  - `src/data/leaveStore.js`（新增 `INITIAL_LEAVE_APPLICATIONS` 與假別常數）
+  - `src/engine/schedulerEngine.js`（實裝方洲算理 `selectShiftForStation`、平日禁 C 班、假日延時站點排 C 班、日期格式雙相容）
+  - `src/components/LeavePortal/RegularStaffPicker.jsx`（特休補休解耦劃休配額、當月及過往月份剛性鎖定唯讀與警示）
+  - `src/components/ScheduleTable.jsx`（單元格微調取消必填、提供快捷理由下拉與預設帶入）
+  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`（調班申請取消必填、提供快捷下拉、新增同仁事前請假二階審核介面與標籤修復）
+  - `src/components/Dashboard/LeaveApplicationModal.jsx`（全新建立：同仁事前線上請假單，限選未來排定出勤日，存摺額度即時動態檢核）
+  - `src/components/Dashboard/MyDashboard.jsx`（掛載線上事前請假按鈕與彈窗）
+  - `src/components/Admin/MonthlyRulesModal.jsx`（新增方洲算理營業時間與閉店班視覺化設定欄位）
+  - `src/App.jsx`（管理事前請假狀態、實裝組長初審與經理終審簽核管線、連動覆寫班表與存摺扣減）
+  - `scratch/check_lucide_imports.mjs`（全系統 Lucide 圖標引用防呆掃描腳本）
+  - `scratch/test_v350_closing_and_leaves.mjs`（方洲算理排班引擎單元測試腳本）
+
+- **驗證成果**：
+  - 圖標引用安全掃描 (`check_lucide_imports.mjs`)：全系統圖標引用無任何遺漏，100% 安全。
+  - 方洲算理單元測試 (`test_v350_closing_and_leaves.mjs`)：
+    - 平日（9/1）18:00 閉店：全館 C 班數為 0，完全不排 C 班。
+    - 假日（9/5）19:00 延時：延時核心站點（服務台、本鋪、MSS、清潔）精準指派 C 班。
+    - 特殊平日延時（9/2）：精準動態套用延時算理指派 C 班。
+    - 斷言全數通過（Assertions Passed 100%）。
+  - 前端專案打包：`npm run build` 0 錯誤順利完成編譯（產生生產環境打包檔案）。
+
+- **狀態驗收**：`✅ 已徹底修復並通過驗證 (v3.5.0-leave-policy-closing-solver)`
+
+

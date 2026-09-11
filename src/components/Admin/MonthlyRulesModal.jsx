@@ -13,7 +13,9 @@ export default function MonthlyRulesModal({
     max_preferred_days: rules.max_preferred_days || 4,
     max_weekend_days: rules.max_weekend_days || 1,
     required_off_days: rules.required_off_days || 10,
-    default_daily_quota: rules.default_daily_quota || 2
+    default_daily_quota: rules.default_daily_quota || 2,
+    default_closing_time_weekday: rules.default_closing_time_weekday || '18:00',
+    default_closing_time_weekend: rules.default_closing_time_weekend || '19:00'
   });
   const [feedback, setFeedback] = useState('');
 
@@ -26,9 +28,12 @@ export default function MonthlyRulesModal({
       max_preferred_days: Number(formData.max_preferred_days),
       max_weekend_days: Number(formData.max_weekend_days),
       required_off_days: Number(formData.required_off_days),
-      default_daily_quota: Number(formData.default_daily_quota)
+      default_daily_quota: Number(formData.default_daily_quota),
+      default_closing_time_weekday: formData.default_closing_time_weekday,
+      default_closing_time_weekend: formData.default_closing_time_weekend
     });
-    setFeedback('已成功儲存全月排班劃休限制規則！');
+    setFeedback('已成功儲存全月排班劃休限制規則與閉店時間！');
+
     setTimeout(() => {
       setFeedback('');
       onClose();
@@ -117,7 +122,7 @@ export default function MonthlyRulesModal({
             />
           </div>
 
-          {/* 3. 當月全場應休總天數 */}
+          {/* 3. 當月全場應休總天數與配額 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="font-bold text-slate-700 block mb-1">
@@ -148,6 +153,42 @@ export default function MonthlyRulesModal({
               />
             </div>
           </div>
+
+          {/* 4. 方洲算理：營業時間與閉店班動態調度 */}
+          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
+            <div className="flex items-center space-x-1.5 font-bold text-amber-950 mb-1.5">
+              <span>🏛️ 方洲算理：每日營業時間與閉店班排程</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-[10px] text-amber-800 font-bold block mb-0.5">平日閉店時間</label>
+                <select
+                  value={formData.default_closing_time_weekday || '18:00'}
+                  onChange={(e) => setFormData({ ...formData, default_closing_time_weekday: e.target.value })}
+                  className="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950"
+                >
+                  <option value="18:00">18:00 (剛性不排 C 班)</option>
+                  <option value="19:00">19:00 (延時營業)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-amber-800 font-bold block mb-0.5">假日閉店時間</label>
+                <select
+                  value={formData.default_closing_time_weekend || '19:00'}
+                  onChange={(e) => setFormData({ ...formData, default_closing_time_weekend: e.target.value })}
+                  className="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950"
+                >
+                  <option value="19:00">19:00 (核心站點排 C 班)</option>
+                  <option value="18:00">18:00 (提早打烊不排 C 班)</option>
+                  <option value="20:00">20:00 (大節慶延時)</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-[10px] text-amber-700 leading-tight">
+              • 平日 18:00 閉店時剛性不排晚班 C 班；假日 19:00 閉店時，服務台/收銀/清潔組將指派 C 班鎖門清帳，純體驗展區不排 C 班。
+            </p>
+          </div>
+
 
           <div className="pt-2 flex justify-end space-x-2">
             <button

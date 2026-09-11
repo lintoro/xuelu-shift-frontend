@@ -216,6 +216,14 @@ export function generateSeedSchedule({
     const assignedToday = new Set();
     const maxConsecutiveAllowed = rules.work_hour_model === 'FLEX_4_WEEK' ? 10 : 6;
 
+    // 方洲算理：動態判斷當日營業時間與是否延時閉店 (19:00)
+    const dateStr = `${yearMonth}-${String(day).padStart(2, '0')}`;
+    const closingTime = rules.daily_closing_overrides?.[day] || 
+                        rules.daily_closing_overrides?.[dateStr] || 
+                        rules.special_closing_dates?.[dateStr] || 
+                        (isWeekend ? (rules.default_closing_time_weekend || '19:00') : (rules.default_closing_time_weekday || '18:00'));
+    const isExtendedClosing = closingTime >= '19:00';
+
     // 6.0 勞基法 7 休 1 強制熔斷（連上達標強制今日排休）
     employees.forEach(emp => {
       if (!emp.is_self_scheduled && consecutiveDaysMap[emp.emp_id] >= maxConsecutiveAllowed) {
@@ -285,8 +293,8 @@ export function generateSeedSchedule({
       // 1. 站點組長（若主屬該站）
       const leader = regularStaff.find(e => e.emp_id === station.leader_emp_id);
       if (leader && canWorkToday(leader) && leader.primary_station === station.station_id) {
-        const isFirst = (stationStaffCount[station.station_id] === 0);
-        const shiftCode = selectShiftForStation(station, isWeekend, isFirst);
+        const isClosingSlot = (stationStaffCount[station.station_id] === 0);
+        const shiftCode = selectShiftForStation(station, isExtendedClosing, isClosingSlot);
         assignStaff(leader, station, shiftCode, false);
         stationStaffCount[station.station_id]++;
         if (leader.can_solo) stationHasSolo[station.station_id] = true;
@@ -301,8 +309,8 @@ export function generateSeedSchedule({
 
       for (const staff of primaryStaffList) {
         if (stationStaffCount[station.station_id] >= minRequired) break;
-        const isFirst = (stationStaffCount[station.station_id] === 0);
-        const shiftCode = selectShiftForStation(station, isWeekend, isFirst);
+        const isClosingSlot = (stationStaffCount[station.station_id] === 0);
+        const shiftCode = selectShiftForStation(station, isExtendedClosing, isClosingSlot);
         assignStaff(staff, station, shiftCode, false);
         stationStaffCount[station.station_id]++;
         if (staff.can_solo) stationHasSolo[station.station_id] = true;
@@ -334,8 +342,8 @@ export function generateSeedSchedule({
           if (stationStaffCount[station.station_id] >= minRequired && (!requiresSolo || stationHasSolo[station.station_id])) {
             break;
           }
-          const isFirst = (stationStaffCount[station.station_id] === 0);
-          const shiftCode = selectShiftForStation(station, isWeekend, isFirst);
+          const isClosingSlot = (stationStaffCount[station.station_id] === 0);
+          const shiftCode = selectShiftForStation(station, isExtendedClosing, isClosingSlot);
           assignStaff(sup, station, shiftCode, true);
           stationStaffCount[station.station_id]++;
           if (sup.can_solo) stationHasSolo[station.station_id] = true;
@@ -372,8 +380,8 @@ export function generateSeedSchedule({
             continue;
           }
 
-          const isFirst = (stationStaffCount[station.station_id] === 0);
-          const shiftCode = selectShiftForStation(station, isWeekend, isFirst);
+          const isClosingSlot = (stationStaffCount[station.station_id] === 0);
+          const shiftCode = selectShiftForStation(station, isExtendedClosing, isClosingSlot);
           assignStaff(pt, station, shiftCode, pt.primary_station !== station.station_id);
           stationStaffCount[station.station_id]++;
           if (pt.can_solo) stationHasSolo[station.station_id] = true;
@@ -395,8 +403,8 @@ export function generateSeedSchedule({
 
           const targetStation = needyStation || stations.find(s => s.station_id === emp.primary_station) || stations[0];
           const isSupport = targetStation.station_id !== emp.primary_station;
-          const isFirst = (stationStaffCount[targetStation.station_id] === 0);
-          const shiftCode = selectShiftForStation(targetStation, isWeekend, isFirst);
+          const isClosingSlot = (stationStaffCount[targetStation.station_id] === 0);
+          const shiftCode = selectShiftForStation(targetStation, isExtendedClosing, isClosingSlot);
           assignStaff(emp, targetStation, shiftCode, isSupport);
           stationStaffCount[targetStation.station_id]++;
           if (emp.can_solo) stationHasSolo[targetStation.station_id] = true;
@@ -405,6 +413,7 @@ export function generateSeedSchedule({
         }
       }
     });
+
 
     // PT 未派工者標為 OFF
     ptStaff.forEach(pt => {
@@ -459,12 +468,27 @@ export function generateSeedSchedule({
   };
 }
 
-function selectShiftForStation(station, isWeekend, isFirstStaff) {
-  if (isWeekend) {
-    if (station.station_id === 'ST_CLEAN') return 'B';
-    return isFirstStaff ? 'C' : 'B';
-  } else {
+function selectShiftForStation(station, isExtendedClosing, isClosingSlot) {
+  // 方洲算理：
+  // 1. 若當日為常態閉店 (18:00，如平日或特殊提早打烊)：剛性禁止排 C 班
+  if (!isExtendedClosing) {
     if (station.station_id === 'ST_CLEAN') return 'A';
-    return isFirstStaff ? 'A' : 'B';
+    return isClosingSlot ? 'B' : 'A';
+  }
+
+  // 2. 若當日為延時閉店 (19:00，如假日或特殊延時日)：
+  // 依據站點是否需要閉店班 (requires_closing_shift)
+  const needsClosing = !!station.requires_closing_shift;
+  if (needsClosing) {
+    // 需要閉店班之核心站點 (服務台、收銀本鋪、MSS、清潔等)
+    // 閉店責任名額指派 C 班 (晚班負責 19:00 閉店清帳鎖門)，其餘分配常規 B 班或 A 班
+    if (isClosingSlot) {
+      return 'C';
+    }
+    return station.station_id === 'ST_CLEAN' ? 'B' : 'B';
+  } else {
+    // 不需閉店班之純體驗/展演站點 (提前打烊清場)，不排 C 班，分配 A/B 班以節約無效在勤
+    return isClosingSlot ? 'B' : 'A';
   }
 }
+

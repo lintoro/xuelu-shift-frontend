@@ -25,12 +25,20 @@ export default function RegularStaffPicker({
   // 當前同仁的劃休志願
   const myPrefs = preferences.filter(p => p.emp_id === employee.emp_id);
 
-  // 統計已選天數與週末天數
-  const totalSelected = myPrefs.length;
-  const weekendSelected = myPrefs.filter(p => {
+  // 1. 核心業務分離：特休與補休不占每月固定選休額度 (需求 1)
+  const regularPrefs = myPrefs.filter(p => p.leave_type !== 'AL' && p.leave_type !== 'CT' && p.leave_type !== '特休' && p.leave_type !== '補休');
+  const regularSelected = regularPrefs.length;
+  const regularWeekendSelected = regularPrefs.filter(p => {
     const d = new Date(year, month - 1, p.day).getDay();
     return d === 0 || d === 6;
   }).length;
+
+  const alSelectedCount = myPrefs.filter(p => p.leave_type === 'AL' || p.leave_type === '特休').length;
+  const ctSelectedCount = myPrefs.filter(p => p.leave_type === 'CT' || p.leave_type === '補休').length;
+
+  // 2. 劃休月份剛性鎖定：已排定或非次月月份禁止劃休 (需求 2)
+  // 假定 2026-09 為當前營運發布月份，小於等於 2026-09 或明確標記 is_published 即鎖定
+  const isMonthLocked = rules.is_published || (rules.target_year_month && rules.target_year_month <= '2026-09');
 
   const [activeDay, setActiveDay] = useState(null); // 目前正在編輯的日期
   const [selectedPriority, setSelectedPriority] = useState(1);
@@ -41,7 +49,6 @@ export default function RegularStaffPicker({
 
   // 產生整月日曆格
   const calendarDays = [];
-  // 計算第一天星期幾 (0 = Sun, 1 = Mon, ..., 6 = Sat)
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
 
   // 補前面的空白格
@@ -54,14 +61,10 @@ export default function RegularStaffPicker({
     const dayOfWeek = dateObj.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    // 取得當日每日配額
     const quotaInfo = dailyQuotas[d] || { quota: rules.default_daily_quota || 2, isRestricted: false };
-    // 計算全體已申請人數（不分志願）
     const totalApplicants = allPreferences.filter(p => p.day === d).length;
     const isFull = totalApplicants >= quotaInfo.quota;
     const isRestricted = quotaInfo.quota === 0;
-
-    // 本人是否已選
     const myPref = myPrefs.find(p => p.day === d);
 
     calendarDays.push({
@@ -82,6 +85,13 @@ export default function RegularStaffPicker({
   const handleDayClick = (cell) => {
     if (cell.isEmpty) return;
 
+    // 劃休鎖定檢查 (需求 2)
+    if (isMonthLocked) {
+      setFeedbackMsg(`【${rules.target_year_month || '本月'}】班表已排定定稿，已關閉志願劃休！若有異動請至工作台使用【線上請假】或【線上調班】。`);
+      setTimeout(() => setFeedbackMsg(''), 4500);
+      return;
+    }
+
     if (cell.isRestricted) {
       setFeedbackMsg(`第 ${cell.day} 天為 ${cell.quotaInfo.tag || '營運管制日'}，全員禁休！`);
       setTimeout(() => setFeedbackMsg(''), 3000);
@@ -96,21 +106,8 @@ export default function RegularStaffPicker({
       setCompHours(cell.myPref.comp_hours || 8);
       setNote(cell.myPref.note || '');
     } else {
-      // 新增劃休防呆檢查
-      if (totalSelected >= (rules.max_preferred_days || 4)) {
-        setFeedbackMsg(`已達自選休假上限（每月最多 ${rules.max_preferred_days || 4} 天）！請先取消其他日期`);
-        setTimeout(() => setFeedbackMsg(''), 4000);
-        return;
-      }
-
-      if (cell.isWeekend && weekendSelected >= (rules.max_weekend_days || 1)) {
-        setFeedbackMsg(`已達週末休假上限（每月最多 ${rules.max_weekend_days || 1} 天）！請選週間平日`);
-        setTimeout(() => setFeedbackMsg(''), 4000);
-        return;
-      }
-
+      // 新增日曆格
       setActiveDay(cell.day);
-      // 若當日已滿額，預設建議登記為備選第 2 志願
       setSelectedPriority(cell.isFull ? 2 : 1);
       setSelectedLeaveType('OFF');
       setCompHours(8);
@@ -122,17 +119,51 @@ export default function RegularStaffPicker({
   const handleSaveDayPref = () => {
     if (!activeDay) return;
 
-    // 特休與補休餘額防呆 (需求 #006 方案 A)
-    if (selectedLeaveType === 'AL' && (leaveBalance.annualLeaveDays || 0) <= 0) {
-      setFeedbackMsg('特休假可用天數不足（餘額為 0 天）！無法排定特休。');
+    if (isMonthLocked) {
+      setFeedbackMsg('本月班表已排定定稿，無法變更劃休！請改用線上請假或調班。');
       setTimeout(() => setFeedbackMsg(''), 4000);
       return;
     }
 
-    if (selectedLeaveType === 'CT' && (leaveBalance.compTimeHours || 0) < 8) {
-      setFeedbackMsg(`補休時數不足全日 8 小時（目前可用 ${leaveBalance.compTimeHours || 0} 小時）！無法排定全日補休。`);
-      setTimeout(() => setFeedbackMsg(''), 4000);
-      return;
+    const currentDayPref = myPrefs.find(p => p.day === activeDay);
+    const isSwitchingToRegular = selectedLeaveType === 'OFF';
+    const wasRegular = currentDayPref && (currentDayPref.leave_type === 'OFF' || currentDayPref.leave_type === '自選例休');
+
+    // 1. 若為一般劃休 (OFF)：受限於固定選休天數上限
+    if (isSwitchingToRegular && !wasRegular) {
+      if (regularSelected >= (rules.max_preferred_days || 4)) {
+        setFeedbackMsg(`已達常規自選休假上限（每月最多 ${rules.max_preferred_days || 4} 天）！特休與補休則不在此限。`);
+        setTimeout(() => setFeedbackMsg(''), 4000);
+        return;
+      }
+
+      const activeDateObj = new Date(year, month - 1, activeDay);
+      const isWeekendDay = activeDateObj.getDay() === 0 || activeDateObj.getDay() === 6;
+      if (isWeekendDay && regularWeekendSelected >= (rules.max_weekend_days || 1)) {
+        setFeedbackMsg(`已達常規週末休假上限（每月最多 ${rules.max_weekend_days || 1} 天）！請選週間平日。`);
+        setTimeout(() => setFeedbackMsg(''), 4000);
+        return;
+      }
+    }
+
+    // 2. 若為特休 (AL)：不占固定額度，僅檢核存摺餘額
+    if (selectedLeaveType === 'AL') {
+      const currentAvailableAl = leaveBalance.annualLeaveDays || 0;
+      if (currentAvailableAl <= 0) {
+        setFeedbackMsg('特休假可用天數不足（個人存摺餘額為 0 天）！無法排定特休。');
+        setTimeout(() => setFeedbackMsg(''), 4000);
+        return;
+      }
+    }
+
+    // 3. 若為補休 (CT)：不占固定額度，僅檢核補休存摺
+    if (selectedLeaveType === 'CT') {
+      const currentAvailableCt = leaveBalance.compTimeHours || 0;
+      if (currentAvailableCt < 8) {
+        setFeedbackMsg(`補休時數不足全日 8 小時（目前可用 ${currentAvailableCt} 小時）！無法排定全日補休。`);
+        setTimeout(() => setFeedbackMsg(''), 4000);
+        return;
+      }
     }
 
     const updated = myPrefs.filter(p => p.day !== activeDay);
@@ -147,13 +178,22 @@ export default function RegularStaffPicker({
 
     onSavePreferences(employee.emp_id, updated);
     setActiveDay(null);
-    const leaveLabel = selectedLeaveType === 'AL' ? '法定特休 (扣1天)' : selectedLeaveType === 'CT' ? '彈性補休 (扣8h)' : '常態例休';
-    setFeedbackMsg(`已成功登記 9/${activeDay} 日 ${leaveLabel} 志願意向！`);
+    const leaveLabel = selectedLeaveType === 'AL' 
+      ? '法定特休 (獨立扣存摺，不占劃休額度)' 
+      : selectedLeaveType === 'CT' 
+      ? '彈性補休 (獨立扣存摺，不占劃休額度)' 
+      : '常態例休';
+    setFeedbackMsg(`已成功登記 ${month}/${activeDay} 日 ${leaveLabel} 志願意向！`);
     setTimeout(() => setFeedbackMsg(''), 3500);
   };
 
   // 刪除當日劃休
   const handleDeleteDayPref = (dayToDelete) => {
+    if (isMonthLocked) {
+      setFeedbackMsg('本月班表已排定定稿，無法在此刪除！請改用線上請假或調班。');
+      setTimeout(() => setFeedbackMsg(''), 4000);
+      return;
+    }
     const updated = myPrefs.filter(p => p.day !== dayToDelete);
     onSavePreferences(employee.emp_id, updated);
     if (activeDay === dayToDelete) setActiveDay(null);
@@ -163,69 +203,82 @@ export default function RegularStaffPicker({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
+      {/* 鎖定提示橫幅 (需求 2) */}
+      {isMonthLocked && (
+        <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start space-x-3 text-amber-900">
+          <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-bold">【{rules.target_year_month || '當前月份'}】班表已排定發布 · 志願劃休已截止</span>
+            <p className="mt-0.5 text-amber-700">
+              依營運規範，已排定之月份無法再申請或變更志願劃休。若當月有突發行程或休假需求，請至「我的工作台」使用<strong>【📝 線上請假】</strong>或至<strong>【🔄 線上調班】</strong>提出申請。
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 標題與額度即時儀表 */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100">
         <div>
           <div className="flex items-center space-x-2">
             <HeartHandshake className="w-5 h-5 text-indigo-600" />
             <h2 className="text-base font-bold text-slate-900">
-              {employee.name} 同仁志願序自選排休 (Mobile-First)
+              {employee.name} 同仁自選排休 (支援特休/補休獨立計數)
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            填寫第 1 / 第 2 志願序分流 · 截止日前可自由修改 · 告別秒殺搶休壓力
+            常規自選休假受限於月額度 · 特休與補休直接扣抵個人存摺，不占用固定選休天數
           </p>
         </div>
 
-        {/* 額度進度卡片 */}
-        <div className="flex items-center space-x-3">
-          {/* 自選總天數 */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 min-w-[120px]">
+        {/* 額度進度卡片 (需求 1 獨立呈現) */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* 常規自選天數 */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 min-w-[110px]">
             <div className="flex justify-between text-[11px] text-slate-500 mb-1">
-              <span>自選額度</span>
-              <span className="font-bold text-slate-800">{totalSelected} / {rules.max_preferred_days || 4} 天</span>
+              <span>常規劃休</span>
+              <span className="font-bold text-slate-800">{regularSelected} / {rules.max_preferred_days || 4} 天</span>
             </div>
             <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${
-                  totalSelected >= 4 ? 'bg-amber-500' : 'bg-indigo-600'
+                  regularSelected >= (rules.max_preferred_days || 4) ? 'bg-amber-500' : 'bg-indigo-600'
                 }`}
-                style={{ width: `${(totalSelected / 4) * 100}%` }}
+                style={{ width: `${Math.min(100, (regularSelected / (rules.max_preferred_days || 4)) * 100)}%` }}
               />
             </div>
           </div>
 
           {/* 週末天數 */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 min-w-[110px]">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 min-w-[100px]">
             <div className="flex justify-between text-[11px] text-slate-500 mb-1">
               <span>週末上限</span>
-              <span className={`font-bold ${weekendSelected >= 1 ? 'text-amber-600' : 'text-slate-800'}`}>
-                {weekendSelected} / {rules.max_weekend_days || 1} 天
+              <span className={`font-bold ${regularWeekendSelected >= (rules.max_weekend_days || 1) ? 'text-amber-600' : 'text-slate-800'}`}>
+                {regularWeekendSelected} / {rules.max_weekend_days || 1} 天
               </span>
             </div>
             <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${
-                  weekendSelected >= 1 ? 'bg-amber-500' : 'bg-indigo-600'
+                  regularWeekendSelected >= (rules.max_weekend_days || 1) ? 'bg-amber-500' : 'bg-indigo-600'
                 }`}
-                style={{ width: `${(weekendSelected / 1) * 100}%` }}
+                style={{ width: `${Math.min(100, (regularWeekendSelected / (rules.max_weekend_days || 1)) * 100)}%` }}
               />
             </div>
           </div>
 
-          {/* 特休可用天數 */}
-          <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-2 min-w-[90px] text-center">
-            <div className="text-[10px] text-amber-700 font-bold">特休可用</div>
-            <div className="text-xs font-black text-amber-900 mt-0.5">{leaveBalance.annualLeaveDays || 0} 天整</div>
-          </div>
-
-          {/* 補休可用時數 */}
-          <div className="bg-purple-50/80 border border-purple-200 rounded-lg p-2 min-w-[95px] text-center">
-            <div className="text-[10px] text-purple-700 font-bold">可用補休</div>
-            <div className="text-xs font-black text-purple-900 mt-0.5">{leaveBalance.compTimeHours || 0} 小時</div>
+          {/* 特休/補休獨立卡片 */}
+          <div className="bg-purple-50/60 border border-purple-200 rounded-lg p-2 min-w-[130px]">
+            <div className="text-[11px] text-purple-700 font-bold mb-0.5">
+              個人存摺排假 (不占額度)
+            </div>
+            <div className="text-[11px] text-slate-600 flex items-center space-x-2">
+              <span>特休: <strong className="text-purple-800">{alSelectedCount}天</strong></span>
+              <span>補休: <strong className="text-amber-700">{ctSelectedCount}天</strong></span>
+            </div>
           </div>
         </div>
       </div>
+
 
       {/* 排班時限排程提醒卡片 (Issue #016) */}
       {!timelineCheck.allowed ? (

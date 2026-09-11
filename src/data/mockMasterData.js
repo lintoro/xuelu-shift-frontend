@@ -8,6 +8,8 @@ export const STATIONS = [
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
+    requires_closing_shift: false,
+    closing_min_staff: 0,
     color: 'border-l-indigo-500 bg-indigo-50/30',
     description: '樓面管理、巡檢與機動支援'
   },
@@ -18,6 +20,8 @@ export const STATIONS = [
     min_staff_weekday: 2,
     min_staff_weekend: 4,
     requires_solo_staff: true,
+    requires_closing_shift: true,
+    closing_min_staff: 1,
     color: 'border-l-blue-500 bg-blue-50/30',
     description: '票務收銀與 DIY 教學'
   },
@@ -28,6 +32,8 @@ export const STATIONS = [
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
+    requires_closing_shift: false,
+    closing_min_staff: 0,
     color: 'border-l-cyan-500 bg-cyan-50/30',
     description: '體驗設施安全檢查'
   },
@@ -38,6 +44,8 @@ export const STATIONS = [
     min_staff_weekday: 2,
     min_staff_weekend: 4,
     requires_solo_staff: true,
+    requires_closing_shift: true,
+    closing_min_staff: 1,
     color: 'border-l-teal-500 bg-teal-50/30',
     description: '櫃位商品銷售與收銀'
   },
@@ -48,6 +56,8 @@ export const STATIONS = [
     min_staff_weekday: 2,
     min_staff_weekend: 3,
     requires_solo_staff: true,
+    requires_closing_shift: true,
+    closing_min_staff: 1,
     color: 'border-l-emerald-500 bg-emerald-50/30',
     description: '商品陳列與銷售結帳'
   },
@@ -58,6 +68,8 @@ export const STATIONS = [
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
+    requires_closing_shift: false,
+    closing_min_staff: 0,
     color: 'border-l-amber-500 bg-amber-50/30',
     description: '商品推廣與現場服務'
   },
@@ -68,6 +80,8 @@ export const STATIONS = [
     min_staff_weekday: 2,
     min_staff_weekend: 3,
     requires_solo_staff: false,
+    requires_closing_shift: true,
+    closing_min_staff: 1,
     color: 'border-l-lime-500 bg-lime-50/30',
     description: '環境消毒維護'
   },
@@ -78,6 +92,8 @@ export const STATIONS = [
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
+    requires_closing_shift: false,
+    closing_min_staff: 0,
     color: 'border-l-orange-500 bg-orange-50/30',
     description: '出餐與點餐收銀'
   },
@@ -88,10 +104,13 @@ export const STATIONS = [
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
+    requires_closing_shift: false,
+    closing_min_staff: 0,
     color: 'border-l-purple-500 bg-purple-50/30',
     description: '家具解說與體驗導引'
   }
 ];
+
 
 // 核心同仁名冊：落實業務角色 (role) 與系統權限 (is_admin) 雙軌解耦
 export const EMPLOYEES = [
@@ -523,8 +542,12 @@ export const DEFAULT_MONTHLY_RULES = {
   default_daily_quota: 2,
   work_hour_model: 'REGULAR',
   max_overtime_hours: 46,
-  overtime_warning_threshold: 40
+  overtime_warning_threshold: 40,
+  default_closing_time_weekday: '18:00',
+  default_closing_time_weekend: '19:00',
+  daily_closing_overrides: {} // 格式: { [day]: '18:00' | '19:00' }
 };
+
 
 // 跨月邊界快取（模擬 2026年8月最後 7 天出勤數據）
 export const MOCK_MONTH_BORDERS = {

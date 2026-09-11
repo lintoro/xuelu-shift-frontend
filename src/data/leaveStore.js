@@ -163,3 +163,53 @@ export const INITIAL_PASSBOOK_TRANSACTIONS = [
   }
 ];
 
+// 線上請假申請單初始資料池（事前請假、限當月未來日子、二重核可制）
+export const INITIAL_LEAVE_APPLICATIONS = [
+  {
+    app_id: 'LA-202609-001',
+    emp_id: 'B113089', // 張舒扉
+    emp_name: '張舒扉',
+    station_id: 'ST_MAIN_SHOP',
+    date: '2026-09-24', // 當月未來臨的排班日
+    leave_type: 'AL',   // 特休假
+    hours: 8,
+    days: 1,
+    reason: '家中有重要親友婚慶需返鄉',
+    status: 'PENDING_LEADER', // 待組長初審
+    first_reviewer_id: null,
+    first_review_time: null,
+    first_review_notes: '',
+    final_reviewer_id: null,
+    final_review_time: null,
+    final_review_notes: '',
+    created_at: '2026-09-11 14:20'
+  },
+  {
+    app_id: 'LA-202609-002',
+    emp_id: 'B114081', // 劉宗哲
+    emp_name: '劉宗哲',
+    station_id: 'ST_SERVICE',
+    date: '2026-09-28',
+    leave_type: 'CT',   // 補休假
+    hours: 8,
+    days: 1,
+    reason: '補休使用',
+    status: 'PENDING_MANAGER', // 已過組長初審，待主管終審
+    first_reviewer_id: 'B112001', // 李俐旻核准
+    first_review_time: '2026-09-11 15:30',
+    first_review_notes: '當日本組服務台人力充足，同意上呈',
+    final_reviewer_id: null,
+    final_review_time: null,
+    final_review_notes: '',
+    created_at: '2026-09-11 10:15'
+  }
+];
+
+export const LEAVE_TYPE_LABELS = {
+  AL: { label: '特休假 (AL)', unit: '天', deductCategory: 'ANNUAL_LEAVE', color: 'bg-purple-100 text-purple-700 border-purple-300' },
+  CT: { label: '補休假 (CT)', unit: '小時', deductCategory: 'COMP_TIME', color: 'bg-amber-100 text-amber-700 border-amber-300' },
+  PERSONAL: { label: '事假 (扣全薪)', unit: '天', deductCategory: 'PERSONAL_LEAVE', color: 'bg-rose-100 text-rose-700 border-rose-300' },
+  SICK: { label: '病假 (扣半薪)', unit: '天', deductCategory: 'SICK_LEAVE', color: 'bg-blue-100 text-blue-700 border-blue-300' }
+};
+
+

@@ -3,6 +3,7 @@ import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCir
 import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
 import { checkEmployeeHolidayConsent } from '../../data/holidayTransferStore.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
+import LeaveApplicationModal from './LeaveApplicationModal.jsx';
 
 export default function MyDashboard({
   currentUser,
@@ -18,10 +19,13 @@ export default function MyDashboard({
   onSignHolidayConsent,
   onSignOff,
   onExportMyIcs,
-  onNavigateTab
+  onNavigateTab,
+  onSubmitLeaveApplication
 }) {
   const [isPassbookOpen, setIsPassbookOpen] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const totalDays = rules.days_in_month || 30;
+
   const yearMonth = rules.target_year_month || '2026-09';
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
   const balance = leaveBalances[currentUser.emp_id] || { annualLeaveDays: 0, compTimeHours: 0 };
@@ -93,12 +97,20 @@ export default function MyDashboard({
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={() => setIsLeaveModalOpen(true)}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 border border-amber-400 text-white font-black text-xs shadow-md transition-all cursor-pointer active:scale-95 animate-pulse"
+            >
+              <span>📝 線上請假申請 (事前)</span>
+            </button>
+
+            <button
               onClick={() => onNavigateTab && onNavigateTab('SWAPS')}
               className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-purple-500/30 hover:bg-purple-500/50 border border-purple-300/40 text-white font-bold text-xs backdrop-blur-xs transition-all cursor-pointer active:scale-95 shadow-xs"
             >
               <ArrowLeftRight className="w-3.5 h-3.5 text-purple-200" />
               <span>🔄 申請個人自調挪休</span>
             </button>
+
 
             <button
               onClick={() => onNavigateTab && onNavigateTab('SWAPS')}
@@ -428,6 +440,18 @@ export default function MyDashboard({
           onClose={() => setIsPassbookOpen(false)}
         />
       )}
+
+      {/* 線上請假申請彈窗 (二重核可制、限未來臨日子) */}
+      <LeaveApplicationModal
+        isOpen={isLeaveModalOpen}
+        onClose={() => setIsLeaveModalOpen(false)}
+        currentUser={currentUser}
+        scheduleMap={scheduleMap}
+        rules={rules}
+        leaveBalances={leaveBalances}
+        onSubmitLeaveApplication={onSubmitLeaveApplication}
+      />
     </div>
   );
 }
+

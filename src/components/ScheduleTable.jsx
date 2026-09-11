@@ -113,8 +113,9 @@ export default function ScheduleTable({
       existingAdj
     });
     setNewShiftCode(initialCode);
-    setAdjustmentReason(existingAdj ? existingAdj.reason : '');
+    setAdjustmentReason(existingAdj ? existingAdj.reason : (isManager ? '主管職權調整' : '因應人流動態調度'));
   };
+
 
   // 送出單格微調暫存
   const handleSaveAdjustmentSubmit = (e) => {
@@ -600,19 +601,43 @@ export default function ScheduleTable({
                 </select>
               </div>
 
-              {/* 微調原因 */}
+              {/* 微調原因 (快捷下拉選單 + 預設載入，非剛性必填) */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">微調調整原因 / 說明</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="如：站點尖峰支援調整、同仁排特休..."
-                  value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                />
+                <label className="font-bold text-slate-700 block mb-1">
+                  微調原因 / 說明 (可由下拉快速帶入或手動輸入)
+                </label>
+                <div className="space-y-1.5">
+                  <select
+                    value={adjustmentReason}
+                    onChange={(e) => {
+                      if (e.target.value === 'CUSTOM') {
+                        setAdjustmentReason('');
+                      } else {
+                        setAdjustmentReason(e.target.value);
+                      }
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-medium"
+                  >
+                    <option value="主管職權調整">🎯 主管職權調整 (預設)</option>
+                    <option value="因應人流動態調度">👥 因應人流動態調度</option>
+                    <option value="站點人力平衡支援">⚖️ 站點人力平衡支援</option>
+                    <option value="現場臨時營運需求">⚡ 現場臨時營運需求</option>
+                    <option value="同仁事前請假轉換">📝 同仁事前請假轉換 (特休/補休)</option>
+                    <option value="專長/Solo配置微調">⭐ 專長/Solo配置微調</option>
+                    <option value="CUSTOM">✏️ 其他（手動輸入理由）</option>
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="若選「其他」或需補充，可在此輸入具體說明..."
+                    value={adjustmentReason}
+                    onChange={(e) => setAdjustmentReason(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white"
+                  />
+                </div>
               </div>
             </div>
+
 
             <div className="flex justify-end space-x-2">
               <button

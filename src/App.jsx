@@ -32,9 +32,11 @@ import {
   INITIAL_DAILY_QUOTAS,
   INITIAL_PREFERENCES,
   INITIAL_PT_AVAILABILITY,
-  INITIAL_PASSBOOK_TRANSACTIONS
+  INITIAL_PASSBOOK_TRANSACTIONS,
+  INITIAL_LEAVE_APPLICATIONS
 } from './data/leaveStore.js';
 import { INITIAL_SWAP_REQUESTS, INITIAL_AUDIT_LOGS } from './data/swapStore.js';
+
 import { generateSeedSchedule } from './engine/schedulerEngine.js';
 import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
@@ -91,6 +93,23 @@ export default function App() {
 
   // 調班申請清單與不可抹滅稽核日誌 (支援 localStorage 持久化)
   const [swapRequests, setSwapRequests] = useState(INITIAL_SWAP_REQUESTS);
+  const [leaveApplications, setLeaveApplications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_leave_applications_v1');
+      return saved ? JSON.parse(saved) : INITIAL_LEAVE_APPLICATIONS;
+    } catch {
+      return INITIAL_LEAVE_APPLICATIONS;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('xuelu_leave_applications_v1', JSON.stringify(leaveApplications));
+    } catch (e) {
+      console.warn('localStorage save failed', e);
+    }
+  }, [leaveApplications]);
+
   const [auditLogs, setAuditLogs] = useState(() => {
     try {
       const saved = localStorage.getItem('xuelu_audit_logs_v1');
@@ -99,6 +118,7 @@ export default function App() {
       return INITIAL_AUDIT_LOGS;
     }
   });
+
 
   // 自動同步至 localStorage
   React.useEffect(() => {
@@ -336,6 +356,127 @@ export default function App() {
   const handleRejectAdjustment = useCallback((adjId) => {
     setPendingAdjustments(prev => prev.map(a => a.adj_id === adjId ? { ...a, status: 'REJECTED' } : a));
   }, []);
+
+  // 線上事前請假三部曲：同仁申請、組長初審、經理終審 (需求 3)
+  const handleSubmitLeaveApplication = useCallback((newApp) => {
+    setLeaveApplications(prev => [newApp, ...prev]);
+    alert(`已成功送出【${newApp.emp_name}】於 ${newApp.date} 的請假單，已進入二重核可簽核管線！`);
+  }, []);
+
+  const handleFirstReviewLeave = useCallback((appId, outcome, notes) => {
+    setLeaveApplications(prev => prev.map(app => {
+      if (app.app_id === appId) {
+        return {
+          ...app,
+          status: outcome === 'APPROVED' ? 'PENDING_MANAGER' : 'REJECTED',
+          first_reviewer_id: currentUser?.emp_id || 'LEADER',
+          first_review_time: new Date().toLocaleString('zh-TW'),
+          first_review_notes: notes || (outcome === 'APPROVED' ? '站點組長初審通過' : '組長退回')
+        };
+      }
+      return app;
+    }));
+    alert(outcome === 'APPROVED' ? '組長初審通過，已呈核營運主管 (Manager) 終審！' : '已退回該請假單。');
+  }, [currentUser]);
+
+  const handleFinalApproveLeave = useCallback((appId, outcome, notes) => {
+    setLeaveApplications(prev => prev.map(app => {
+      if (app.app_id === appId) {
+        if (outcome === 'APPROVED') {
+          // 覆寫班表
+          setScheduleOverrides(prevOverrides => ({
+            ...prevOverrides,
+            [app.emp_id]: {
+              ...(prevOverrides[app.emp_id] || {}),
+              [app.day]: {
+                shift_type: app.leave_type,
+                station_id: null,
+                work_hours: 0,
+                note: `事前請假核准 (${app.leave_type === 'AL' ? '特休' : app.leave_type === 'CT' ? '補休' : app.leave_type === 'PERSONAL' ? '事假' : '病假'})`
+              }
+            }
+          }));
+
+          // 特休/補休存摺連動扣抵
+          if (app.leave_type === 'AL') {
+            setLeaveBalances(prev => ({
+              ...prev,
+              [app.emp_id]: {
+                ...prev[app.emp_id],
+                annualLeaveDays: Math.max(0, (prev[app.emp_id]?.annualLeaveDays || 0) - 1)
+              }
+            }));
+            setPassbookTransactions(prev => [
+              {
+                tx_id: `TX_LA_${Date.now()}`,
+                emp_id: app.emp_id,
+                category: 'ANNUAL_LEAVE',
+                date: app.date,
+                action: 'DEDUCT',
+                title: '事前請假核扣特休',
+                amount: -1,
+                unit: '天',
+                balance_after: Math.max(0, (leaveBalances[app.emp_id]?.annualLeaveDays || 0) - 1),
+                ref_no: app.app_id,
+                notes: `請假申請單 ${app.app_id} 終審核定扣特休 1 天`
+              },
+              ...prev
+            ]);
+          } else if (app.leave_type === 'CT') {
+            setLeaveBalances(prev => ({
+              ...prev,
+              [app.emp_id]: {
+                ...prev[app.emp_id],
+                compTimeHours: Math.max(0, (prev[app.emp_id]?.compTimeHours || 0) - 8)
+              }
+            }));
+            setPassbookTransactions(prev => [
+              {
+                tx_id: `TX_LA_${Date.now()}`,
+                emp_id: app.emp_id,
+                category: 'COMP_TIME',
+                date: app.date,
+                action: 'DEDUCT',
+                title: '事前請假核扣補休',
+                amount: -8,
+                unit: '小時',
+                balance_after: Math.max(0, (leaveBalances[app.emp_id]?.compTimeHours || 0) - 8),
+                ref_no: app.app_id,
+                notes: `請假申請單 ${app.app_id} 終審核定扣補休 8 小時`
+              },
+              ...prev
+            ]);
+          }
+
+          // 寫入稽核日誌
+          setAuditLogs(prev => [
+            {
+              log_id: `LOG_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              action_type: 'LEAVE_APPLICATION_APPROVED',
+              operator_id: currentUser?.emp_id || 'MANAGER',
+              operator_name: currentUser?.name || '陳鵬宇 (營運長)',
+              notes: `終審核准同仁【${app.emp_name}】於 ${app.date} 請假 (${app.leave_type})，已即時覆寫全館班表並扣抵個人假勤存摺`,
+              before_snapshot: null,
+              after_snapshot: app
+            },
+            ...prev
+          ]);
+        }
+
+        return {
+          ...app,
+          status: outcome === 'APPROVED' ? 'APPROVED' : 'REJECTED',
+          final_reviewer_id: currentUser?.emp_id || 'MANAGER',
+          final_review_time: new Date().toLocaleString('zh-TW'),
+          final_review_notes: notes || (outcome === 'APPROVED' ? '營運高管終審核可' : '營運高管駁回')
+        };
+      }
+      return app;
+    }));
+    alert(outcome === 'APPROVED' ? '營運主管已終審核可！已自動寫入全館班表並完成存摺沖抵。' : '已駁回該請假單。');
+  }, [currentUser, leaveBalances]);
+
 
   // 離職名冊（測試用）
   const resignationData = useMemo(() => {
@@ -1301,8 +1442,10 @@ export default function App() {
             onSignOff={handleEmployeeSignOff}
             onExportMyIcs={handleExportMyIcs}
             onNavigateTab={setActiveTab}
+            onSubmitLeaveApplication={handleSubmitLeaveApplication}
           />
         )}
+
 
         {/* TAB 1: 全館排班總表 (Schedule Matrix) */}
         {effectiveActiveTab === 'SCHEDULE' && (
@@ -1431,7 +1574,7 @@ export default function App() {
           />
         )}
 
-        {/* TAB 4: 調班申請與二階審核 */}
+        {/* TAB 4: 調班申請與事前請假二階審核 */}
         {effectiveActiveTab === 'SWAPS' && (
           <ShiftSwapPortal
             employees={allEmployees}
@@ -1445,6 +1588,9 @@ export default function App() {
             currentEmpId={currentUser.emp_id}
             currentUser={currentUser}
             shiftTypes={shiftTypes}
+            leaveApplications={leaveApplications}
+            onFirstReviewLeave={handleFirstReviewLeave}
+            onFinalApproveLeave={handleFinalApproveLeave}
           />
         )}
 

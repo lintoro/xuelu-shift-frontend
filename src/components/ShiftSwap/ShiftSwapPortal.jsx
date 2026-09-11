@@ -30,6 +30,9 @@ export default function ShiftSwapPortal({
   onAddSwapRequest,
   onFirstReview,
   onFinalApprove,
+  leaveApplications = [],
+  onFirstReviewLeave,
+  onFinalApproveLeave,
   currentEmpId,
   currentUser,
   shiftTypes = SHIFT_TYPES
@@ -44,8 +47,12 @@ export default function ShiftSwapPortal({
   const canFirstReview = isLeader || isManager || isAdmin;
   const canFinalApprove = isManager || isAdmin;
 
+  // 核決進度中心分頁：SWAPS (調班) 或 LEAVES (事前請假)
+  const [reviewTab, setReviewTab] = useState('SWAPS');
+
   // 申請模式：SWAP (雙人對調) 或 SELF_RESCHEDULE (個人自調挪休)
   const [swapType, setSwapType] = useState('SWAP');
+
 
   // 表單狀態
   const [targetEmpId, setTargetEmpId] = useState(
@@ -446,24 +453,56 @@ export default function ShiftSwapPortal({
             </div>
           )}
 
-          {/* 事由與即時安全鎖預檢指示 */}
+          {/* 事由與即時安全鎖預檢指示 (快捷下拉選單 + 預設載入，非剛性必填) */}
           <div className="mb-4">
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              {swapType === 'SELF_RESCHEDULE' ? '個人挪休原因 (必填)' : '雙人對調事由 (必填)'}
+              {swapType === 'SELF_RESCHEDULE' ? '個人挪休原因 (可由下拉快速帶入或手動輸入)' : '調班事由說明 (可由下拉快速帶入或手動輸入)'}
             </label>
-            <input
-              type="text"
-              required
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={
-                swapType === 'SELF_RESCHEDULE'
-                  ? '請填寫挪休事由，如：家庭臨時照顧需求，申請將 9/10 出勤改至 9/14 到班...'
-                  : '請填寫調班原因，如：參加外部培訓、個人行程調配...'
-              }
-              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-            />
+            <div className="space-y-1.5">
+              <select
+                value={reason}
+                onChange={(e) => {
+                  if (e.target.value === 'CUSTOM') {
+                    setReason('');
+                  } else {
+                    setReason(e.target.value);
+                  }
+                }}
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-medium cursor-pointer"
+              >
+                {swapType === 'SELF_RESCHEDULE' ? (
+                  <>
+                    <option value="個人行程自調挪休">🗓️ 個人行程自調挪休 (預設)</option>
+                    <option value="家庭臨時照護需求">🏠 家庭臨時照護需求</option>
+                    <option value="配合站點人流挪休">👥 配合站點人流挪休</option>
+                    <option value="進修研習課程改期">📚 進修研習課程改期</option>
+                    <option value="CUSTOM">✏️ 其他（手動輸入事由）</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="個人行程協商">🤝 個人行程協商 (預設)</option>
+                    <option value="家庭突發狀況調配">🏠 家庭突發狀況調配</option>
+                    <option value="同仁互助調班">🔄 同仁互助調班</option>
+                    <option value="跨組專長支援調換">⭐ 跨組專長支援調換</option>
+                    <option value="CUSTOM">✏️ 其他（手動輸入事由）</option>
+                  </>
+                )}
+              </select>
+
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={
+                  swapType === 'SELF_RESCHEDULE'
+                    ? '若選「其他」或需補充，可在此輸入具體說明...'
+                    : '若選「其他」或需補充，可在此輸入具體說明...'
+                }
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
           </div>
+
 
           {/* 安全預檢結果卡片 (支援勞基法剛性阻擋 vs 跨組特例軟性放行) */}
           {!precheckResult.isSafe ? (
@@ -538,290 +577,311 @@ export default function ShiftSwapPortal({
         </form>
       </div>
 
-      {/* 區塊 2: 二階核決清單 (初審 / 終審) */}
+      {/* 區塊 2: 二階核決清單 (調班/挪休 vs 同仁事前請假) */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-slate-100">
-          <FileCheck className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-base font-bold text-slate-900">二階核決簽核進度中心</h2>
-          <span className="text-xs text-slate-500">
-            第一階：組長初審 (First Review) → 第二階：主管終審 (Final Approval)
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center space-x-2">
+            <FileCheck className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-base font-bold text-slate-900">二階核決簽核進度中心</h2>
+          </div>
+
+          {/* 核決分頁切換：調班 vs 請假 */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-lg text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setReviewTab('SWAPS')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                reviewTab === 'SWAPS'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔄 線上調班/挪休 ({swapRequests.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReviewTab('LEAVES')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                reviewTab === 'LEAVES'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              📝 同仁事前請假 ({leaveApplications.length})
+            </button>
+          </div>
         </div>
 
-        {swapRequests.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-400">
-            目前無待核決之調班單
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {swapRequests.map(req => {
-              const isApproved = req.status === 'APPROVED';
-              const isRejected = req.status === 'REJECTED';
-              const isPendingFirst = req.status === 'PENDING_FIRST_REVIEW';
-              const isPendingFinal = req.status === 'PENDING_FINAL_REVIEW';
-              const isSelf = req.type === 'SELF_RESCHEDULE';
+        {/* 分頁 A: 線上調班/挪休清單 */}
+        {reviewTab === 'SWAPS' && (
+          swapRequests.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              目前無待核決之調班單
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {swapRequests.map(req => {
+                const isApproved = req.status === 'APPROVED';
+                const isRejected = req.status === 'REJECTED';
+                const isPendingFirst = req.status === 'PENDING_FIRST_REVIEW';
+                const isPendingFinal = req.status === 'PENDING_FINAL_REVIEW';
+                const isSelf = req.type === 'SELF_RESCHEDULE';
 
-              return (
-                <div
-                  key={req.swap_id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isApproved
-                      ? 'bg-emerald-50/40 border-emerald-200'
-                      : isRejected
-                      ? 'bg-slate-50 border-slate-200 opacity-60'
-                      : 'bg-white border-slate-200 shadow-xs'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-                    <div className="flex items-center space-x-2">
-                      {(() => {
-                        const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && !isApproved && !isRejected);
-                        return (
-                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                            isApproved
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : isRejected
-                              ? 'bg-rose-100 text-rose-800'
-                              : isPendingAdminVerify
-                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                              : isPendingFirst
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-purple-100 text-purple-800'
-                          }`}>
-                            {isApproved ? '已生效' : isRejected ? '已駁回' : isPendingAdminVerify ? '待Admin備查' : isPendingFirst ? '待組長初審' : '待主管終審'}
-                          </span>
-                        );
-                      })()}
+                return (
+                  <div
+                    key={req.swap_id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isApproved
+                        ? 'bg-emerald-50/40 border-emerald-200'
+                        : isRejected
+                        ? 'bg-slate-50 border-slate-200 opacity-60'
+                        : 'bg-white border-slate-200 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center space-x-2">
+                        {(() => {
+                          const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && !isApproved && !isRejected);
+                          return (
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isRejected
+                                ? 'bg-rose-100 text-rose-800'
+                                : isPendingAdminVerify
+                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                : isPendingFirst
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {isApproved ? '已生效' : isRejected ? '已駁回' : isPendingAdminVerify ? '待Admin備查' : isPendingFirst ? '待組長初審' : '待主管終審'}
+                            </span>
+                          );
+                        })()}
 
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        isSelf ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {isSelf ? '個人自調挪休' : '雙人班表對調'}
-                      </span>
-
-                      {req.is_manager_self_declared && (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-50 text-purple-900 border border-purple-300 flex items-center space-x-1 shadow-2xs">
-                          <span>👑 最高主管自主申報 (待行政合規備查)</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          isSelf ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {isSelf ? '個人自調挪休' : '雙人班表對調'}
                         </span>
-                      )}
 
-                      {req.is_special_swap && (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
-                          <AlertTriangle className="w-3 h-3 text-amber-600" />
-                          <span>⚠️ 跨組特例 (需組長高管特准)</span>
-                        </span>
-                      )}
-
-                      <span className="text-xs font-extrabold text-slate-900">
-                        {isSelf ? (
-                          <span>
-                            {req.applicant_name}：9/{req.applicant_day} (原{req.applicant_shift}班改休假) ⇄ 9/{req.target_day} (原休假改出勤{req.target_shift}班)
-                          </span>
-                        ) : (
-                          <span>
-                            {req.applicant_name} (9/{req.applicant_day} {req.applicant_shift}班) ⇄ {req.target_name} (9/{req.target_day} {req.target_shift}班)
+                        {req.is_manager_self_declared && (
+                          <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-50 text-purple-900 border border-purple-300 flex items-center space-x-1 shadow-2xs">
+                            <span>👑 最高主管自主申報 (待行政合規備查)</span>
                           </span>
                         )}
+
+                        {req.is_special_swap && (
+                          <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            <span>⚠️ 跨組特例 (需組長高管特准)</span>
+                          </span>
+                        )}
+
+                        <span className="text-xs font-extrabold text-slate-900">
+                          {isSelf ? (
+                            <span>
+                              {req.applicant_name}：9/{req.applicant_day} (原{req.applicant_shift}班改休假) ⇄ 9/{req.target_day} (原休假改出勤{req.target_shift}班)
+                            </span>
+                          ) : (
+                            <span>
+                              {req.applicant_name} (9/{req.applicant_day} 原{req.applicant_shift}班) ⇄ {req.target_name} (9/{req.target_day} 原{req.target_shift}班)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <span className="text-[11px] text-slate-400">
+                        申請單號: {req.swap_id}
                       </span>
                     </div>
 
-                    <span className="text-[11px] text-slate-400">
-                      申請時間: {new Date(req.created_at).toLocaleString('zh-TW')}
-                    </span>
-                  </div>
-
-                  {req.is_special_swap && req.special_warnings?.length > 0 && (
-                    <div className="mb-2.5 p-2.5 bg-amber-50/90 rounded-lg border border-amber-200 text-[11px] text-amber-900">
-                      <div className="font-bold flex items-center space-x-1 mb-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                        <span>特例調班審核提示（無常規支援資格或現場缺Solo人員）：</span>
-                      </div>
-                      <ul className="list-disc pl-4 space-y-0.5">
-                        {req.special_warnings.map((w, idx) => (
-                          <li key={idx}>{w}</li>
-                        ))}
-                      </ul>
+                    <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg mb-3">
+                      <strong>申請原因：</strong>{req.reason || '無說明'}
                     </div>
-                  )}
 
-                  <div className="text-xs text-slate-600 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    事由: {req.reason}
-                  </div>
-
-                  {/* 二階管線進度條與審核按鈕 */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-                    {/* 管線標籤 */}
-                    {req.is_manager_self_declared ? (
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-500">業務決策 (最高主管):</span>
-                          <span className="font-bold text-purple-700">✓ 主管自主申報</span>
-                        </div>
-                        <span>→</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-500">行政備查 (Admin):</span>
-                          <span className={`font-bold ${
-                            isApproved ? 'text-emerald-600' : isRejected ? 'text-rose-600' : 'text-amber-600'
-                          }`}>
-                            {isApproved ? '✓ 已備查歸檔' : isRejected ? '已退回' : '待合規歸檔'}
-                          </span>
-                        </div>
+                    {/* 審核操作按鈕 */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                      <div className="text-slate-500 text-[11px]">
+                        {req.created_at ? `發起時間：${req.created_at.replace('T', ' ').substring(0, 16)}` : ''}
                       </div>
-                    ) : (
-                      <div className="flex items-center space-x-4">
-                        {/* 初審標籤 */}
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-500">初審 (站點組長):</span>
-                          <span className={`font-bold ${
-                            req.first_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'
-                          }`}>
-                            {req.first_review.status === 'APPROVED' ? '✓ 通過' : '審核中'}
-                          </span>
-                        </div>
 
-                        <span>→</span>
+                      <div className="flex items-center space-x-2">
+                        {/* 初審按鈕 (Leader/Manager) */}
+                        {isPendingFirst && canFirstReview && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onFirstReview && onFirstReview(req.swap_id, 'REJECTED', '組長退回')}
+                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
+                            >
+                              駁回
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onFirstReview && onFirstReview(req.swap_id, 'APPROVED', '組長初審通過')}
+                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs"
+                            >
+                              初審核准 (呈核高管)
+                            </button>
+                          </>
+                        )}
 
-                        {/* 終審標籤 */}
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-500">終審 (營運高管):</span>
-                          <span className={`font-bold ${
-                            req.final_review.status === 'APPROVED' ? 'text-emerald-600' : 'text-slate-400'
-                          }`}>
-                            {req.final_review.status === 'APPROVED' ? '✓ 核准覆寫' : '待終審'}
-                          </span>
-                        </div>
+                        {/* 終審按鈕 (Manager) */}
+                        {isPendingFinal && canFinalApprove && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onFinalApprove && onFinalApprove(req.swap_id, 'REJECTED', '主管駁回')}
+                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
+                            >
+                              終審駁回
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onFinalApprove && onFinalApprove(req.swap_id, 'APPROVED', '主管終審核可')}
+                              className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-2xs"
+                            >
+                              終審核准放行 (生效班表)
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* 分頁 B: 同仁事前請假單清單 (二重核可制，需求 3) */}
+        {reviewTab === 'LEAVES' && (
+          leaveApplications.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              目前無待審核之事前請假申請單
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {leaveApplications.map(app => {
+                const isApproved = app.status === 'APPROVED';
+                const isRejected = app.status === 'REJECTED';
+                const isPendingLeader = app.status === 'PENDING_LEADER';
+                const isPendingManager = app.status === 'PENDING_MANAGER';
+
+                const leaveBadge = app.leave_type === 'AL'
+                  ? { label: '特休假 (AL)', cls: 'bg-purple-100 text-purple-800' }
+                  : app.leave_type === 'CT'
+                  ? { label: '補休假 (CT)', cls: 'bg-amber-100 text-amber-800' }
+                  : app.leave_type === 'PERSONAL'
+                  ? { label: '事假 (扣全薪)', cls: 'bg-rose-100 text-rose-800' }
+                  : { label: '病假 (扣半薪)', cls: 'bg-blue-100 text-blue-800' };
+
+                return (
+                  <div
+                    key={app.app_id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isApproved
+                        ? 'bg-emerald-50/40 border-emerald-200'
+                        : isRejected
+                        ? 'bg-slate-50 border-slate-200 opacity-60'
+                        : 'bg-white border-slate-200 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          isApproved
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : isRejected
+                            ? 'bg-rose-100 text-rose-800'
+                            : isPendingLeader
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {isApproved ? '已生效' : isRejected ? '已駁回' : isPendingLeader ? '待組長初審' : '待主管終審'}
+                        </span>
+
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${leaveBadge.cls}`}>
+                          {leaveBadge.label}
+                        </span>
+
+                        <span className="text-xs font-extrabold text-slate-900">
+                          {app.emp_name} · 申請於 <strong>{app.date}</strong> 請假 ({app.hours || 8} 小時)
+                        </span>
+                      </div>
+
+                      <span className="text-[11px] text-slate-400">
+                        請假單號: {app.app_id}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg mb-2">
+                      <strong>請假原因：</strong>{app.reason || '無備註說明'}
+                    </div>
+
+                    {app.first_review_notes && (
+                      <div className="text-[11px] text-blue-700 bg-blue-50/60 p-2 rounded mb-2">
+                        <strong>組長初審意見：</strong>{app.first_review_notes} ({app.first_review_time})
                       </div>
                     )}
 
-                    {/* 審核操作按鈕：依照主管指示 #013 & #014 嚴格落實同組限制、利益迴避、向上覆核與 Admin 備查歸檔 */}
-                    {(() => {
-                      const isPendingAdminVerify = req.status === 'PENDING_ADMIN_VERIFY' || (req.is_manager_self_declared && !isApproved && !isRejected);
-                      const isSelfSwap = req.applicant_id === currentEmp?.emp_id || req.target_emp_id === currentEmp?.emp_id;
-                      const isLeaderStationMatch = isLeader && (
-                        req.applicant_station === currentEmp?.primary_station ||
-                        req.target_station === currentEmp?.primary_station
-                      );
+                    {/* 請假審核操作按鈕 */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                      <div className="text-slate-500 text-[11px]">
+                        申請時間：{app.created_at || '今日'}
+                      </div>
 
-                      // A. 若為最高主管自主申報 (PENDING_ADMIN_VERIFY)
-                      if (isPendingAdminVerify) {
-                        return (
-                          <div className="flex items-center space-x-2">
-                            {isSelfSwap && (
-                              <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
-                                <Lock className="w-3 h-3 text-amber-600" />
-                                <span>最高主管自身申報迴避（待系統管理員 Admin 備查歸檔）</span>
-                              </span>
-                            )}
-
-                            {!isSelfSwap && isLeader && !isAdmin && (
-                              <span className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-100 border border-slate-200 text-slate-500 font-semibold flex items-center space-x-1">
-                                <Lock className="w-3 h-3 text-slate-400" />
-                                <span>屬最高主管自主申報（由系統管理員 Admin 進行行政備查，組長無權）</span>
-                              </span>
-                            )}
-
-                            {isAdmin && (
-                              <>
-                                <button
-                                  onClick={() => onFinalApprove(req.swap_id, true, { is_admin_archived: true, admin_name: currentEmp.name })}
-                                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-lg text-xs flex items-center space-x-1.5 shadow-sm cursor-pointer active:scale-95 transition-all"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5 text-purple-200" />
-                                  <span>檢驗合規並備查歸檔 (Verify & Archive)</span>
-                                </button>
-
-                                <button
-                                  onClick={() => onFinalApprove(req.swap_id, false, { is_admin_archived: true, admin_name: currentEmp.name })}
-                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer transition-all"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                  <span>退回補充說明</span>
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // B. 一般同仁或組長調班單據
-                      const canFirst = (isManager || isAdmin) 
-                        ? !isSelfSwap 
-                        : (isLeader && isLeaderStationMatch && !isSelfSwap);
-                      const canFinal = (isManager || isAdmin) && !isSelfSwap;
-
-                      return (
-                        <div className="flex items-center space-x-2">
-                          {/* 1. 初審狀態處理 */}
-                          {isPendingFirst && (
-                            <>
-                              {isSelfSwap && (
-                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
-                                  <Lock className="w-3 h-3 text-amber-600" />
-                                  <span>涉及自身調班（初審向上由經理裁決）</span>
-                                </span>
-                              )}
-
-                              {isLeader && !isLeaderStationMatch && !isSelfSwap && (
-                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-100 border border-slate-200 text-slate-500 font-semibold flex items-center space-x-1">
-                                  <Lock className="w-3 h-3 text-slate-400" />
-                                  <span>需由【{stationMap[req.applicant_station] || '該站點'}】組長初審（禁止跨組）</span>
-                                </span>
-                              )}
-
-                              {canFirst && (
-                                <button
-                                  onClick={() => onFirstReview(req.swap_id, true)}
-                                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95 transition-all"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>組長初審通過</span>
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {/* 2. 終審狀態處理 */}
-                          {isPendingFinal && (
-                            <>
-                              {isSelfSwap && (isManager || isAdmin) && (
-                                <span className="px-2.5 py-1 text-[11px] rounded-lg bg-amber-50 border border-amber-300 text-amber-800 font-semibold flex items-center space-x-1 shadow-2xs">
-                                  <Lock className="w-3 h-3 text-amber-600" />
-                                  <span>自身調班迴避（由高管/Admin 代理終審）</span>
-                                </span>
-                              )}
-
-                              {canFinal && (
-                                <button
-                                  onClick={() => onFinalApprove(req.swap_id, true)}
-                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center space-x-1 shadow-2xs cursor-pointer active:scale-95 transition-all"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>高管終審核准 (即時覆寫班表)</span>
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {/* 駁回按鈕 */}
-                          {((isPendingFirst && canFirst) || (isPendingFinal && canFinal)) && (
+                      <div className="flex items-center space-x-2">
+                        {/* 第一階：組長初審 */}
+                        {isPendingLeader && canFirstReview && (
+                          <>
                             <button
-                              onClick={() => isPendingFirst ? onFirstReview(req.swap_id, false) : onFinalApprove(req.swap_id, false)}
-                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-semibold rounded-lg text-xs flex items-center space-x-1 cursor-pointer transition-all"
+                              type="button"
+                              onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'REJECTED', '組長站點人力緊縮駁回')}
+                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold cursor-pointer"
                             >
-                              <X className="w-3.5 h-3.5" />
-                              <span>駁回</span>
+                              初審退回
                             </button>
-                          )}
-                        </div>
-                      );
-                    })()}
+                            <button
+                              type="button"
+                              onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'APPROVED', '站點人力可協調，同意上呈')}
+                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              組長初審核准 (呈核高管)
+                            </button>
+                          </>
+                        )}
+
+                        {/* 第二階：經理終審 */}
+                        {isPendingManager && canFinalApprove && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onFinalApproveLeave && onFinalApproveLeave(app.app_id, 'REJECTED', '高管終審駁回')}
+                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold cursor-pointer"
+                            >
+                              終審退回
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onFinalApproveLeave && onFinalApproveLeave(app.app_id, 'APPROVED', '營運高管核可，核發班表並扣存摺')}
+                              className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              👑 經理終審核准 (寫入班表與存摺)
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
     </div>
   );
 }
+
