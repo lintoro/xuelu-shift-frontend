@@ -313,13 +313,29 @@ function handleGetInitialData(yearMonth, session) {
   var empSheet = ss.getSheetByName('Employees');
   var empData = empSheet ? empSheet.getDataRange().getValues() : [];
   var employees = [];
+  
+  var legacyStationMap = {
+    'ST_OPS': 'ST_ADMIN',
+    'ST_EXTREME': 'ST_EXPERIENCE',
+    'ST_SHOP_MAIN': 'ST_MAIN_SHOP',
+    'ST_SHOP_SUB': 'ST_SUB_SHOP',
+    'ST_GAGOO': 'ST_Gagoo'
+  };
+
+  var mapLegacy = function(sid) {
+    if (!sid) return sid;
+    var upper = String(sid).trim().toUpperCase();
+    return legacyStationMap[upper] || String(sid).trim();
+  };
+
   for (var i = 1; i < empData.length; i++) {
     var r = empData[i];
     if (!r[0]) continue;
+    
     var supp = [];
-    try { supp = r[7] ? JSON.parse(r[7]) : [r[6]]; } catch(e) { supp = [r[6]]; }
+    try { supp = r[7] ? JSON.parse(r[7]).map(mapLegacy) : [mapLegacy(r[6])]; } catch(e) { supp = [mapLegacy(r[6])]; }
     var solo = [];
-    try { solo = r[8] ? JSON.parse(r[8]) : []; } catch(e) { solo = []; }
+    try { solo = r[8] ? JSON.parse(r[8]).map(mapLegacy) : []; } catch(e) { solo = []; }
 
     employees.push({
       emp_id: r[0],
@@ -328,7 +344,7 @@ function handleGetInitialData(yearMonth, session) {
       pin_hash: r[3] || '',
       salt: r[4] || '',
       is_admin: !!r[5],
-      primary_station: r[6],
+      primary_station: mapLegacy(r[6]),
       supported_stations: supp,
       solo_stations: solo,
       can_solo: r[9] === true || r[9] === 'true',
@@ -338,20 +354,37 @@ function handleGetInitialData(yearMonth, session) {
     });
   }
 
-  // 2. 讀取 Stations
+  // 2. 讀取 Stations 並執行自動無縫遷移 (修正 ST_OPS 卡住的問題)
   var stSheet = ss.getSheetByName('Stations');
   var stData = stSheet ? stSheet.getDataRange().getValues() : [];
   var stations = [];
+  
+  var legacyStationMap = {
+    'ST_OPS': 'ST_ADMIN',
+    'ST_EXTREME': 'ST_EXPERIENCE',
+    'ST_SHOP_MAIN': 'ST_MAIN_SHOP',
+    'ST_SHOP_SUB': 'ST_SUB_SHOP',
+    'ST_GAGOO': 'ST_Gagoo'
+  };
+
   for (var j = 1; j < stData.length; j++) {
     var s = stData[j];
     if (!s[0]) continue;
+    
+    var sid = String(s[0]).trim();
+    var upperSid = sid.toUpperCase();
+    if (legacyStationMap[upperSid] && sid !== legacyStationMap[upperSid]) {
+      sid = legacyStationMap[upperSid];
+      stSheet.getRange(j + 1, 1).setValue(sid); // 直接修復試算表中的舊站點代碼
+    }
+
     var wkOpen = ['B'];
     var weOpen = ['A', 'B', 'C'];
     try { if (s[4]) wkOpen = JSON.parse(s[4]); } catch(e){}
     try { if (s[5]) weOpen = JSON.parse(s[5]); } catch(e){}
 
     stations.push({
-      station_id: s[0],
+      station_id: sid,
       station_name: s[1],
       weekday_min_staff: Number(s[2] || 0),
       weekend_min_staff: Number(s[3] || 0),
