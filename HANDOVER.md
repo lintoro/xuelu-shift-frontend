@@ -1,75 +1,75 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發工作交接與架構演進報告 (HANDOVER.md)
 
-- **更新日期**：2026-09-11 00:52 (GMT+8)
-- **當前核心版本**：`v2.6.0-cloud-production` (雲端全自動化正式版)
+- **最新更新日期**：2026-09-12 01:05 (GMT+8)
+- **當前核心版本**：`v2.7.0-cloud-personnel-clean-unlocked` (雲端全自動化正式部署版)
 - **前端部署網址 (Vercel)**：已連動 GitHub 倉庫，支援手機 PWA / 桌面瀏覽器 24 小時免開電腦在線運作
 - **GitHub 儲存庫**：`https://github.com/lintoro/xuelu-shift-frontend.git`
 - **後端資料庫**：Google Sheets 7+1+4 資料庫 + Google Apps Script (GAS) 原生 JSON-RPC 2.0 微服務
 
 ---
 
-## 📋 今日重大開發進展與更新紀錄總覽
+## 📋 重大開發進展與更新紀錄總覽
 
-### 1. 登入後全域白屏 (Runtime Error) 追查與徹底修復
-- **問題根因定位**：
-  1. `swapStore.js`（調班預檢）：當 `scheduleMap` 為空時，存取 `simMap[applicantId][targetDay]` 發生 `Cannot set properties of undefined`。
-  2. `holidayTransferStore.js`（國假簽認）：排班矩陣在升級後單日班別為 `{shift_type, station_id, ...}` 物件，該模組直接做 `shift !== 'OFF'` 並將物件回傳為 React Child，引發 `Objects are not valid as a React child` 崩潰。
-- **解決方案**：
-  - 加固 `swapStore.js` 之防呆物件初始化。
-  - 校正 `holidayTransferStore.js` 嚴格取用 `shift.shift_type` 比對與呈現。
-  - 在 `src/main.jsx` 外圍加裝全域 **`ErrorBoundary.jsx`（錯誤邊界保護組件）**，阻絕未來任何非預期錯誤導致全頁白屏，並提供深色診斷卡片與一鍵快取清除按鈕。
+### 1. 人員資料一致性與雲端單一真理源（Source of Truth）架構根治
+- **歷史問題與痛點定位**：
+  1. **職務與權限混淆導致角色錯亂**：前端修改人員資料或按下「🔄 刷新試算表」後，具備 Admin 權限的職員（如李俐旻、林美鳳）會被強制覆蓋並跳回「高管 (Manager)」，產生重複不同工號的異常資料。
+  2. **站點代碼死鎖與跳回**：歷史站點代碼（`ST_OPS` vs `ST_ADMIN`、`ST_EXTREME` vs `ST_EXPERIENCE` 等）在本地快取與雲端試算表間存在名稱不一致，導致編輯時卡死或按刷新後又被還原為舊代碼。
+  3. **本地快取與雲端衝突**：前端在拉取雲端資料時未以雲端為唯一基準，導致過期的 `localStorage` 快取在背景反向覆蓋雲端正確資料。
+- **解決方案與核心架構改造**：
+  - **權限與排班角色徹底解耦**：修改後端 `Code.gs` 的 `handleGetInitialData`，移除將 `is_admin` 視同 `is_self_scheduled` 的舊邏輯，僅當角色確為 `Manager` 時才標記為高管自主排班。職員（Staff）與組長（Leader）即使具備後台管理權限，依然維持原出勤排班身分。
+  - **落實雲端單一真理源 (Single Source of Truth)**：重構 `App.jsx` 的 `handlePullFromCloud` 機制，刷新時以雲端試算表為最高標準覆蓋記憶體，本地端僅保留加鹽雜湊（`pin_hash`, `salt`）以保障無密碼登入，徹底阻斷過期快取污染雲端的惡性循環。
+  - **舊站點代碼動態遷移容錯 (Auto-Migration on the fly)**：後端 `handleGetInitialData` 自動就地升級歷史舊代碼；前端透過 `normalizeStationId` 統一站點代碼與大小寫比對，徹底解決代碼不一致與介面卡死問題。
 
-### 2. 國定假日專案調移同意書與免計雙薪協議 (勞基法 37/39 條閉環)
+---
+
+### 2. 同仁清單全域結構化三階層排序
+- **業務需求**：管理者在「同仁管理」面板查閱與核對名冊時，需要依照一致且清晰的階層順序呈現。
+- **實作落地（`PersonnelManagement.jsx`）**：
+  1. **第一順位：主屬站點 (primary_station)**：依正規化後的站點代碼由 A 到 Z 排序，使同站人員自然聚集。
+  2. **第二順位：業務角色階層 (role)**：依權重清晰排序：高階主管 (Manager) ➜ 站點組長 (Leader) ➜ 正職同仁 (Staff) ➜ 計時同仁 (PT)。
+  3. **第三順位：員工工號 (emp_id)**：同站點且同角色同仁嚴格依工號由 A 到 Z 遞增排序。
+
+---
+
+### 3. 各組別當月排班組長 (Leader) 選派選單優化
+- **業務需求**：主管於每月 8-10 日進行組長指派時，選單必須具備嚴格的資格篩選與利於快速選取的排序規則。
+- **實作落地（`PersonnelManagement.jsx`）**：
+  - **嚴格資格過濾**：
+    - 僅允許**「主屬該站點」**或**「跨組支援清單中包含該站點」**的同仁才有資格擔任該站排班組長。
+    - 自動排除自主排班高管 (`is_self_scheduled`) 與兼職人員 (`PT`)。
+    - 保留當前已指派人選保底，避免歷史資料未更新時選單呈現空白。
+  - **排序層次與視覺強化**：
+    - **本站主屬同仁優先置頂**，方便優先選拔本職同仁。
+    - **跨組支援同仁依所屬主站點分群**，後續再依工號由 A 到 Z 排序。
+    - **清楚標示選項**：每一筆選項標示主屬站點與工號，如 `[服務台] 李俐旻 (B112001)`；若為跨組支援同仁則額外標示 `[支援]`（如 `[營運處(支援)] 曾月薇 (B113106) [支援]`），選派一目了然。
+
+---
+
+### 4. 清潔組 (ST_CLEAN) 屬性全面解禁與排班互助
+- **業務需求**：解除原本對清潔組設定的雙向隔離限制，開放清潔組人員可以支援外組、也能被外組支援，使其他組別同仁能夠協助清潔組排班與出勤。
+- **實作落地**：
+  - **前端人員管理表單解禁（`PersonnelManagement.jsx`）**：
+    - 移除原本「特別單位不支援外組」與「外組禁止支援清潔組」的防呆限制與警告提示方塊。
+    - 新增與編輯同仁時，外組人員可自由勾選支援清潔組；清潔組同仁亦可自由勾選支援其他營業站點。
+    - 連動組長選派：外組同仁只要支援清單勾選「清潔」，即可在清潔組的組長下拉選單中被選派為排班組長，**正式實現由別組員工協助排班**。
+  - **核心排班種子演算法同步放寬（`schedulerEngine.js`）**：
+    - 移除演算法內部 `isStationCompatible` 對清潔組的硬編碼排他隔離邏輯，全面依據實際設定的跨組支援清單進行動態相容排班。
+
+---
+
+### 5. 勞基法 37/39 條國定假日調移與出勤免雙薪協議 (閉環機制)
 - **法規依據**：四週變形工時服務業於國定假日出勤，需事前經勞工個別同意並指定調移休假日，出勤日按平日工時給薪，免計雙薪。
 - **實作落地**：
   - 新增 `holidayTransferStore.js` 與 `AnnualHolidayTransfer.jsx`。
   - 全年度各月份法定放假天數動態加總平帳（非寫死 120 天，支援專案借還假調移）。
   - 在同仁專屬工作台（`MyDashboard.jsx`）加裝勞基法第 37/39 條電子合意簽認卡片，完成數位簽核與稽核軌跡。
 
-### 3. GitHub 遠端版本庫託管流程
-1. 本地初始化與乾淨提交：排除敏感暫存檔案，以 `feat` 規範提交所有核心模組。
-2. 綁定遠端倉庫：
-   ```bash
-   git remote add origin https://github.com/lintoro/xuelu-shift-frontend.git
-   git branch -M main
-   ```
-3. 透過 Windows Git Credential Manager 完成瀏覽器互動授權驗證，成功推送到 GitHub。
+---
 
-### 4. Vercel 雲端現代化託管與 CI/CD 自動化發布
-- **配置 SPA 重導向**：新增 `vercel.json`：
-  ```json
-  {
-    "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-  }
-  ```
-- **Vercel 連動流程**：
-  1. 使用 GitHub 帳號註冊/登入 Vercel 平台。
-  2. 選擇「Hobby」（免費個人方案，無使用期限）。
-  3. 選擇「Import Git Repository」➜ 選擇 `lintoro/xuelu-shift-frontend`。
-  4. Framework Preset 自動識別為 `Vite`，點擊「Deploy」一鍵上線。
-- **CI/CD 自動發布優勢**：
-  - 本地程式碼修改後，只需執行 `git push origin main`，Vercel 在 30 秒內自動拉取代碼、完成打包編譯並無縫部署，完全免手動維護。
-  - 產出專屬線上 HTTPS 網址，支援手機 Safari/Chrome「加入主畫面」，脫離必須開著個人電腦的限制。
-
-### 5. Google 試算表與前端雙向連動打通
-- **問題分析**：先前在試算表修改員工角色（Staff ➜ Manager）或班表，網頁上無反應，原因是前端先前僅依靠 `localStorage` 快取，未在組件掛載時拉取雲端。
-- **解決方案**：
-  1. 在 `App.jsx` 加入 `useEffect`：進入系統時自動向 Google Apps Script 發送 `schedule.getInitialData`，拉取試算表最新名冊、角色與班表。
-  2. 頂部導航列新增 **「🔄 刷新試算表」** 按鈕：隨時一鍵取得試算表最新欄位，無需重新登入。
-  3. 排班總表新增主管專屬：
-     - **「🚀 啟動智慧排班」**：0.5 秒重新依 7 休 1 與配額求解最佳班表。
-     - **「☁️ 儲存至 Google 試算表」**：一鍵將 37 位同仁整月班表整批寫入試算表 `Schedules` 頁籤！
-  4. **後端相容性**：GAS `Code.gs` 後端已具備完整 `schedule.saveSchedule` 與欄位讀寫邏輯，**完全無需重複修改或重新部署 Code.gs**。
-
-### 6. 登入彩蛋升級：「動態角色沙盒切換矩陣」
-- **原狀缺點**：原本連點 5 次 Logo 出現的測試卡片寫死了少數人員，若門市人員異動無法彈性測試。
-- **全新實作**：
-  - 升級為 **「動態角色測試沙盒 (Dynamic Role Sandbox)」**。
-  - **4 大身分分頁切換**：高管/Admin、站點組長 (Leader)、正職同仁 (Staff)、計時同仁 (PT)。
-  - **動態人員選單**：直接連動目前試算表在職名冊（37人），按身分動態過濾並於下拉選單標註站點與 Solo 資格。
-  - **屬性卡片即時預覽**：選擇同仁時，卡片即時展示主屬站點、獨立顧站資格與支援清單。
-  - **一鍵快速免密模擬登入**：點擊即可切換至該同仁真實視角，驗證權限、報班門戶與個人工作台。
+### 6. 全域錯誤邊界防護（ErrorBoundary）
+- 在 `src/main.jsx` 外圍加裝全域 **`ErrorBoundary.jsx`（錯誤邊界保護組件）**。
+- 阻絕未來任何非預期錯誤導致全頁白屏，並提供深色診斷卡片與一鍵快取清除重載按鈕，確保門市現場 100% 高可用性。
 
 ---
 
@@ -79,30 +79,39 @@
 | :--- | :--- |
 | `src/main.jsx` | React 根入口，掛載 `ErrorBoundary` 保護機制 |
 | `src/components/ErrorBoundary.jsx` | 全域錯誤攔截器，防止白屏並呈現錯誤堆疊診斷 |
-| `src/App.jsx` | 核心狀態容器，管理雲端自動拉取、排班矩陣與身分導航 |
-| `src/components/Header.jsx` | 頂部導航，包含雲端同步指示、月份工時切換與手動刷新按鈕 |
-| `src/components/Auth/LoginView.jsx` | 登入門戶，含記住工號功能與連點 5 次 Logo 動態沙盒矩陣 |
+| `src/App.jsx` | 核心狀態容器，管理雲端自動拉取、單一真理源同步、排班矩陣與身分導航 |
+| `src/components/Header.jsx` | 頂部導航，包含雲端同步指示、月份工時切換與手動刷新試算表按鈕 |
+| `src/components/Admin/PersonnelManagement.jsx` | 同仁資料維護、三階層排序、排班組長動態選派、跨組支援清單（清潔組已全面解禁） |
+| `src/engine/schedulerEngine.js` | 核心排班啟發式貪婪演算法（支援站點動態相容性、清潔組互助排班調度） |
 | `src/components/ScheduleTable.jsx` | 全館出勤大表，內建組別/角色篩選、一鍵智慧排班與雲端儲存 |
 | `src/components/Dashboard/MyDashboard.jsx` | 同仁個人工作台，整合國假調移出勤同意簽署 (37/39條) |
 | `src/data/holidayTransferStore.js` | 國定假日調移與年度平帳資料核心，支援個別同意檢查 |
-| `src/data/swapStore.js` | 調班申請、合規預檢（防呆加固）與不可抹滅雙快照稽核日誌 |
+| `src/data/swapStore.js` | 調班申請、合規預檢與不可抹滅雙快照稽核日誌 |
 | `src/services/apiService.js` | 雲端 JSON-RPC 網關，統籌 Google Apps Script 雙向讀寫 |
-| `src/backend/Code.gs` | Google Apps Script 原生後端（7+1+4 表結構、加鹽雜湊防護、班表儲存） |
+| `src/backend/Code.gs` | Google Apps Script 原生後端（權限解耦、資料庫欄位動態遷移、加鹽雜湊、班表儲存） |
 | `vercel.json` | Vercel SPA 路由重導向配置檔 |
 
 ---
 
-## 🚀 後續交接維護指引
+## 🚀 日常維護與後續交接指引
 
-1. **日常程式更新步驟**：
-   ```bash
-   cd c:\Github\ReactApp\xuelu-shift-frontend
-   git add .
-   git commit -m "feat: 說明本次更新內容"
-   git push origin main
-   ```
-   *推送後 Vercel 會自動在 30 秒內完成雲端打包發布，手機與電腦重新整理即可看到最新版。*
-2. **Google 試算表資料異動**：
-   - 任何人在 Google 試算表編輯員工姓名、角色或站點後，只需在線上網頁點擊上方 **「🔄 刷新試算表」** 即可完成同步。
-3. **班表產出與發布**：
-   - 在「排班總表」點擊 **「🚀 啟動智慧排班」** ➜ 滿意後點擊 **「☁️ 儲存至 Google 試算表」** 即可全量持久化至 Google Sheets 的 `Schedules` 工作表。
+### 1. 程式碼發布與部署流程
+本專案採用 **Vercel + GitHub CI/CD** 全自動化發布架構：
+```bash
+cd c:\Github\ReactApp\xuelu-shift-frontend
+git add .
+git commit -m "feat: 說明本次更新內容"
+git push origin main
+```
+- 推送至 `main` 分支後，Vercel 會在 30 秒內自動拉取最新程式碼完成打包並無縫發布。
+- 現場同仁使用手機或電腦瀏覽器重新整理（或重開 PWA），即可立即使用最新功能。
+
+### 2. Google Apps Script (GAS) 後端部署提醒
+若有異動 `src/backend/Code.gs`：
+1. 開啟綁定之 Google 試算表 ➜ 點選「擴充功能」➜「Apps Script」。
+2. 將 `src/backend/Code.gs` 完整內容複製貼上至編輯器。
+3. 點擊右上角 **「部署」➜「管理部署作業」➜ 點擊鉛筆圖示編輯 ➜ 版本選擇「新版本」➜ 點擊「部署」** 即可完成生效。
+
+### 3. Google 試算表與線上系統資料同步
+- **名冊/站點/規則更新**：任何人在 Google 試算表修改資料後，線上系統使用者僅需點擊頂部導航列的 **「🔄 刷新試算表」**，系統將以試算表為唯一真理源，即刻重載最新資料。
+- **班表產出與永久儲存**：主管在「排班總表」點擊 **「🚀 啟動智慧排班」** 生成最佳班表後，點擊 **「☁️ 儲存至 Google 試算表」**，即會全量寫入試算表的 `Schedules` 工作表持久化。
