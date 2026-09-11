@@ -995,8 +995,49 @@
 - **驗證成果**：
   - 自動化單元測試 `test_v353_station_leader_persistence.mjs` 100% 通過（9 大站點預設組長對齊、雲端正規化、主管指派變更與持久化模擬均無誤）。
   - Lucide 圖標掃描 `check_lucide_imports.mjs` 0 缺失。
-  - 前端專案打包 `npm run build` 0 錯誤順利完成編譯。
 - **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.3-station-leader-persistence-delivered)`
+
+---
+
+### 📌 [需求 #031] 排班劃休限制規則法定天數鎖定、配額支援拉至10名、人事職等內外一致與 F5 防沖刷修復
+
+- **來源反饋**：現場主管操作回報並附兩張截圖：
+  1. 「法定總休數 法定就是固定的 這應該不能拉動」
+  2. 「全館劃休配額拉至10名」
+  3. 「人事儀表版內的設定與外面的顯示及實際不同 張舒扉裡面是高管 外面是職員 實際分類也是職員，重新修改過就變了但按F5又變回來職員了 這問題也是一樣嘛」
+- **根本原因排查**：
+  1. **法定應休總天數未鎖定**：
+     - 在 `MonthlyRulesModal.jsx` 中，`required_off_days` 為可隨意編輯的 number input，未依法規標示鎖定狀態。
+  2. **單日劃休配額上限鎖死在 5 名**：
+     - 在 `MonthlyRulesModal.jsx` 中，`default_daily_quota` 寫死 `min={1} max={5}` 且無 Slider 滑桿，導致主管無法拉動到 10 名。
+  3. **人事管理表格職等判斷欄位錯誤（內外不一致）**：
+     - 在 `PersonnelManagement.jsx` 表格渲染中：
+       `const isManager = emp.is_self_scheduled;`
+       表格不是依據同仁實際業務職等 `emp.role === 'Manager'` 判斷，而是依賴 `is_self_scheduled` 布林值！當主管在彈窗將張舒扉設為高管時，如果 `is_self_scheduled` 尚未連動或為 false，表格立即誤判為正職同仁。
+  4. **F5 重整時職等被雲端舊資料沖銷**：
+     - `App.jsx` 的 `handleUpdateEmployee` 雖然觸發了 state 更新，但缺少即時的 `localStorage.setItem('xuelu_employees_v2', ...)`。
+     - 當處於雲端同步模式時，F5 重新整理自動執行 `handlePullFromCloud()`，直接用雲端舊資料 (`data.employees`) 覆蓋了本地剛修改的 state，導致被沖回職員。
+- **修復方案實作**：
+  1. **`MonthlyRulesModal.jsx`**：
+     - 「全月法定應休總天數」：設定 `readOnly`、`disabled`、灰底鎖定樣式，加入 `🔒 法定固定天數 (依勞動基準法由曆法自動固定計算，禁止隨意變動)` 提示標籤。
+     - 「單日全館劃休配額」：上限擴展至 15 名（`min={1} max={15}`），加入 Range Slider 與 Number Input 雙向連動，主管可直接將配額自由拉至 10 名或手動輸入 10。
+  2. **`PersonnelManagement.jsx`**：
+     - 表格修正為：`const isManager = emp.role === 'Manager' || emp.is_self_scheduled;`，徽章顯示 `👑 營運高管`，徹底消除內外顯示矛盾。
+     - 在 `handleSaveEdit` 儲存時，自動連動 `is_self_scheduled: isManagerRole ? true : ...`。
+  3. **`App.jsx`**：
+     - `handleUpdateEmployee` 與 `handleAddEmployee` 增加即時 `localStorage.setItem('xuelu_employees_v2', JSON.stringify(next))`，並同步刷新當前登入者 `currentUser` 快取。
+     - 在 `handlePullFromCloud()` 中加入本地最新名冊防沖刷合併機制，保留本地已更新之 `role`、`is_self_scheduled`、`is_admin`、`solo_stations` 等設定，防止雲端舊快照沖銷。
+- **影響檔案清單**：
+  - `src/components/Admin/MonthlyRulesModal.jsx`
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/App.jsx`
+  - `scratch/test_v354_rules_and_employee_role.mjs`
+- **驗證成果**：
+  - 單元測試 `test_v354_rules_and_employee_role.mjs` 100% 通過。
+  - 圖標檢查 `check_lucide_imports.mjs` 0 缺失。
+  - 專案打包 `npm run build` 0 錯誤編譯成功。
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.4-rules-quota-and-role-persistence-delivered)`
+
 
 
 

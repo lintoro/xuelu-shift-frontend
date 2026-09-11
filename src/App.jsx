@@ -1095,7 +1095,29 @@ export default function App() {
       if (!data) return false;
 
       if (data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
-        setAllEmployees(data.employees);
+        setAllEmployees(prev => {
+          const localMap = Object.fromEntries(prev.map(e => [e.emp_id, e]));
+          const mergedEmployees = data.employees.map(cloudEmp => {
+            const local = localMap[cloudEmp.emp_id];
+            if (!local) return cloudEmp;
+            // 若本地有已更新之職等與自主排班屬性，保護本地設定不被舊雲端快照洗回
+            return {
+              ...cloudEmp,
+              role: local.role || cloudEmp.role,
+              is_self_scheduled: typeof local.is_self_scheduled !== 'undefined' ? local.is_self_scheduled : cloudEmp.is_self_scheduled,
+              is_admin: typeof local.is_admin !== 'undefined' ? local.is_admin : cloudEmp.is_admin,
+              primary_station: local.primary_station || cloudEmp.primary_station,
+              supported_stations: local.supported_stations || cloudEmp.supported_stations,
+              solo_stations: local.solo_stations || cloudEmp.solo_stations,
+              can_solo: typeof local.can_solo !== 'undefined' ? local.can_solo : cloudEmp.can_solo,
+              status: local.status || cloudEmp.status
+            };
+          });
+          try {
+            localStorage.setItem('xuelu_employees_v2', JSON.stringify(mergedEmployees));
+          } catch (e) {}
+          return mergedEmployees;
+        });
       }
       if (data.stations && Array.isArray(data.stations) && data.stations.length > 0) {
         setAllStations(prev => {
@@ -1184,16 +1206,45 @@ export default function App() {
     }
   }, [currentMonth, allEmployees, allStations, shiftTypes, effectiveScheduleMap]);
 
-  // 人事主檔更新
+  // 人事主檔更新 (即時寫入本機快取與雲端同步，防 F5 沖刷)
   const handleUpdateEmployee = useCallback((updatedEmp) => {
-    setAllEmployees(prev => prev.map(e => e.emp_id === updatedEmp.emp_id ? updatedEmp : e));
+    setAllEmployees(prev => {
+      const next = prev.map(e => e.emp_id === updatedEmp.emp_id ? updatedEmp : e);
+      try {
+        localStorage.setItem('xuelu_employees_v2', JSON.stringify(next));
+      } catch (e) {
+        console.warn('localStorage save failed', e);
+      }
+      return next;
+    });
+
+    // 若修改者恰好為當前登入者，同步刷新 currentUser 與 auth 狀態
+    setCurrentUser(prev => {
+      if (prev && prev.emp_id === updatedEmp.emp_id) {
+        const merged = { ...prev, ...updatedEmp };
+        try {
+          localStorage.setItem('xuelu_auth_user_v1', JSON.stringify(merged));
+        } catch (e) {}
+        return merged;
+      }
+      return prev;
+    });
+
     if (ApiService.isCloudMode()) {
       ApiService.savePersonnel(updatedEmp).catch(e => console.warn('[雲端同步] 人事主檔更新失敗:', e));
     }
   }, []);
 
   const handleAddEmployee = useCallback((newEmp) => {
-    setAllEmployees(prev => [...prev, newEmp]);
+    setAllEmployees(prev => {
+      const next = [...prev, newEmp];
+      try {
+        localStorage.setItem('xuelu_employees_v2', JSON.stringify(next));
+      } catch (e) {
+        console.warn('localStorage save failed', e);
+      }
+      return next;
+    });
     if (ApiService.isCloudMode()) {
       ApiService.savePersonnel(newEmp).catch(e => console.warn('[雲端同步] 新增同仁失敗:', e));
     }

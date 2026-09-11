@@ -1,6 +1,6 @@
 // src/components/Admin/MonthlyRulesModal.jsx
 import React, { useState } from 'react';
-import { Settings2, X, Save, ShieldAlert, Calendar, Check, Sliders } from 'lucide-react';
+import { Settings2, X, Save, ShieldAlert, Calendar, Check, Sliders, Lock, Users } from 'lucide-react';
 
 export default function MonthlyRulesModal({
   isOpen,
@@ -124,35 +124,71 @@ export default function MonthlyRulesModal({
               />
             </div>
 
-            {/* 3. 當月全場應休總天數與配額 */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  全月法定應休總天數
-                </label>
-                <input
-                  type="number"
-                  min={4}
-                  max={15}
-                  required
-                  value={formData.required_off_days}
-                  onChange={(e) => setFormData({ ...formData, required_off_days: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold font-mono text-center"
-                />
+            {/* 3. 當月全場應休總天數 (勞基法固定天數，鎖定不可改) 與 單日劃休配額 (支援拉至 10 名) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 法定總休數：固定勞基法天數，鎖定不可拉動 */}
+              <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                    <span>全月法定應休總天數</span>
+                  </label>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                    🔒 法定固定天數
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-2">
+                  依勞動基準法由曆法自動固定計算（雙週84工時/一例一休及國定假日），禁止隨意變動。
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    readOnly
+                    disabled
+                    value={formData.required_off_days}
+                    className="w-full bg-slate-100/90 border border-slate-300 rounded-lg p-2 font-black font-mono text-center text-slate-700 cursor-not-allowed select-none shadow-inner"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">天</span>
+                </div>
               </div>
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  單日全館劃休配額 (人)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={5}
-                  required
-                  value={formData.default_daily_quota}
-                  onChange={(e) => setFormData({ ...formData, default_daily_quota: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 font-bold font-mono text-center"
-                />
+
+              {/* 單日全館劃休配額：擴展上限至 15 名，支援拉至 10 名 */}
+              <div className="p-3 bg-indigo-50/40 rounded-xl border border-indigo-200">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>單日全館劃休配額 (人)</span>
+                  </label>
+                  <span className="text-xs font-black text-indigo-700 font-mono">
+                    {formData.default_daily_quota} 名
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-2">
+                  全場每日允許同時劃休之正職同仁總人數上限（支援彈性拉動至 10 名以上）。
+                </p>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="range"
+                    min={1}
+                    max={15}
+                    step={1}
+                    value={formData.default_daily_quota}
+                    onChange={(e) => setFormData({ ...formData, default_daily_quota: Number(e.target.value) })}
+                    className="flex-1 accent-indigo-600 cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={15}
+                    required
+                    value={formData.default_daily_quota}
+                    onChange={(e) => {
+                      const val = Math.max(1, Math.min(15, Number(e.target.value) || 1));
+                      setFormData({ ...formData, default_daily_quota: val });
+                    }}
+                    className="w-16 border border-indigo-300 bg-white rounded-lg p-1.5 font-bold font-mono text-center text-indigo-900 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
             </div>
 

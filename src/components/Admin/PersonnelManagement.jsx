@@ -88,8 +88,10 @@ export default function PersonnelManagement({
     const cleanSolo = Array.from(new Set(
       (editingEmp.solo_stations || []).map(st => normalizeStationId(st))
     ));
+    const isManagerRole = editingEmp.role === 'Manager';
     const finalEmp = {
       ...editingEmp,
+      is_self_scheduled: isManagerRole ? true : !!editingEmp.is_self_scheduled,
       primary_station: cleanPrimary,
       supported_stations: cleanSupported,
       solo_stations: cleanSolo
@@ -221,7 +223,7 @@ export default function PersonnelManagement({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {employees.map(emp => {
-              const isManager = emp.is_self_scheduled;
+              const isManager = emp.role === 'Manager' || emp.is_self_scheduled;
               const isInactive = emp.status !== 'Active';
 
               return (
@@ -231,7 +233,7 @@ export default function PersonnelManagement({
                   <td className="p-2.5">
                     <span className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
                       isManager 
-                        ? 'bg-purple-100 text-purple-700' 
+                        ? 'bg-purple-100 text-purple-700 font-bold' 
                         : emp.role === 'Leader' 
                         ? 'bg-blue-100 text-blue-700' 
                         : emp.role === 'PT' 
