@@ -191,6 +191,34 @@ export default function PersonnelManagement({
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
           {stations.map(station => {
             const currentLeaderId = station.leader_emp_id || station.leader_id || '';
+            const targetStationId = normalizeStationId(station.station_id);
+
+            // 1. 資格過濾：以主屬站點及跨組支援清單的員工才有資格擔任排班組長 (排除高管自主排班與兼職PT)
+            const candidates = employees.filter(e => {
+              if (e.is_self_scheduled || e.role === 'PT') return false;
+              if (e.status === 'RESIGNED') return false;
+
+              const isPrimary = normalizeStationId(e.primary_station) === targetStationId;
+              const isSupported = (e.supported_stations || [])
+                .map(st => normalizeStationId(st))
+                .includes(targetStationId);
+
+              return isPrimary || isSupported || e.emp_id === currentLeaderId;
+            });
+
+            // 2. 排序依 主站點、工號 進行，以利快速選擇 (本站主屬優先置頂，再依支援主站點排序，同站點內依工號排序)
+            candidates.sort((a, b) => {
+              const isPriA = normalizeStationId(a.primary_station) === targetStationId;
+              const isPriB = normalizeStationId(b.primary_station) === targetStationId;
+              if (isPriA !== isPriB) return isPriA ? -1 : 1;
+
+              const stA = normalizeStationId(a.primary_station) || '';
+              const stB = normalizeStationId(b.primary_station) || '';
+              if (stA !== stB) return stA.localeCompare(stB);
+
+              return (a.emp_id || '').localeCompare(b.emp_id || '');
+            });
+
             return (
               <div key={station.station_id} className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
                 <div className="text-[11px] font-bold text-slate-800 mb-1 truncate flex items-center justify-between">
@@ -207,9 +235,15 @@ export default function PersonnelManagement({
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1 text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
                 >
                   <option value="">(未指派/主管統籌)</option>
-                  {employees.filter(e => !e.is_self_scheduled && e.role !== 'PT').map(e => (
-                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>
-                  ))}
+                  {candidates.map(e => {
+                    const isPrimary = normalizeStationId(e.primary_station) === targetStationId;
+                    const stationLabel = getStationDisplayName(e.primary_station);
+                    return (
+                      <option key={e.emp_id} value={e.emp_id}>
+                        [{stationLabel}] {e.name} ({e.emp_id}){isPrimary ? '' : ' [支援]'}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             );

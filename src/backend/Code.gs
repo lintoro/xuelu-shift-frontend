@@ -350,7 +350,7 @@ function handleGetInitialData(yearMonth, session) {
       can_solo: r[9] === true || r[9] === 'true',
       hire_date: r[10] ? (r[10] instanceof Date ? Utilities.formatDate(r[10], 'GMT+8', 'yyyy-MM-dd') : String(r[10])) : '',
       status: r[12] || r[11] || 'Active',
-      is_self_scheduled: r[2] === 'Manager' || !!r[5]
+      is_self_scheduled: r[2] === 'Manager'
     });
   }
 
