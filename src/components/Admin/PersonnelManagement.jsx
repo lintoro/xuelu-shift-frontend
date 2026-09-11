@@ -58,26 +58,14 @@ export default function PersonnelManagement({
     return stationMap[norm] || rawId;
   };
 
-  // 處理主屬站點變更（落實清潔組雙向隔離規則）
+  // 處理主屬站點變更
   const getUpdatedSupportedStations = (prevSupported, newPrimary) => {
-    if (newPrimary === 'ST_CLEAN') {
-      // 規則 A：清潔組為固定特別單位，不支援其它組別
-      return ['ST_CLEAN'];
-    }
-    // 規則 B：其它組別不讓任何人支援清潔組，且主屬站點必選
-    const cleaned = (prevSupported || []).filter(id => id !== 'ST_CLEAN');
-    return Array.from(new Set([...cleaned, newPrimary]));
+    // 主屬站點必選，並保留既有的跨組支援清單
+    return Array.from(new Set([...(prevSupported || []), newPrimary]));
   };
 
   // 處理核取方塊切換支援站點
   const toggleSupportedStation = (currentSupported, stationId, checked, primaryStation) => {
-    if (primaryStation === 'ST_CLEAN') {
-      return ['ST_CLEAN'];
-    }
-    if (stationId === 'ST_CLEAN') {
-      // 禁止外組同仁支援清潔組
-      return (currentSupported || []).filter(id => id !== 'ST_CLEAN');
-    }
     if (stationId === primaryStation) {
       // 主屬站點必選，不可取消
       return currentSupported || [primaryStation];
@@ -460,36 +448,20 @@ export default function PersonnelManagement({
                 </div>
               </div>
 
-              {/* 新增同仁：跨組支援清單 (落實清潔組雙向隔離) */}
+              {/* 新增同仁：跨組支援清單 */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-bold text-slate-700 block">
                     跨組支援清單 (supported_stations)
                   </label>
-                  {newEmpForm.primary_station === 'ST_CLEAN' ? (
-                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                      特別單位：不支援外組
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
-                  )}
+                  <span className="text-[10px] text-slate-400">可多選（主屬站點必選，清潔組開放互助支援）</span>
                 </div>
-
-                {newEmpForm.primary_station === 'ST_CLEAN' && (
-                  <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                   {stations.map(st => {
-                    const isCleanUnit = st.station_id === 'ST_CLEAN';
                     const isPrimary = st.station_id === newEmpForm.primary_station;
-                    const isCleanPrimary = newEmpForm.primary_station === 'ST_CLEAN';
-                    
-                    const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
-                    const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id));
+                    const isDisabled = isPrimary;
+                    const isChecked = isPrimary || (newEmpForm.supported_stations || []).includes(st.station_id);
                     const isSolo = isPrimary 
                       ? !!newEmpForm.can_solo 
                       : (newEmpForm.solo_stations || []).includes(st.station_id);
@@ -499,9 +471,7 @@ export default function PersonnelManagement({
                         key={st.station_id}
                         className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
                           isDisabled
-                            ? isCleanUnit && !isCleanPrimary
-                              ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
-                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
+                            ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
                             : isChecked
                             ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
                             : 'bg-white border-slate-200 text-slate-600'
@@ -528,9 +498,6 @@ export default function PersonnelManagement({
                           />
                           <span className="font-bold truncate">
                             {st.station_name}
-                            {isCleanUnit && !isCleanPrimary && (
-                              <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
-                            )}
                             {isPrimary && (
                               <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
                             )}
@@ -699,36 +666,20 @@ export default function PersonnelManagement({
                 </select>
               </div>
 
-              {/* 編輯同仁：跨組支援清單 (落實清潔組雙向隔離) */}
+              {/* 編輯同仁：跨組支援清單 */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-bold text-slate-700 block">
                     跨組支援清單 (supported_stations)
                   </label>
-                  {editingEmp.primary_station === 'ST_CLEAN' ? (
-                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                      特別單位：不支援外組
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">可多選（主屬站點必選）</span>
-                  )}
+                  <span className="text-[10px] text-slate-400">可多選（主屬站點必選，清潔組開放互助支援）</span>
                 </div>
-
-                {editingEmp.primary_station === 'ST_CLEAN' && (
-                  <div className="p-2 mb-2 rounded bg-amber-50/90 border border-amber-200 text-[11px] text-amber-800 flex items-center space-x-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>清潔組為固定特別單位，不支援其它組別，跨組支援清單固定鎖死。</span>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                   {stations.map(st => {
-                    const isCleanUnit = st.station_id === 'ST_CLEAN';
                     const isPrimary = st.station_id === editingEmp.primary_station;
-                    const isCleanPrimary = editingEmp.primary_station === 'ST_CLEAN';
-                    
-                    const isDisabled = isPrimary || (isCleanPrimary ? !isCleanUnit : isCleanUnit);
-                    const isChecked = isCleanPrimary ? isCleanUnit : (isPrimary || (editingEmp.supported_stations || []).includes(st.station_id));
+                    const isDisabled = isPrimary;
+                    const isChecked = isPrimary || (editingEmp.supported_stations || []).includes(st.station_id);
                     const isSolo = isPrimary 
                       ? !!editingEmp.can_solo 
                       : (editingEmp.solo_stations || []).includes(st.station_id);
@@ -738,9 +689,7 @@ export default function PersonnelManagement({
                         key={st.station_id}
                         className={`flex flex-col justify-between p-2 rounded-lg border text-[11px] transition-all ${
                           isDisabled
-                            ? isCleanUnit && !isCleanPrimary
-                              ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400'
-                              : 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
+                            ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 font-semibold'
                             : isChecked
                             ? 'bg-white border-indigo-300 text-indigo-950 shadow-2xs'
                             : 'bg-white border-slate-200 text-slate-600'
@@ -767,9 +716,6 @@ export default function PersonnelManagement({
                           />
                           <span className="font-bold truncate">
                             {st.station_name}
-                            {isCleanUnit && !isCleanPrimary && (
-                              <span className="text-[9px] text-rose-500 block leading-tight font-normal">禁止外援</span>
-                            )}
                             {isPrimary && (
                               <span className="text-[9px] text-indigo-600 block leading-tight font-bold">主屬站點</span>
                             )}

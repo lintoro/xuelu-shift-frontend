@@ -275,14 +275,8 @@ export function generateSeedSchedule({
       stationHasSolo[s.station_id] = false;
     });
 
-    // 清潔組特別隔離保險：外人不可支援清潔組，清潔組同仁不支援外組
+    // 站點資格相容性：主屬該站或跨組支援清單中包含該站（清潔組已開放互為支援）
     const isStationCompatible = (person, targetStationId) => {
-      if (targetStationId === 'ST_CLEAN') {
-        return person.primary_station === 'ST_CLEAN';
-      }
-      if (person.primary_station === 'ST_CLEAN') {
-        return false;
-      }
       return person.primary_station === targetStationId || (person.supported_stations || []).includes(targetStationId);
     };
 
