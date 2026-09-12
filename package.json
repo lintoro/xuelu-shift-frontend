@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm test && vite build",
     "preview": "vite preview",
-    "test": "node scratch/detect_undeclared_variables.mjs && node scratch/check_lucide_imports.mjs && node scratch/verify_all_components_ssr.mjs && node scratch/test_v355_statutory_leaves_and_one_off_one_rest.mjs",
+    "test": "node scratch/detect_undeclared_variables.mjs && node scratch/check_lucide_imports.mjs && node scratch/verify_all_components_ssr.mjs && node scratch/test_v355_statutory_leaves_and_one_off_one_rest.mjs && node scratch/test_v356_save_stations_persistence.mjs",
     "sync": "git pull origin main && npm install"
   },
   "dependencies": {

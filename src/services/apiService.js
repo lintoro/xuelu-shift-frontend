@@ -260,6 +260,9 @@ export const ApiService = {
       case 'admin.saveShiftTypes':
         return { success: true, count: (params.shift_types || []).length };
 
+      case 'admin.saveStations':
+        return { success: true, count: (params.stations || []).length };
+
       case 'admin.holidayTransfer':
         return { success: true };
 
@@ -352,6 +355,14 @@ export const ApiService = {
     return this.callRpc('admin.saveStationLeader', {
       station_id: stationId,
       leader_emp_id: leaderEmpId,
+      token: token
+    });
+  },
+
+  // 批量儲存站點主檔（包含平假日最低人數與當月組長動態選派）
+  async saveStations(stations, token = 'session_active') {
+    return this.callRpc('admin.saveStations', {
+      stations: stations,
       token: token
     });
   },

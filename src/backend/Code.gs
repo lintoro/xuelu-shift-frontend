@@ -168,6 +168,14 @@ function doPost(e) {
         result = handleSaveStationLeader(session, params.station_id, params.leader_emp_id);
         break;
 
+      case 'admin.saveStations':
+        var session = validateToken(params.token);
+        if (session.role !== 'Manager' && !session.is_admin) {
+          throw new Error('403 Forbidden: 僅營運高管或系統管理員具備維護站點規則權限！');
+        }
+        result = handleSaveStations(session, params.stations);
+        break;
+
       case 'admin.holidayTransfer':
         var session = validateToken(params.token);
         if (session.role !== 'Manager') {
@@ -388,6 +396,8 @@ function handleGetInitialData(yearMonth, session) {
       station_name: s[1],
       weekday_min_staff: Number(s[2] || 0),
       weekend_min_staff: Number(s[3] || 0),
+      min_staff_weekday: Number(s[2] || 0),
+      min_staff_weekend: Number(s[3] || 0),
       weekday_open_shifts: wkOpen,
       weekend_open_shifts: weOpen,
       weekday_primary_min: Number(s[6] || 0),
@@ -1023,6 +1033,65 @@ function handleSaveStationLeader(session, stationId, leaderEmpId) {
   return { success: false, message: '找不到對應站點' };
 }
 
+// 批量儲存站點主檔（寫入 Stations 工作表，精確更新平假日人數與組長）
+function handleSaveStations(session, stations) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Stations');
+  if (!sheet) throw new Error('500 Database Error: 找不到 Stations 表單！');
+
+  if (!Array.isArray(stations)) {
+    throw new Error('400 Bad Request: 站點資料必須為陣列');
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var existingMap = {};
+  for (var i = 1; i < data.length; i++) {
+    var sid = String(data[i][0]).trim();
+    if (sid) existingMap[sid] = i + 1; // 記錄 1-based 列號
+  }
+
+  stations.forEach(function(st) {
+    var sid = String(st.station_id || '').trim();
+    if (!sid) return;
+
+    var weekdayMin = Number(typeof st.weekday_min_staff !== 'undefined' ? st.weekday_min_staff : (st.min_staff_weekday || 0));
+    var weekendMin = Number(typeof st.weekend_min_staff !== 'undefined' ? st.weekend_min_staff : (st.min_staff_weekend || 0));
+    var leaderId = st.leader_emp_id || st.leader_id || '';
+    var wkOpenStr = JSON.stringify(st.weekday_open_shifts || ['B']);
+    var weOpenStr = JSON.stringify(st.weekend_open_shifts || ['A', 'B', 'C']);
+    var wkPrimary = Number(st.weekday_primary_min || 1);
+    var wePrimary = Number(st.weekend_primary_min || 1);
+
+    var targetRow = existingMap[sid];
+    if (targetRow) {
+      // 既有站點：直接更新平假日人數與組長工號
+      sheet.getRange(targetRow, 3).setValue(weekdayMin); // C欄: weekday_min_staff
+      sheet.getRange(targetRow, 4).setValue(weekendMin); // D欄: weekend_min_staff
+      sheet.getRange(targetRow, 5).setValue(wkOpenStr);   // E欄: weekday_open_shifts
+      sheet.getRange(targetRow, 6).setValue(weOpenStr);   // F欄: weekend_open_shifts
+      sheet.getRange(targetRow, 7).setValue(wkPrimary);   // G欄: weekday_primary_min
+      sheet.getRange(targetRow, 8).setValue(wePrimary);   // H欄: weekend_primary_min
+      sheet.getRange(targetRow, 9).setValue(leaderId);    // I欄: leader_id
+    } else {
+      // 全新站點：追加新行
+      sheet.appendRow([
+        sid,
+        st.station_name || sid,
+        weekdayMin,
+        weekendMin,
+        wkOpenStr,
+        weOpenStr,
+        wkPrimary,
+        wePrimary,
+        leaderId
+      ]);
+    }
+  });
+
+  logAuditEvent(session, 'STATIONS_UPDATE', '更新各組營運規則與平假日人數配置 (共 ' + stations.length + ' 站點)', null, stations);
+  return { success: true, count: stations.length };
+}
+
 // 全量雙向備份同步函式 (一鍵將本地狀態覆寫至雲端)
 function handleSyncAll(session, payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1084,6 +1153,11 @@ function handleSyncAll(session, payload) {
         }
       });
     }
+  }
+
+  // 2. 同步 Stations
+  if (payload.stations && Array.isArray(payload.stations)) {
+    handleSaveStations(session, payload.stations);
   }
 
   // 2. 同步 Shift_Types

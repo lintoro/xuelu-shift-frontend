@@ -1266,7 +1266,18 @@ export default function App() {
     if (ApiService.isCloudMode() && typeof ApiService.saveStations === 'function') {
       ApiService.saveStations(newStations).catch(e => console.warn('[雲端同步] 站點組別規則更新失敗:', e));
     }
-  }, []);
+
+    const operatorName = currentUser ? currentUser.name : '陳鵬宇 (營運長)';
+    const operatorId = currentUser ? currentUser.emp_id : 'B111155';
+    setAuditLogs(prev => [{
+      log_id: `LOG_STATIONS_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action_type: 'UPDATE_STATION_RULES',
+      operator_id: operatorId,
+      operator_name: operatorName,
+      notes: `主管【${operatorName}】更新各組平假日出勤人數與組長配置 (共 ${newStations.length} 組)`
+    }, ...prev]);
+  }, [currentUser]);
 
   // 營業班別主檔管理回呼 (需求 #008 Manager 專屬規劃與稽核日誌連動)
   const handleSaveShiftType = useCallback((newShift) => {
