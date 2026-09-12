@@ -1136,17 +1136,63 @@ export default function App() {
       }
       if (data.shiftTypes && Array.isArray(data.shiftTypes) && data.shiftTypes.length > 0) {
         const shiftsObj = {};
-        data.shiftTypes.forEach(st => { shiftsObj[st.code] = st; });
+        data.shiftTypes.forEach(st => {
+          const defaultRef = DEFAULT_SHIFT_TYPES[st.code] || {};
+          shiftsObj[st.code] = {
+            ...defaultRef,
+            ...st,
+            color: st.color || defaultRef.color || 'bg-slate-100 text-slate-800 border-slate-300',
+            badgeColor: st.badgeColor || defaultRef.badgeColor || 'bg-slate-600 text-white',
+            breakHours: Number(st.breakHours ?? defaultRef.breakHours ?? 1),
+            workHours: Number(st.workHours ?? defaultRef.workHours ?? 8),
+            isActive: st.isActive !== false
+          };
+        });
         setShiftTypes(shiftsObj);
+        try {
+          localStorage.setItem('xuelu_shift_types_v1', JSON.stringify(shiftsObj));
+        } catch (e) {}
       }
+
+      // 班表矩陣標準化：無論雲端存的是字串代碼還是物件，全量正規化為前端標準物件矩陣
       if (data.scheduleMap && typeof data.scheduleMap === 'object' && Object.keys(data.scheduleMap).length > 0) {
-        setCloudScheduleMap(data.scheduleMap);
+        const normalizedMatrix = {};
+        const empLookup = Object.fromEntries(
+          (data.employees || allEmployees).map(e => [e.emp_id, e])
+        );
+
+        Object.entries(data.scheduleMap).forEach(([empId, dayObj]) => {
+          if (!dayObj || typeof dayObj !== 'object') return;
+          normalizedMatrix[empId] = {};
+          const emp = empLookup[empId];
+          const primaryStation = emp?.primary_station || 'ST_SERVICE';
+
+          Object.entries(dayObj).forEach(([d, cellVal]) => {
+            if (!cellVal) return;
+            if (typeof cellVal === 'object' && cellVal.shift_type) {
+              normalizedMatrix[empId][d] = {
+                ...cellVal,
+                station_id: cellVal.station_id || primaryStation
+              };
+            } else {
+              const codeStr = String(cellVal).trim();
+              if (!codeStr) return;
+              const shiftDef = (data.shiftTypes && data.shiftTypes[codeStr]) || DEFAULT_SHIFT_TYPES[codeStr];
+              normalizedMatrix[empId][d] = {
+                shift_type: codeStr,
+                station_id: primaryStation,
+                work_hours: shiftDef?.workHours || 8,
+                is_support: false,
+                note: '雲端同步班表'
+              };
+            }
+          });
+        });
+        setCloudScheduleMap(normalizedMatrix);
       }
+
       if (data.swaps && Array.isArray(data.swaps)) {
         setSwapRequests(data.swaps);
-      }
-      if (data.overrides && typeof data.overrides === 'object') {
-        setScheduleOverrides(data.overrides);
       }
       if (data.passbooks && Array.isArray(data.passbooks)) {
         setPassbookTransactions(data.passbooks);

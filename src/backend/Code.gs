@@ -425,8 +425,10 @@ function handleGetInitialData(yearMonth, session) {
       endTime: fmtEnd,
       breakHours: Number(sRow[4] || 1),
       workHours: Number(sRow[5] || 8),
+      color: sRow[6] || '#f1f5f9',
       bgColor: sRow[6] || '#f1f5f9',
       textColor: sRow[7] || '#334155',
+      badgeColor: sRow[7] || '#334155',
       isActive: sRow[8] !== false && sRow[8] !== 'false'
     });
   }
@@ -853,10 +855,12 @@ function handleSaveSchedule(session, yearMonth, scheduleMatrix) {
       empId
     ];
     var workCount = 0;
+    var nonWorking = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF'];
     for (var day = 1; day <= 31; day++) {
-      var shiftCode = empShifts[day] || '';
+      var shiftVal = empShifts[day];
+      var shiftCode = typeof shiftVal === 'object' ? (shiftVal?.shift_type || '') : (shiftVal || '');
       rowArr.push(shiftCode);
-      if (shiftCode && shiftCode !== 'OFF') workCount++;
+      if (shiftCode && nonWorking.indexOf(shiftCode) === -1) workCount++;
     }
     rowArr.push(workCount * 8); // total_hours
     rowArr.push('PUBLISHED');
@@ -998,8 +1002,8 @@ function handleSaveShiftTypes(session, shiftTypes) {
         st.endTime || '',
         st.breakHours || 1,
         st.workHours || 8,
-        st.bgColor || '#f1f5f9',
-        st.textColor || '#334155',
+        st.color || st.bgColor || '#f1f5f9',
+        st.badgeColor || st.textColor || '#334155',
         st.isActive !== false,
         nowStr
       ]);
