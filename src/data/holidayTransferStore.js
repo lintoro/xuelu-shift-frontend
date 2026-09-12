@@ -1,4 +1,5 @@
 // src/data/holidayTransferStore.js
+import { isWorkingShift, isOffShift } from '../types/scheduler.js';
 
 /**
  * 全年度國定假日專案調移與平帳管理模組 (Holiday Transfer & Balance Store)
@@ -108,17 +109,17 @@ export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', sche
   monthHolidays.forEach(h => {
     const shift = empSchedule[h.day];
     const shiftType = typeof shift === 'object' ? shift?.shift_type : shift;
-    // 若該國定假日排定出勤班別（非休假 OFF 且非空）
-    if (shiftType && shiftType !== 'OFF' && shiftType !== 'TERM_OFF') {
+    // 若該國定假日排定出勤班別（非休假且非空）
+    if (shiftType && isWorkingShift(shiftType)) {
       const consentKey = `${yearMonth}_${h.day}_${empId}`;
       const isConsented = !!consentsMap[consentKey];
       
-      // 自動尋找當月最靠近的一個 OFF 日作為指定調移休假日
+      // 自動尋找當月最靠近的一個休假日作為指定調移休假日
       let suggestedOffDay = null;
       for (let d = 1; d <= 31; d++) {
         const dayShift = empSchedule[d];
         const dayShiftType = typeof dayShift === 'object' ? dayShift?.shift_type : dayShift;
-        if ((!dayShiftType || dayShiftType === 'OFF' || dayShiftType === 'TERM_OFF') && d !== h.day) {
+        if ((!dayShiftType || isOffShift(dayShiftType)) && d !== h.day) {
           suggestedOffDay = d;
           break;
         }

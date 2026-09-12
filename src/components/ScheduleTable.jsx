@@ -1,6 +1,6 @@
 // src/components/ScheduleTable.jsx
 import React, { useState } from 'react';
-import { SHIFT_TYPES } from '../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift } from '../types/scheduler.js';
 import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight } from 'lucide-react';
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
@@ -460,22 +460,40 @@ export default function ScheduleTable({
                       } else if (effectiveCode === 'OFF' || effectiveCode === 'REST_OFF') {
                         pillStyle = 'bg-rose-100 text-rose-700 font-bold border border-rose-200';
                         label = '休';
-                      } else if (effectiveCode === 'TERM_OFF') {
-                        pillStyle = 'bg-slate-200 text-slate-500 font-semibold';
-                        label = '空';
                       } else if (effectiveCode === 'AL') {
                         pillStyle = 'bg-amber-100 text-amber-800 font-bold border border-amber-300';
                         label = '特';
                       } else if (effectiveCode === 'CT') {
                         pillStyle = 'bg-purple-100 text-purple-800 font-bold border border-purple-300';
                         label = '補';
+                      } else if (effectiveCode === 'SL') {
+                        pillStyle = 'bg-orange-100 text-orange-800 font-bold border border-orange-300';
+                        label = '病';
+                      } else if (effectiveCode === 'PL') {
+                        pillStyle = 'bg-slate-200 text-slate-800 font-bold border border-slate-300';
+                        label = '事';
+                      } else if (effectiveCode === 'ML') {
+                        pillStyle = 'bg-pink-100 text-pink-700 font-bold border border-pink-300';
+                        label = '婚';
+                      } else if (effectiveCode === 'FL') {
+                        pillStyle = 'bg-stone-200 text-stone-800 font-bold border border-stone-300';
+                        label = '喪';
+                      } else if (effectiveCode === 'MAT') {
+                        pillStyle = 'bg-fuchsia-100 text-fuchsia-800 font-bold border border-fuchsia-300';
+                        label = '產';
+                      } else if (effectiveCode === 'CL') {
+                        pillStyle = 'bg-cyan-100 text-cyan-800 font-bold border border-cyan-300';
+                        label = '公';
+                      } else if (effectiveCode === 'TERM_OFF') {
+                        pillStyle = 'bg-slate-200 text-slate-500 font-semibold';
+                        label = '空';
                       } else if (shiftDef) {
                         label = effectiveCode;
                         pillStyle = `${shiftDef.color || 'bg-indigo-100 text-indigo-800'} font-bold border shadow-2xs`;
                       }
 
-                      // 國定假日出勤調移簽認狀態檢核
-                      const isHolidayDuty = holidayObj && effectiveCode && !['OFF', 'REG_OFF', 'REST_OFF', 'TERM_OFF'].includes(effectiveCode) && !isEmpManager;
+                      // 國定假日出勤調移簽認狀態檢核 (僅實際出勤且非高管者需檢核)
+                      const isHolidayDuty = holidayObj && effectiveCode && isWorkingShift(effectiveCode) && !isEmpManager;
                       const consentKey = `${rules.target_year_month || '2026-09'}_${day}_${emp.emp_id}`;
                       const isConsented = isHolidayDuty ? !!holidayConsents[consentKey] : false;
 
@@ -622,20 +640,28 @@ export default function ScheduleTable({
                   onChange={(e) => setNewShiftCode(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 font-bold text-xs focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <optgroup label="營業出勤班別">
-                    {Object.values(effectiveShiftDefs).filter(s => !['OFF', 'TERM_OFF', 'AL', 'CT', 'REG_OFF', 'REST_OFF'].includes(s.code)).map(s => (
+                  <optgroup label="🏢 營業出勤班別">
+                    {Object.values(effectiveShiftDefs).filter(s => isWorkingShift(s.code)).map(s => (
                       <option key={s.code} value={s.code}>
                         {s.code} {s.name} ({formatShiftTime(s.startTime)}~{formatShiftTime(s.endTime)})
                       </option>
                     ))}
                   </optgroup>
-                  <optgroup label="法定休假 (一例一休)">
-                    <option value="REG_OFF">🟥 例 法定例休 (剛性不可出勤)</option>
-                    <option value="REST_OFF">⬜ 休 一般休假 (休息日輪休)</option>
+                  <optgroup label="⚖️ 法定休假 (一例一休)">
+                    <option value="REG_OFF">🟥 例 法定例假 (剛性不可出勤)</option>
+                    <option value="REST_OFF">⬜ 休 休息日 (一般常態輪休)</option>
                   </optgroup>
-                  <optgroup label="事前請假 (排定即扣存摺)">
-                    <option value="AL">🟨 特 排定特休 (可用: {leaveBalances[editingCell.emp.emp_id]?.annualLeaveDays || 0} 天)</option>
-                    <option value="CT">🟪 補 排定補休 (可用: {leaveBalances[editingCell.emp.emp_id]?.compTimeHours || 0} 小時)</option>
+                  <optgroup label="📋 假勤存摺請假 (排定扣抵存摺)">
+                    <option value="AL">🟨 特 特別休假 (可用: {leaveBalances[editingCell.emp.emp_id]?.annualLeaveDays || 0} 天)</option>
+                    <option value="CT">🟪 補 彈性補休 (可用: {leaveBalances[editingCell.emp.emp_id]?.compTimeHours || 0} 小時)</option>
+                  </optgroup>
+                  <optgroup label="🏥 各類法定與差勤請假">
+                    <option value="SL">🟧 病 普通傷病假 (半薪)</option>
+                    <option value="PL">⬛ 事 事假 (無薪)</option>
+                    <option value="ML">🌸 婚 婚假 (8天有薪)</option>
+                    <option value="FL">🪦 喪 喪假 (依親屬等別有薪)</option>
+                    <option value="MAT">🍼 產 產假 / 陪產檢及陪產假</option>
+                    <option value="CL">🏛️ 公 法定公假 (兵役/出庭)</option>
                   </optgroup>
                 </select>
               </div>

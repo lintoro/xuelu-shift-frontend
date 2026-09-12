@@ -483,7 +483,7 @@ export function generateSeedSchedule({
     });
   }
 
-  // 7. 最終收斂：嚴格確保正職每人剛好休滿法定 10 天
+  // 7. 最終收斂：嚴格確保正職每人剛好休滿法定天數
   regularStaff.forEach(emp => {
     let offDays = 0;
     for (let d = 1; d <= totalDays; d++) {
@@ -502,6 +502,44 @@ export function generateSeedSchedule({
             note: '法定例休補足'
           };
           offDays++;
+        }
+      }
+    }
+  });
+
+  // 8. 勞基法第 36 條「一例一休」法定假別自動定性程序 (Statutory Leave Categorization)
+  // 核心原則：每 7 日週期內指定 1 天為剛性法定例假 (REG_OFF 例)，其餘排休為休息日 (REST_OFF 休)
+  // 同仁若已申請 AL(特休)、CT(補休)、SL(病假)、PL(事假) 等，保留該特定假別
+  employees.forEach(emp => {
+    if (emp.is_self_scheduled) return; // 高管自主排班不覆寫
+    const empMap = scheduleMap[emp.emp_id];
+    if (!empMap) return;
+
+    for (let cycleStart = 1; cycleStart <= totalDays; cycleStart += 7) {
+      const cycleEnd = Math.min(cycleStart + 6, totalDays);
+      let hasRegOff = false;
+
+      // 檢查當週是否已有指定之法定例假
+      for (let d = cycleStart; d <= cycleEnd; d++) {
+        if (empMap[d]?.shift_type === 'REG_OFF') {
+          hasRegOff = true;
+          break;
+        }
+      }
+
+      // 當週尚未有例假時，將首個常態休假定性為法定例假 REG_OFF (例)
+      // 當週其餘常態休假定性為休息日輪休 REST_OFF (休)
+      for (let d = cycleStart; d <= cycleEnd; d++) {
+        const item = empMap[d];
+        if (item && item.shift_type === 'OFF') {
+          if (!hasRegOff) {
+            item.shift_type = 'REG_OFF';
+            item.note = '勞基法第36條法定例假 (例)';
+            hasRegOff = true;
+          } else {
+            item.shift_type = 'REST_OFF';
+            item.note = '勞基法第36條休息日輪休 (休)';
+          }
         }
       }
     }

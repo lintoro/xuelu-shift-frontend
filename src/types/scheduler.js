@@ -154,13 +154,35 @@ export const DEFAULT_SHIFT_TYPES = {
     color: 'bg-cyan-50 text-cyan-700 border-cyan-300',
     badgeColor: 'bg-cyan-600 text-white',
     description: '依法給予公假 (兵役/公務出庭，工資照給)'
+  },
+  REG_OFF: {
+    code: 'REG_OFF',
+    name: '法定例假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-rose-600 text-white font-black border border-rose-700',
+    badgeColor: 'bg-rose-600 text-white',
+    description: '勞基法第36條法定例假 (一例一休剛性保障，不可出勤)'
+  },
+  REST_OFF: {
+    code: 'REST_OFF',
+    name: '休息日',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-rose-100 text-rose-700 border border-rose-200',
+    badgeColor: 'bg-rose-500 text-white',
+    description: '勞基法第36條休息日 (常態輪休/彈性調移)'
   }
 };
 
 // 保持與既有靜態模組之 100% 完全相容
 export const SHIFT_TYPES = DEFAULT_SHIFT_TYPES;
 
-export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'];
+export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF'];
 
 /**
  * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休/補休/病假/事假等)

@@ -1,5 +1,5 @@
 // src/utils/calendarExport.js
-import { SHIFT_TYPES } from '../types/scheduler.js';
+import { SHIFT_TYPES, isOffShift } from '../types/scheduler.js';
 
 /**
  * 匯出同仁個人專屬 RFC 5545 標準 .ics 行事曆檔案
@@ -31,7 +31,7 @@ export function exportEmployeeToIcs({
   const pad = (n) => String(n).padStart(2, '0');
 
   Object.entries(empSchedule).forEach(([dayStr, shift]) => {
-    if (!shift || !shift.shift_type || shift.shift_type === 'OFF' || shift.shift_type === 'TERM_OFF') {
+    if (!shift || !shift.shift_type || isOffShift(shift.shift_type)) {
       return;
     }
 
@@ -132,6 +132,24 @@ export function exportScheduleToCsv({
       } else if (shift.shift_type === 'CT') {
         offDays++;
         row.push('補');
+      } else if (shift.shift_type === 'SL') {
+        offDays++;
+        row.push('病');
+      } else if (shift.shift_type === 'PL') {
+        offDays++;
+        row.push('事');
+      } else if (shift.shift_type === 'ML') {
+        offDays++;
+        row.push('婚');
+      } else if (shift.shift_type === 'FL') {
+        offDays++;
+        row.push('喪');
+      } else if (shift.shift_type === 'MAT') {
+        offDays++;
+        row.push('產');
+      } else if (shift.shift_type === 'CL') {
+        offDays++;
+        row.push('公');
       } else if (shift.shift_type === 'TERM_OFF') {
         offDays++;
         row.push('離職');

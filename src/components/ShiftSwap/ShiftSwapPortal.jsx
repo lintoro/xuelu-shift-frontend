@@ -18,7 +18,7 @@ import {
   Lock
 } from 'lucide-react';
 import { precheckSwapCompliance } from '../../data/swapStore.js';
-import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 
 export default function ShiftSwapPortal({
@@ -69,7 +69,7 @@ export default function ShiftSwapPortal({
     const days = [];
     for (let d = 1; d <= 30; d++) {
       const s = scheduleMap[currentEmp?.emp_id]?.[d];
-      if (s && s.shift_type && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF') {
+      if (s && s.shift_type && isWorkingShift(s.shift_type)) {
         days.push({ day: d, shift: s.shift_type, stationId: s.station_id });
       }
     }
@@ -80,7 +80,7 @@ export default function ShiftSwapPortal({
     const days = [];
     for (let d = 1; d <= 30; d++) {
       const s = scheduleMap[currentEmp?.emp_id]?.[d];
-      if (!s || s.shift_type === 'OFF') {
+      if (!s || isOffShift(s.shift_type)) {
         days.push(d);
       }
     }

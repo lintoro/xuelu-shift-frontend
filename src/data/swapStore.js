@@ -1,5 +1,5 @@
 // src/data/swapStore.js
-import { SHIFT_TYPES } from '../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../types/scheduler.js';
 import { canEmployeeSoloAtStation } from './mockMasterData.js';
 
 export const INITIAL_SWAP_REQUESTS = [
@@ -87,12 +87,12 @@ export function precheckSwapCompliance({
     }
 
     const appCurrentShift = simMap[applicantId]?.[applicantDay];
-    if (!appCurrentShift || appCurrentShift.shift_type === 'OFF' || appCurrentShift.shift_type === 'TERM_OFF') {
+    if (!appCurrentShift || isOffShift(appCurrentShift.shift_type)) {
       return { isSafe: false, errors: [`9月${applicantDay}日您原本已是休假，請選擇原本有出勤的日期進行改休！`], warnings: [] };
     }
 
     const targetCurrentShift = simMap[applicantId]?.[targetDay];
-    if (targetCurrentShift && targetCurrentShift.shift_type && targetCurrentShift.shift_type !== 'OFF') {
+    if (targetCurrentShift && isWorkingShift(targetCurrentShift.shift_type)) {
       return { isSafe: false, errors: [`9月${targetDay}日您原本已有排定出勤班別 (${targetCurrentShift.shift_type})，無法重複挪調！`], warnings: [] };
     }
 
@@ -109,7 +109,7 @@ export function precheckSwapCompliance({
     let consecutive = monthBorders['2026-09']?.[appEmp.emp_id]?.consecutive_work_days_at_end || 0;
     for (let d = 1; d <= 30; d++) {
       const shift = simMap[appEmp.emp_id]?.[d];
-      if (shift && shift.shift_type && shift.shift_type !== 'OFF' && shift.shift_type !== 'TERM_OFF') {
+      if (shift && isWorkingShift(shift.shift_type)) {
         consecutive++;
         if (consecutive > 6) {
           errors.push(`挪休後將導致您於第 ${d} 天起連續出勤達 ${consecutive} 天（違反《勞基法》第 36 條 7 休 1 規定）！`);
@@ -125,7 +125,7 @@ export function precheckSwapCompliance({
     if (origStation) {
       const remainingAssigned = employees.filter(e => {
         const s = simMap[e.emp_id]?.[applicantDay];
-        return s && s.station_id === origStation.station_id && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF';
+        return s && s.station_id === origStation.station_id && isWorkingShift(s.shift_type);
       });
 
       const hasSolo = remainingAssigned.some(e => canEmployeeSoloAtStation(e, origStation.station_id));
@@ -156,7 +156,7 @@ export function precheckSwapCompliance({
 
   // 1. 雙向跨組支援資格檢驗 (對價關係軟性關卡：依主管指示不剛性阻止，記錄警告供二階主管核決)
   // A. 檢驗申請人 (applicant) 是否具備對調對象出勤站點之支援能力
-  if (tarShift && tarShift.station_id && tarShift.shift_type !== 'OFF' && tarShift.shift_type !== 'TERM_OFF') {
+  if (tarShift && tarShift.station_id && isWorkingShift(tarShift.shift_type)) {
     const isAppQualifiedForTarStation = (
       appEmp.primary_station === tarShift.station_id || 
       appEmp.supported_stations?.includes(tarShift.station_id)
@@ -168,7 +168,7 @@ export function precheckSwapCompliance({
   }
 
   // B. 檢驗對調對象 (target) 是否具備申請人出勤站點之支援能力
-  if (appShift && appShift.station_id && appShift.shift_type !== 'OFF' && appShift.shift_type !== 'TERM_OFF') {
+  if (appShift && appShift.station_id && isWorkingShift(appShift.shift_type)) {
     const isTarQualifiedForAppStation = (
       tarEmp.primary_station === appShift.station_id || 
       tarEmp.supported_stations?.includes(appShift.station_id)
@@ -200,7 +200,7 @@ export function precheckSwapCompliance({
     let consecutive = monthBorders['2026-09']?.[emp.emp_id]?.consecutive_work_days_at_end || 0;
     for (let d = 1; d <= 30; d++) {
       const shift = simMap[emp.emp_id]?.[d];
-      if (shift && shift.shift_type && shift.shift_type !== 'OFF' && shift.shift_type !== 'TERM_OFF') {
+      if (shift && isWorkingShift(shift.shift_type)) {
         consecutive++;
         if (consecutive > 6) {
           errors.push(`換班後將導致 ${emp.name} 於第 ${d} 天起連續出勤達 ${consecutive} 天（違反《勞基法》第 36 條 7 休 1 規定）！`);
@@ -218,7 +218,7 @@ export function precheckSwapCompliance({
     stations.forEach(station => {
       const assigned = employees.filter(e => {
         const s = simMap[e.emp_id]?.[d];
-        return s && s.station_id === station.station_id && s.shift_type !== 'OFF' && s.shift_type !== 'TERM_OFF';
+        return s && s.station_id === station.station_id && isWorkingShift(s.shift_type);
       });
 
       if (station.requires_solo_staff && assigned.length > 0) {

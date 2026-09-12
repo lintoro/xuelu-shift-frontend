@@ -1,5 +1,5 @@
 // src/engine/complianceValidator.js
-import { SHIFT_TYPES, ALERT_LEVELS, isWorkingShift } from '../types/scheduler.js';
+import { SHIFT_TYPES, ALERT_LEVELS, isWorkingShift, isOffShift } from '../types/scheduler.js';
 
 /**
  * 勞基法全方位合規檢核器與站點三級燈號判定模組
@@ -301,7 +301,7 @@ export function validateScheduleCompliance({
         let windowOffDays = 0;
         for (let wd = d - 13; wd <= d; wd++) {
           const item = scheduleMap[emp.emp_id]?.[wd];
-          if (!item || item.shift_type === 'OFF' || item.shift_type === 'TERM_OFF' || item.work_hours === 0) {
+          if (!item || isOffShift(item.shift_type) || item.work_hours === 0) {
             windowOffDays++;
           }
         }
@@ -332,7 +332,7 @@ export function validateScheduleCompliance({
         let biWeeklyOff = 0;
         for (let wd = d - 13; wd <= d; wd++) {
           const item = scheduleMap[emp.emp_id]?.[wd];
-          if (!item || item.shift_type === 'OFF' || item.shift_type === 'TERM_OFF') biWeeklyOff++;
+          if (!item || isOffShift(item.shift_type)) biWeeklyOff++;
         }
         if (biWeeklyOff < 2) {
           issues.push({
@@ -350,7 +350,7 @@ export function validateScheduleCompliance({
         let fourWeekOff = 0;
         for (let wd = 1; wd <= 28; wd++) {
           const item = scheduleMap[emp.emp_id]?.[wd];
-          if (!item || item.shift_type === 'OFF' || item.shift_type === 'TERM_OFF') fourWeekOff++;
+          if (!item || isOffShift(item.shift_type)) fourWeekOff++;
         }
         if (fourWeekOff < 8) {
           issues.push({
