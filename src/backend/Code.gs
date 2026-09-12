@@ -1201,8 +1201,9 @@ function handleSyncAll(session, payload) {
           empSheet.getRange(exist.row, 8).setValue(suppSt);
           empSheet.getRange(exist.row, 9).setValue(soloSt);
           empSheet.getRange(exist.row, 10).setValue(canSolo);
-          // 欄位 13: status
+          // 欄位 13: status, 欄位 14: pt_schedule_mode
           empSheet.getRange(exist.row, 13).setValue(status);
+          empSheet.getRange(exist.row, 14).setValue(e.pt_schedule_mode || 'FREE');
         } else {
           // 若不存在，新增員工並配置預設密碼
           var newSalt = Utilities.getUuid().substring(0, 8);
@@ -1220,7 +1221,8 @@ function handleSyncAll(session, payload) {
             canSolo,
             hireDate,
             new Date().toISOString(),
-            status
+            status,
+            e.pt_schedule_mode || 'FREE'
           ]);
         }
       });
@@ -1301,7 +1303,7 @@ function setupSpreadsheet() {
   var tables = [
     {
       name: 'Employees',
-      headers: ['emp_id', 'name', 'role', 'pin_hash', 'salt', 'is_admin', 'primary_station', 'supported_stations', 'solo_stations', 'can_solo', 'hire_date', 'created_at', 'status']
+      headers: ['emp_id', 'name', 'role', 'pin_hash', 'salt', 'is_admin', 'primary_station', 'supported_stations', 'solo_stations', 'can_solo', 'hire_date', 'created_at', 'status', 'pt_schedule_mode']
     },
     {
       name: 'Stations',
