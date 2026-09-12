@@ -1038,6 +1038,47 @@
   - 專案打包 `npm run build` 0 錯誤編譯成功。
 - **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.4-rules-quota-and-role-persistence-delivered)`
 
+---
 
+### 📌 [需求 #032] 人事資料新增與編輯彈窗 isCleanUnit 未定義崩潰修復 ＋ ErrorBoundary 免截圖一鍵複製功能
 
+- **來源反饋**：現場主管於新電腦開啟系統，點擊「人事管理」同仁編輯按鈕時跳出 ErrorBoundary「ReferenceError: isCleanUnit is not defined」，附畫面截圖。
+- **根本原因深度排查**：
+  - 先前進行清潔組雙向支援解禁時，在 `PersonnelManagement.jsx` 移除了 `isCleanUnit` 宣告，但於新增同仁彈窗（Line 508）與編輯同仁彈窗（Line 726）的支援站點清單中，JSX 條件式仍殘留 `{isChecked && !isCleanUnit && (`。
+  - 當點擊「編輯同仁」或「新增同仁」彈窗渲染時，JavaScript 評估未定義變數 `isCleanUnit` 拋出 ReferenceError，觸發全域 ErrorBoundary 攔截卡片。
+- **修復與加固架構**：
+  1. **移除殘留未定義變數**：在 `PersonnelManagement.jsx` 徹底移除兩處 `!isCleanUnit`，改為 `{isChecked && (`，恢復支援站點 Solo 開關正常渲染。
+  2. **ErrorBoundary 加裝免截圖一鍵複製按鈕**：
+     - 在 `ErrorBoundary.jsx` 加入 `📋 一鍵複製錯誤代碼 (免截圖)` 功能按鈕。
+     - 點擊後直接將錯誤名稱與元件堆疊寫入系統剪貼簿，主管可直接 `Ctrl + V` 貼上回報，無需另外手動截圖。
+- **影響檔案清單**：
+  - `src/components/Admin/PersonnelManagement.jsx`
+  - `src/components/ErrorBoundary.jsx`
+- **驗證成果**：
+  - 生產環境打包 `npm run build` 成功（6.5 秒通過）。
+  - 單元測試與 Lucide 圖標掃描 100% 通過。
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.5-fix-clean-unit-ref-error-delivered)`
 
+---
+
+## 📝 累積待辦需求清單 (Backlog - 待主管指示開工)
+
+### 📌 [待辦需求 #033] 頂部【排班營運規則總控】彈窗整合（方案 B）
+- **功能規劃**：
+  1. 將頂部紫色按鈕 `【劃休限制設定】` 升級為 `【排班營運規則設定】` 雙頁籤 Modal：
+     - 分頁 1：全館劃休配額與法定天數設定（現有功能）。
+     - 分頁 2：9 大組別「平日最少出勤人數」、「假日最少出勤人數」與「當月排班組長」一站式設定。
+  2. 將「各組組長選派」從人事管理面板抽出，整合至此處。
+  3. 平假日最少人數直接連動自動排班引擎（`schedulerEngine.js` 目標人數）與合規三級燈號（`complianceValidator.js`）。
+
+### 📌 [待辦需求 #034] 人事管理「離退與非在勤封存專區」＋「留停/長病狀態擴充與一鍵復職」
+- **功能規劃**：
+  1. 擴充同仁 `status` 生命週期屬性：
+     - `Active`（在職中 · 主要工作區）
+     - `Suspended`（留職停薪 · 暫停排班）
+     - `MedicalLeave`（長期病假休養 · 暫停排班）
+     - `Resigned`（離退職 · 歷史銷假真空）
+  2. 人事管理介面設計分頁切換：
+     - 分頁 1：`👥 在勤同仁名冊 (在職中)`（主要工作區，只顯示 Active 同仁）。
+     - 分頁 2：`📁 離退與非在勤封存區`（收錄離職、留停、長病假人員，支援隨時切回 `Active` 一鍵復職）。
+  3. 排班引擎與大表僅納入在勤同仁，排班更聚焦、表格更清爽。

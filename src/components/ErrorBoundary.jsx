@@ -64,33 +64,60 @@ export default class ErrorBoundary extends React.Component {
               {'\n\n'}
               {this.state.errorInfo && this.state.errorInfo.componentStack}
             </div>
-            <button
-              onClick={() => {
-                // 清除 localStorage 可能的壞資料
-                try {
-                  localStorage.removeItem('xuelu_employees_v1');
-                  localStorage.removeItem('xuelu_employees_v2');
-                  localStorage.removeItem('xuelu_audit_logs_v1');
-                  localStorage.removeItem('xuelu_holiday_consents_v1');
-                  localStorage.removeItem('xuelu_shift_types_v1');
-                } catch (e) {}
-                window.location.reload();
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                background: '#6366f1',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '12px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🔄 清除快取並重新載入
-            </button>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <button
+                onClick={() => {
+                  const errorText = `${this.state.error?.toString() || ''}\n\n${this.state.errorInfo?.componentStack || ''}`;
+                  navigator.clipboard.writeText(errorText).then(() => {
+                    this.setState({ copied: true });
+                    setTimeout(() => this.setState({ copied: false }), 3000);
+                  }).catch(() => {
+                    alert('複製失敗，請手動反白框內文字');
+                  });
+                }}
+                style={{
+                  flex: '1',
+                  background: this.state.copied ? '#059669' : '#334155',
+                  color: '#fff',
+                  border: '1px solid #475569',
+                  borderRadius: '10px',
+                  padding: '12px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }}
+              >
+                {this.state.copied ? '✓ 已複製錯誤代碼！請直接貼給我' : '📋 一鍵複製錯誤代碼 (免截圖)'}
+              </button>
+
+              <button
+                onClick={() => {
+                  // 清除 localStorage 可能的壞資料
+                  try {
+                    localStorage.removeItem('xuelu_employees_v1');
+                    localStorage.removeItem('xuelu_employees_v2');
+                    localStorage.removeItem('xuelu_audit_logs_v1');
+                    localStorage.removeItem('xuelu_holiday_consents_v1');
+                    localStorage.removeItem('xuelu_shift_types_v1');
+                  } catch (e) {}
+                  window.location.reload();
+                }}
+                style={{
+                  flex: '1',
+                  background: '#6366f1',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '12px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 清除快取並重新載入
+              </button>
+            </div>
           </div>
         </div>
       );

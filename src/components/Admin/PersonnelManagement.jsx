@@ -505,7 +505,7 @@ export default function PersonnelManagement({
                         </label>
 
                         {/* 支援站點能否獨立開關 (由主管設定) */}
-                        {isChecked && !isCleanUnit && (
+                        {isChecked && (
                           <label 
                             className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
                               isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
@@ -723,7 +723,7 @@ export default function PersonnelManagement({
                         </label>
 
                         {/* 支援站點能否獨立開關 (由主管設定) */}
-                        {isChecked && !isCleanUnit && (
+                        {isChecked && (
                           <label 
                             className={`mt-1.5 flex items-center justify-between px-1.5 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
                               isSolo ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'
