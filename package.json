@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scratch/detect_undeclared_variables.mjs && node scratch/check_lucide_imports.mjs && node scratch/verify_all_components_ssr.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

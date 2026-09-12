@@ -9,25 +9,29 @@ import { BookOpen, X, Clock, Calendar, AlertTriangle, ShieldCheck, ArrowUpRight,
  * 3. 動態流水帳歷程：記錄增加、扣抵、單號、備註與期末結餘。
  */
 export default function LeavePassbookModal({
-  currentUser,
-  balance,
+  currentUser = {},
+  balance = {},
   transactions = [],
   onClose
 }) {
   const [activeTab, setActiveTab] = useState('COMP_TIME'); // 'COMP_TIME' 或 'ANNUAL_LEAVE'
 
+  const safeCompTimeHours = balance?.compTimeHours ?? balance?.compensatory_leave_hours ?? balance?.comp_hours ?? 0;
+  const safeAnnualLeaveDays = balance?.annualLeaveDays ?? balance?.annual_leave_days ?? balance?.annual_days ?? 0;
+  const currentEmpId = currentUser?.emp_id || '';
+
   // 過濾當前使用者的流水紀錄
-  const myTxList = transactions.filter(t => t.emp_id === currentUser.emp_id && t.category === activeTab);
+  const myTxList = (transactions || []).filter(t => t?.emp_id === currentEmpId && t?.category === activeTab);
 
   // 統計補休累計數據
-  const compTx = transactions.filter(t => t.emp_id === currentUser.emp_id && t.category === 'COMP_TIME');
-  const compTotalAdded = compTx.filter(t => t.action === 'INCREASE').reduce((sum, t) => sum + (t.amount || 0), 0);
-  const compTotalDeducted = Math.abs(compTx.filter(t => t.action === 'DEDUCT').reduce((sum, t) => sum + (t.amount || 0), 0));
+  const compTx = (transactions || []).filter(t => t?.emp_id === currentEmpId && t?.category === 'COMP_TIME');
+  const compTotalAdded = compTx.filter(t => t?.action === 'INCREASE').reduce((sum, t) => sum + (t?.amount || 0), 0);
+  const compTotalDeducted = Math.abs(compTx.filter(t => t?.action === 'DEDUCT').reduce((sum, t) => sum + (t?.amount || 0), 0));
 
   // 統計特休累計數據
-  const annTx = transactions.filter(t => t.emp_id === currentUser.emp_id && t.category === 'ANNUAL_LEAVE');
-  const annTotalAdded = annTx.filter(t => t.action === 'INCREASE').reduce((sum, t) => sum + (t.amount || 0), 0);
-  const annTotalDeducted = Math.abs(annTx.filter(t => t.action === 'DEDUCT').reduce((sum, t) => sum + (t.amount || 0), 0));
+  const annTx = (transactions || []).filter(t => t?.emp_id === currentEmpId && t?.category === 'ANNUAL_LEAVE');
+  const annTotalAdded = annTx.filter(t => t?.action === 'INCREASE').reduce((sum, t) => sum + (t?.amount || 0), 0);
+  const annTotalDeducted = Math.abs(annTx.filter(t => t?.action === 'DEDUCT').reduce((sum, t) => sum + (t?.amount || 0), 0));
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
@@ -72,7 +76,7 @@ export default function LeavePassbookModal({
             <Clock className="w-4 h-4" />
             <span>彈性補休存摺 (小時制 · 12/31歸零)</span>
             <span className="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold">
-              {balance.compTimeHours}h
+              {safeCompTimeHours}h
             </span>
           </button>
 
@@ -87,7 +91,7 @@ export default function LeavePassbookModal({
             <Calendar className="w-4 h-4" />
             <span>法定特休存摺 (週年制 · 整數天數)</span>
             <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold">
-              {balance.annualLeaveDays}天
+              {safeAnnualLeaveDays}天
             </span>
           </button>
         </div>
@@ -123,7 +127,7 @@ export default function LeavePassbookModal({
                 </div>
                 <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200">
                   <span className="text-[11px] text-purple-700 block mb-0.5 font-bold">當前可用結餘</span>
-                  <span className="text-lg font-black text-purple-700 font-mono">{balance.compTimeHours}</span>
+                  <span className="text-lg font-black text-purple-700 font-mono">{safeCompTimeHours}</span>
                   <span className="text-xs text-purple-600 ml-1 font-bold">小時</span>
                 </div>
               </div>
@@ -136,7 +140,7 @@ export default function LeavePassbookModal({
                 <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
                   <span className="font-bold">單一到職週年制特休規則：</span>
-                  特休天數嚴格依同仁到職日（{currentUser.hire_date || '2021-05-15'}）年資階梯給定，全數維持為<strong>整數天數</strong>。
+                  特休天數嚴格依同仁到職日（{currentUser?.hire_date || '2021-05-15'}）年資階梯給定，全數維持為<strong>整數天數</strong>。
                   <span className="block text-[11px] text-amber-800 mt-0.5">
                     * 有效使用期限至次一到職週年前一日，僅管理可用與已休天數，不涉薪資折現。
                   </span>
@@ -157,7 +161,7 @@ export default function LeavePassbookModal({
                 </div>
                 <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
                   <span className="text-[11px] text-amber-800 block mb-0.5 font-bold">目前剩餘天數</span>
-                  <span className="text-lg font-black text-amber-700 font-mono">{balance.annualLeaveDays}</span>
+                  <span className="text-lg font-black text-amber-700 font-mono">{safeAnnualLeaveDays}</span>
                   <span className="text-xs text-amber-700 ml-1 font-bold">天整</span>
                 </div>
               </div>
