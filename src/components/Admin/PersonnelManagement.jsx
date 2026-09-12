@@ -1,6 +1,43 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles } from 'lucide-react';
+import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles, RotateCcw, Archive, UserCheck, HeartPulse, PauseCircle } from 'lucide-react';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
+
+// 人員生命週期狀態設定字典
+export const PERSONNEL_STATUS_CONFIG = {
+  Active: {
+    label: '在職中',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    icon: UserCheck,
+    desc: '正常在勤 · 參與排班'
+  },
+  Suspended: {
+    label: '留職停薪',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    icon: PauseCircle,
+    desc: '保留年資 · 暫停排班'
+  },
+  MedicalLeave: {
+    label: '長期病假',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
+    icon: HeartPulse,
+    desc: '醫療休養 · 暫停排班'
+  },
+  Resigned: {
+    label: '離退職',
+    badgeClass: 'bg-slate-200 text-slate-700 border-slate-300',
+    icon: Archive,
+    desc: '已離退 · 銷假真空'
+  }
+};
+
+// 標準化人員狀態 (相容舊版 Inactive / RESIGNED 等代碼)
+export const normalizeEmpStatus = (status) => {
+  if (!status || status === 'Active') return 'Active';
+  if (status === 'RESIGNED' || status === 'Inactive' || status === 'Resigned') return 'Resigned';
+  if (status === 'Suspended') return 'Suspended';
+  if (status === 'MedicalLeave') return 'MedicalLeave';
+  return status;
+};
 
 export default function PersonnelManagement({
   employees,
@@ -10,6 +47,7 @@ export default function PersonnelManagement({
   onUpdateStationLeader,
   currentSimulatedDate
 }) {
+  const [personnelTab, setPersonnelTab] = useState('ACTIVE'); // 'ACTIVE' (在勤) | 'ARCHIVED' (離退與非在勤封存)
   const [editingEmp, setEditingEmp] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
@@ -133,6 +171,22 @@ export default function PersonnelManagement({
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
+  // 一鍵復職快捷作業 (封存區專用：將同仁轉回 Active 並移回主要在勤名冊)
+  const handleReactivate = (emp) => {
+    const updated = {
+      ...emp,
+      status: 'Active'
+    };
+    onUpdateEmployee(updated);
+    setFeedbackMsg(`🎉 已成功將同仁【${emp.name}】(${emp.emp_id}) 復職！已重回在勤名冊並可重新參與排班。`);
+    setTimeout(() => setFeedbackMsg(''), 4000);
+  };
+
+  // 分流：在勤名冊 vs 封存區
+  const activeEmployees = employees.filter(e => normalizeEmpStatus(e.status) === 'Active');
+  const archivedEmployees = employees.filter(e => normalizeEmpStatus(e.status) !== 'Active');
+  const currentList = personnelTab === 'ACTIVE' ? activeEmployees : archivedEmployees;
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-8">
       {/* 標題與操作按鈕 */}
@@ -141,11 +195,11 @@ export default function PersonnelManagement({
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-indigo-600" />
             <h2 className="text-base font-bold text-slate-900">
-              人事組織主檔動態管理面板 (動態直連零死碼)
+              人事組織主檔動態管理面板
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            核心決策 14 & 9-2：免開試算表 · 增修同仁 · 站點組長動態選派 · 離退職銷假連動
+            核心架構：在勤名冊 · 離退與留停封存區 · 一鍵復職 · 9大站點平假日出勤連動
           </p>
         </div>
 
@@ -159,194 +213,192 @@ export default function PersonnelManagement({
       </div>
 
       {feedbackMsg && (
-        <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center space-x-2">
+        <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center space-x-2 animate-fadeIn">
           <Check className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{feedbackMsg}</span>
         </div>
       )}
 
-      {/* 站點組長 (Leader) 動態指派快顯列 */}
-      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h3 className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-            <Award className="w-4 h-4 text-amber-600" />
-            <span>各組別當月排班組長 (Leader) 動態選派</span>
-          </h3>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300">
-            ★ 每月 8-10 日主管排班設定期：指定完成各組別當月組長
-          </span>
+      {/* 雙分頁切換導覽列 (在勤同仁 vs 離退/留停封存區) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center space-x-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+          <button
+            type="button"
+            onClick={() => setPersonnelTab('ACTIVE')}
+            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              personnelTab === 'ACTIVE'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <UserCheck className="w-4 h-4 text-emerald-600" />
+            <span>在勤同仁名冊</span>
+            <span className={`ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              personnelTab === 'ACTIVE' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {activeEmployees.length} 人
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPersonnelTab('ARCHIVED')}
+            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              personnelTab === 'ARCHIVED'
+                ? 'bg-white text-slate-800 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Archive className="w-4 h-4 text-slate-500" />
+            <span>離退與非在勤封存區</span>
+            <span className={`ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              personnelTab === 'ARCHIVED' ? 'bg-rose-100 text-rose-800' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {archivedEmployees.length} 人
+            </span>
+          </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
-          {stations.map(station => {
-            const currentLeaderId = station.leader_emp_id || station.leader_id || '';
-            const targetStationId = normalizeStationId(station.station_id);
 
-            // 1. 資格過濾：以主屬站點及跨組支援清單的員工才有資格擔任排班組長 (排除高管自主排班與兼職PT)
-            const candidates = employees.filter(e => {
-              if (e.is_self_scheduled || e.role === 'PT') return false;
-              if (e.status === 'RESIGNED') return false;
-
-              const isPrimary = normalizeStationId(e.primary_station) === targetStationId;
-              const isSupported = (e.supported_stations || [])
-                .map(st => normalizeStationId(st))
-                .includes(targetStationId);
-
-              return isPrimary || isSupported || e.emp_id === currentLeaderId;
-            });
-
-            // 2. 排序依 主站點、工號 進行，以利快速選擇 (本站主屬優先置頂，再依支援主站點排序，同站點內依工號排序)
-            candidates.sort((a, b) => {
-              const isPriA = normalizeStationId(a.primary_station) === targetStationId;
-              const isPriB = normalizeStationId(b.primary_station) === targetStationId;
-              if (isPriA !== isPriB) return isPriA ? -1 : 1;
-
-              const stA = normalizeStationId(a.primary_station) || '';
-              const stB = normalizeStationId(b.primary_station) || '';
-              if (stA !== stB) return stA.localeCompare(stB);
-
-              return (a.emp_id || '').localeCompare(b.emp_id || '');
-            });
-
-            return (
-              <div key={station.station_id} className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
-                <div className="text-[11px] font-bold text-slate-800 mb-1 truncate flex items-center justify-between">
-                  <span>{station.station_name}</span>
-                  {currentLeaderId && (
-                    <span className="text-[9px] px-1 py-0.2 bg-amber-50 text-amber-700 rounded font-bold border border-amber-200">
-                      組長在勤
-                    </span>
-                  )}
-                </div>
-                <select
-                  value={currentLeaderId}
-                  onChange={(e) => onUpdateStationLeader(station.station_id, e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded p-1 text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
-                >
-                  <option value="">(未指派/主管統籌)</option>
-                  {candidates.map(e => {
-                    const isPrimary = normalizeStationId(e.primary_station) === targetStationId;
-                    const stationLabel = getStationDisplayName(e.primary_station);
-                    return (
-                      <option key={e.emp_id} value={e.emp_id}>
-                        [{stationLabel}] {e.name} ({e.emp_id}){isPrimary ? '' : ' [支援]'}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            );
-          })}
+        {/* 營運規則設定指引 */}
+        <div className="text-[11px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center space-x-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span>各站點平日/假日出勤配額與當月排班組長，已收攏至頂部導覽列【營運規則設定】面板統一控管</span>
         </div>
       </div>
 
       {/* 同仁清單表格 */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-              <th className="p-2.5 font-bold">工號</th>
-              <th className="p-2.5 font-bold">同仁姓名</th>
-              <th className="p-2.5 font-bold">業務角色</th>
-              <th className="p-2.5 font-bold">主屬站點</th>
-              <th className="p-2.5 font-bold">跨組支援清單</th>
-              <th className="p-2.5 font-bold">獨立顧站 (Solo)</th>
-              <th className="p-2.5 font-bold">到職日</th>
-              <th className="p-2.5 font-bold">在職狀態</th>
-              <th className="p-2.5 text-center font-bold">操作管理</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {[...employees].sort((a, b) => {
-              // 1. 依主屬站點排序
-              const stA = normalizeStationId(a.primary_station) || '';
-              const stB = normalizeStationId(b.primary_station) || '';
-              if (stA !== stB) return stA.localeCompare(stB);
+      {currentList.length === 0 ? (
+        <div className="py-12 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+          <Archive className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="font-bold text-sm text-slate-600">
+            {personnelTab === 'ACTIVE' ? '目前在勤名冊無資料' : '目前非在勤封存區尚無任何人員'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {personnelTab === 'ACTIVE' 
+              ? '請點擊右上角「新增在勤同仁」以建立名冊。' 
+              : '所有同仁目前皆在職中。若有同仁申請留職停薪、長期病假或離退，可於編輯時調整狀態移入封存。'}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                <th className="p-2.5 font-bold">工號</th>
+                <th className="p-2.5 font-bold">同仁姓名</th>
+                <th className="p-2.5 font-bold">業務角色</th>
+                <th className="p-2.5 font-bold">主屬站點</th>
+                <th className="p-2.5 font-bold">跨組支援清單</th>
+                <th className="p-2.5 font-bold">獨立顧站 (Solo)</th>
+                <th className="p-2.5 font-bold">到職日</th>
+                <th className="p-2.5 font-bold">在職狀態</th>
+                <th className="p-2.5 text-center font-bold">操作管理</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {[...currentList].sort((a, b) => {
+                // 1. 依主屬站點排序
+                const stA = normalizeStationId(a.primary_station) || '';
+                const stB = normalizeStationId(b.primary_station) || '';
+                if (stA !== stB) return stA.localeCompare(stB);
 
-              // 2. 依業務角色排序 (高管 > 組長 > 正職 > PT，賦予權重排序更直觀，若使用者要 A-Z 則 localeCompare)
-              // 這裡採用自定義權重讓階層更清楚：Manager(1) -> Leader(2) -> Staff(3) -> PT(4)
-              const roleWeight = { 'Manager': 1, 'Leader': 2, 'Staff': 3, 'PT': 4 };
-              const weightA = roleWeight[a.role] || 99;
-              const weightB = roleWeight[b.role] || 99;
-              if (weightA !== weightB) return weightA - weightB;
+                // 2. 依業務角色排序
+                const roleWeight = { 'Manager': 1, 'Leader': 2, 'Staff': 3, 'PT': 4 };
+                const weightA = roleWeight[a.role] || 99;
+                const weightB = roleWeight[b.role] || 99;
+                if (weightA !== weightB) return weightA - weightB;
 
-              // 3. 依工號排序
-              const idA = a.emp_id || '';
-              const idB = b.emp_id || '';
-              return idA.localeCompare(idB);
-            }).map(emp => {
-              const isManager = emp.role === 'Manager' || emp.is_self_scheduled;
-              const isInactive = emp.status !== 'Active';
+                // 3. 依工號排序
+                const idA = a.emp_id || '';
+                const idB = b.emp_id || '';
+                return idA.localeCompare(idB);
+              }).map(emp => {
+                const isManager = emp.role === 'Manager' || emp.is_self_scheduled;
+                const normStatus = normalizeEmpStatus(emp.status);
+                const statusMeta = PERSONNEL_STATUS_CONFIG[normStatus] || PERSONNEL_STATUS_CONFIG.Active;
+                const isInactive = normStatus !== 'Active';
 
-              return (
-                <tr key={emp.emp_id} className={`hover:bg-slate-50 ${isInactive ? 'opacity-50 bg-slate-50/50' : ''}`}>
-                  <td className="p-2.5 font-mono font-bold text-slate-900">{emp.emp_id}</td>
-                  <td className="p-2.5 font-bold text-slate-800">{emp.name}</td>
-                  <td className="p-2.5">
-                    <span className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
-                      isManager 
-                        ? 'bg-purple-100 text-purple-700 font-bold' 
-                        : emp.role === 'Leader' 
-                        ? 'bg-blue-100 text-blue-700' 
-                        : emp.role === 'PT' 
-                        ? 'bg-amber-100 text-amber-700' 
-                        : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {isManager ? '高管 (自主排班)' : emp.role === 'Leader' ? '站點組長' : emp.role === 'PT' ? '計時 PT' : '正職同仁'}
-                    </span>
-                  </td>
-                  <td className="p-2.5 font-semibold text-slate-700">
-                    {getStationDisplayName(emp.primary_station)}
-                  </td>
-                  <td className="p-2.5 text-slate-700 max-w-[220px]">
-                    {Array.from(new Set((emp.supported_stations || []).map(st => normalizeStationId(st)))).map(st => {
-                      const isSolo = canEmployeeSoloAtStation(emp, st);
-                      return (
-                        <span key={st} className="inline-flex items-center space-x-1 mr-1.5 mb-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          <span className="font-semibold text-slate-800">{getStationDisplayName(st)}</span>
-                          <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSolo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
-                            {isSolo ? '可獨立' : '僅協同'}
+                return (
+                  <tr key={emp.emp_id} className={`hover:bg-slate-50 transition-colors ${isInactive ? 'opacity-70 bg-slate-50/50' : ''}`}>
+                    <td className="p-2.5 font-mono font-bold text-slate-900">{emp.emp_id}</td>
+                    <td className="p-2.5 font-bold text-slate-800">{emp.name}</td>
+                    <td className="p-2.5">
+                      <span className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
+                        isManager 
+                          ? 'bg-purple-100 text-purple-700 font-bold' 
+                          : emp.role === 'Leader' 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : emp.role === 'PT' 
+                          ? 'bg-amber-100 text-amber-700' 
+                          : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {isManager ? '高管 (自主排班)' : emp.role === 'Leader' ? '站點組長' : emp.role === 'PT' ? '計時 PT' : '正職同仁'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 font-semibold text-slate-700">
+                      {getStationDisplayName(emp.primary_station)}
+                    </td>
+                    <td className="p-2.5 text-slate-700 max-w-[220px]">
+                      {Array.from(new Set((emp.supported_stations || []).map(st => normalizeStationId(st)))).map(st => {
+                        const isSolo = canEmployeeSoloAtStation(emp, st);
+                        return (
+                          <span key={st} className="inline-flex items-center space-x-1 mr-1.5 mb-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                            <span className="font-semibold text-slate-800">{getStationDisplayName(st)}</span>
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSolo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
+                              {isSolo ? '可獨立' : '僅協同'}
+                            </span>
                           </span>
-                        </span>
-                      );
-                    })}
-                  </td>
-                  <td className="p-2.5">
-                    <span className={`font-semibold text-xs ${emp.can_solo ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {emp.can_solo ? '✓ 主屬可獨立' : '— 否'}
-                    </span>
-                  </td>
-                  <td className="p-2.5 text-slate-500 font-mono">{emp.hire_date || '2023-01-01'}</td>
-                  <td className="p-2.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      emp.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                    }`}>
-                      {emp.status === 'Active' ? '在職中' : '離退職'}
-                    </span>
-                  </td>
-                  <td className="p-2.5 text-center">
-                    <div className="flex items-center justify-center space-x-1.5">
-                      <button
-                        onClick={() => setEditingEmp({ ...emp })}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
-                        title="編輯同仁資料"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleResetPin(emp)}
-                        className="p-1 rounded hover:bg-slate-200 text-amber-600 cursor-pointer"
-                        title="重設 PIN 密碼"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                        );
+                      })}
+                    </td>
+                    <td className="p-2.5">
+                      <span className={`font-semibold text-xs ${emp.can_solo ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {emp.can_solo ? '✓ 主屬可獨立' : '— 否'}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-slate-500 font-mono">{emp.hire_date || '2023-01-01'}</td>
+                    <td className="p-2.5">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusMeta.badgeClass}`} title={statusMeta.desc}>
+                        {statusMeta.label}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-center">
+                      <div className="flex items-center justify-center space-x-1.5">
+                        {/* 封存區專屬一鍵復職按鈕 */}
+                        {isInactive && (
+                          <button
+                            type="button"
+                            onClick={() => handleReactivate(emp)}
+                            className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold text-[10px] inline-flex items-center space-x-1 cursor-pointer active:scale-95 transition-all shadow-2xs"
+                            title="一鍵復職回到在職名冊"
+                          >
+                            <RotateCcw className="w-3 h-3 text-emerald-600" />
+                            <span>復職</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setEditingEmp({ ...emp })}
+                          className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
+                          title="編輯同仁資料"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleResetPin(emp)}
+                          className="p-1 rounded hover:bg-slate-200 text-amber-600 cursor-pointer"
+                          title="重設 PIN 密碼"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 新增同仁彈窗 */}
       {isAddingNew && (
@@ -445,6 +497,20 @@ export default function PersonnelManagement({
                     onChange={(e) => setNewEmpForm({ ...newEmpForm, hire_date: e.target.value })}
                     className="w-full border border-slate-300 rounded p-2 font-mono"
                   />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">在勤生命週期狀態</label>
+                  <select
+                    value={newEmpForm.status}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, status: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 font-bold text-slate-800 bg-slate-50 focus:bg-white"
+                  >
+                    <option value="Active">🟢 在職中 (Active)</option>
+                    <option value="Suspended">🟡 留職停薪 (Suspended)</option>
+                    <option value="MedicalLeave">🟣 長期病假休養 (Medical Leave)</option>
+                    <option value="Resigned">⚪ 離退職 (Resigned)</option>
+                  </select>
                 </div>
               </div>
 
@@ -655,15 +721,20 @@ export default function PersonnelManagement({
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">在職狀態 (離職銷假連動)</label>
+                <label className="font-bold text-slate-700 block mb-1">人員在勤生命週期狀態</label>
                 <select
-                  value={editingEmp.status}
+                  value={normalizeEmpStatus(editingEmp.status)}
                   onChange={(e) => setEditingEmp({ ...editingEmp, status: e.target.value })}
-                  className="w-full border border-slate-300 rounded p-2 font-bold"
+                  className="w-full border border-slate-300 rounded p-2 font-bold text-slate-800 bg-slate-50 focus:bg-white"
                 >
-                  <option value="Active">在職中 (Active)</option>
-                  <option value="Inactive">離職/停用 (自動啟動離職銷假真空)</option>
+                  <option value="Active">🟢 在職中 (Active) - 正常在勤 · 參與排班與劃休</option>
+                  <option value="Suspended">🟡 留職停薪 (Suspended) - 保留年資 · 移至封存區 · 暫停排班</option>
+                  <option value="MedicalLeave">🟣 長期病假休養 (Medical Leave) - 醫療休養 · 移至封存區 · 暫停排班</option>
+                  <option value="Resigned">⚪ 離退職 (Resigned) - 終止契約 · 移至封存區 · 銷假真空</option>
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  非 Active 狀態人員將自動移入「離退與非在勤封存區」，不干擾主要排班大表；後續隨時可一鍵復職。
+                </p>
               </div>
 
               {/* 編輯同仁：跨組支援清單 */}

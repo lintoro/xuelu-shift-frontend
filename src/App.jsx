@@ -1255,6 +1255,19 @@ export default function App() {
     }
   }, []);
 
+  // 批量儲存站點主檔（包含平假日最低人數與當月組長動態選派）
+  const handleSaveAllStations = useCallback((newStations) => {
+    setAllStations(newStations);
+    try {
+      localStorage.setItem('xuelu_stations_v1', JSON.stringify(newStations));
+    } catch (e) {
+      console.warn('localStorage save stations failed', e);
+    }
+    if (ApiService.isCloudMode() && typeof ApiService.saveStations === 'function') {
+      ApiService.saveStations(newStations).catch(e => console.warn('[雲端同步] 站點組別規則更新失敗:', e));
+    }
+  }, []);
+
   // 營業班別主檔管理回呼 (需求 #008 Manager 專屬規劃與稽核日誌連動)
   const handleSaveShiftType = useCallback((newShift) => {
     const beforeState = JSON.parse(JSON.stringify(shiftTypes));
@@ -1838,6 +1851,9 @@ export default function App() {
         rules={currentRules}
         onSaveRules={handleSaveMonthlyRules}
         currentMonth={currentMonth}
+        stations={allStations}
+        employees={allEmployees}
+        onSaveStations={handleSaveAllStations}
       />
 
       {/* 底部資訊 */}

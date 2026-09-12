@@ -71,8 +71,12 @@ export default function ScheduleTable({
     dayHeaders.push({ day: d, isWeekend, weekDayStr, holidayObj, fullDate });
   }
 
-  // 雙重篩選人員（角色 + 站點/組別）
+  // 雙重篩選人員（在勤狀態 + 角色 + 站點/組別）
   const filteredEmployees = employees.filter(emp => {
+    // 排除離退、留停、長期病假等非在勤同仁，排班大表僅呈現 Active 在勤同仁
+    const status = emp.status || 'Active';
+    if (status !== 'Active') return false;
+
     if (filterRole !== 'ALL') {
       if (filterRole === 'Manager') {
         if (!emp.is_self_scheduled) return false;

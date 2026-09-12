@@ -93,8 +93,30 @@ export function generateSeedSchedule({
     }
   });
 
-  const regularStaff = employees.filter(e => !e.is_self_scheduled && e.role !== 'PT');
-  const ptStaff = employees.filter(e => e.role === 'PT');
+  // 4.5 非在勤人員 (留職停薪 / 長期病假 / 離退職) 全月鎖定真空
+  const isEmpActive = (e) => !e.status || e.status === 'Active';
+  const inactiveEmployees = employees.filter(e => !isEmpActive(e));
+  inactiveEmployees.forEach(emp => {
+    const statusNote = emp.status === 'Suspended' 
+      ? '留職停薪' 
+      : emp.status === 'MedicalLeave' 
+      ? '長期病假休養' 
+      : '離退職封存';
+    for (let d = 1; d <= totalDays; d++) {
+      if (scheduleMap[emp.emp_id]) {
+        scheduleMap[emp.emp_id][d] = {
+          shift_type: 'TERM_OFF',
+          station_id: null,
+          work_hours: 0,
+          is_support: false,
+          note: statusNote
+        };
+      }
+    }
+  });
+
+  const regularStaff = employees.filter(e => isEmpActive(e) && !e.is_self_scheduled && e.role !== 'PT');
+  const ptStaff = employees.filter(e => isEmpActive(e) && e.role === 'PT');
 
   // 5. 正職輪休規劃 (Regular Staff Off Days Distribution)
   // 5.1 週末輪休分配（每人最多 1 天週末排休，平準週末滿載人力）
