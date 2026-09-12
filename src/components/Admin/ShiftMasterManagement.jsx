@@ -17,6 +17,7 @@ import {
   HelpCircle 
 } from 'lucide-react';
 import { isWorkingShift, isOffShift } from '../../types/scheduler.js';
+import { formatShiftTime } from '../../utils/timeFormatUtils.js';
 
 // 預設 8 大視覺配色調色盤
 const COLOR_PRESETS = [
@@ -78,8 +79,8 @@ const COLOR_PRESETS = [
   }
 ];
 
-// 核心不可刪除班別
-const CORE_SHIFT_CODES = ['A', 'B', 'C', 'OFF', 'TERM_OFF', 'AL', 'CT'];
+// 核心不可刪除班別 (含核心出勤班別與各類勞基法定假別)
+const CORE_SHIFT_CODES = ['A', 'B', 'C', 'OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'];
 
 // 產生時間刻度選項 (07:00 ~ 24:00, 30分鐘一刻度)
 const TIME_OPTIONS = [];
@@ -392,7 +393,7 @@ export default function ShiftMasterManagement({
                     <div>
                       <span className="text-[10px] text-slate-400 block">排定出勤時段</span>
                       <span className="font-semibold text-slate-800">
-                        {shift.startTime} ~ {shift.endTime}
+                        {formatShiftTime(shift.startTime)} ~ {formatShiftTime(shift.endTime)}
                       </span>
                     </div>
                     <div>

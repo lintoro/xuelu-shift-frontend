@@ -88,33 +88,94 @@ export const DEFAULT_SHIFT_TYPES = {
     color: 'bg-purple-50 text-purple-700 border-purple-300',
     badgeColor: 'bg-purple-600 text-white',
     description: '加班核轉彈性補償休假 (全日 8h)'
+  },
+  SL: {
+    code: 'SL',
+    name: '病假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-rose-50 text-rose-700 border-rose-300',
+    badgeColor: 'bg-rose-600 text-white',
+    description: '傷病請假 (一年內未住院 30 日內半薪)'
+  },
+  PL: {
+    code: 'PL',
+    name: '事假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-slate-100 text-slate-700 border-slate-300',
+    badgeColor: 'bg-slate-600 text-white',
+    description: '個人私事請假 (一年內合計不得超過 14 日)'
+  },
+  ML: {
+    code: 'ML',
+    name: '婚假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-pink-50 text-pink-700 border-pink-300',
+    badgeColor: 'bg-pink-600 text-white',
+    description: '法定結婚假別 (8 日，工資照給)'
+  },
+  FL: {
+    code: 'FL',
+    name: '喪假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-stone-100 text-stone-700 border-stone-300',
+    badgeColor: 'bg-stone-600 text-white',
+    description: '親屬喪葬法定假別 (3~8 日，工資照給)'
+  },
+  MAT: {
+    code: 'MAT',
+    name: '產假/陪產假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-300',
+    badgeColor: 'bg-fuchsia-600 text-white',
+    description: '分娩產假 (8週) 或 陪產檢及陪產假 (7日)'
+  },
+  CL: {
+    code: 'CL',
+    name: '公假',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-cyan-50 text-cyan-700 border-cyan-300',
+    badgeColor: 'bg-cyan-600 text-white',
+    description: '依法給予公假 (兵役/公務出庭，工資照給)'
   }
 };
 
 // 保持與既有靜態模組之 100% 完全相容
 export const SHIFT_TYPES = DEFAULT_SHIFT_TYPES;
 
+export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'];
 
 /**
- * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休、非補休)
+ * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休/補休/病假/事假等)
  */
 export function isWorkingShift(shiftType) {
-  return !!shiftType && 
-    shiftType !== 'OFF' && 
-    shiftType !== 'TERM_OFF' && 
-    shiftType !== 'AL' && 
-    shiftType !== 'CT';
+  const code = typeof shiftType === 'object' ? shiftType?.code : shiftType;
+  return !!code && !NON_WORKING_CODES.includes(code);
 }
 
 /**
- * 判定該班別是否為各類休假 (含一般例休、特休、補休、離職真空)
+ * 判定該班別是否為各類休假或特定非出勤 (含例休、特休、補休、病假、事假、離職真空等)
  */
 export function isOffShift(shiftType) {
-  return !shiftType || 
-    shiftType === 'OFF' || 
-    shiftType === 'TERM_OFF' || 
-    shiftType === 'AL' || 
-    shiftType === 'CT';
+  const code = typeof shiftType === 'object' ? shiftType?.code : shiftType;
+  return !code || NON_WORKING_CODES.includes(code);
 }
 
 export const ALERT_LEVELS = {
