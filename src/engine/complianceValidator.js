@@ -18,7 +18,8 @@ export function validateScheduleCompliance({
   monthBorders = {}
 }) {
   const totalDays = rules.days_in_month || 30;
-  const yearMonth = rules.target_year_month || '2026-09';
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const yearMonth = rules.target_year_month || currentYM;
   const borderData = monthBorders[yearMonth] || {};
 
   const issues = [];

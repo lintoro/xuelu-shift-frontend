@@ -67,7 +67,7 @@ export default function PersonnelManagement({
     solo_stations: ['ST_SERVICE'],
     is_self_scheduled: false,
     status: 'Active',
-    hire_date: '2026-09-01'
+    hire_date: ''
   });
 
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
@@ -148,7 +148,12 @@ export default function PersonnelManagement({
   const handleCreateEmp = (e) => {
     e.preventDefault();
     if (!newEmpForm.name) {
-      setFeedbackMsg('請輸入同仁姓名！');
+      setFeedbackMsg('⚠️ 請輸入同仁姓名！');
+      setTimeout(() => setFeedbackMsg(''), 3000);
+      return;
+    }
+    if (!newEmpForm.hire_date) {
+      setFeedbackMsg('⚠️ 請選擇並確定同仁正式到職日！(週年特休計算必填)');
       setTimeout(() => setFeedbackMsg(''), 3000);
       return;
     }
@@ -163,7 +168,7 @@ export default function PersonnelManagement({
       can_solo: true,
       is_self_scheduled: false,
       status: 'Active',
-      hire_date: '2026-09-01'
+      hire_date: ''
     });
     setFeedbackMsg(`已成功新增同仁 ${newEmpForm.name}，名冊已即時動態直連！`);
     setTimeout(() => setFeedbackMsg(''), 3000);
@@ -590,12 +595,15 @@ export default function PersonnelManagement({
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">到職日 (週年特休計算)</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    到職日 <span className="text-rose-500 font-bold">* 必填 (週年特休計算)</span>
+                  </label>
                   <input
                     type="date"
+                    required
                     value={newEmpForm.hire_date}
                     onChange={(e) => setNewEmpForm({ ...newEmpForm, hire_date: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 font-mono"
+                    className="w-full border border-slate-300 rounded p-2 font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 

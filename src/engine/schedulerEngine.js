@@ -19,7 +19,8 @@ export function generateSeedSchedule({
   resignationData = {}
 }) {
   const startTime = performance.now();
-  const yearMonth = rules.target_year_month || '2026-09';
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const yearMonth = rules.target_year_month || currentYM;
   const totalDays = rules.days_in_month || 30;
   const requiredOffDays = rules.required_off_days || 10;
   const [year, month] = yearMonth.split('-').map(Number);

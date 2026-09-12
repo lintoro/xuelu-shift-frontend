@@ -25,21 +25,25 @@ export default function SchedulingTimelineStepper({
   const [showSimulator, setShowSimulator] = useState(false);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
 
-  const activeDate = currentSimulatedDate || '2026-09-10';
+  const activeDate = currentSimulatedDate || new Date().toISOString().slice(0, 10);
   const statusInfo = getTimelineStatus(activeDate);
   const currentStage = statusInfo.currentStage;
   const currentStep = currentStage?.step || 0;
 
-  // 快速切換模擬日期的預設情境 (依照主管最新 8 大階段排程)
+  // 動態根據當前基準日合成跨月份死線日期
+  const [activeYear, activeMonth] = activeDate.split('-');
+  const ymPrefix = `${activeYear}-${activeMonth}`;
+  const monthNum = parseInt(activeMonth, 10);
+
+  // 快速切換模擬日期的預設情境 (依照主管最新 8 大階段排程，動態適應跨月份)
   const quickDatePresets = [
-    { label: '9/08 主管設定', date: '2026-09-08', desc: '8-10日 規則/指派組長' },
-    { label: '9/11 員工劃選', date: '2026-09-11', desc: '11-14日 劃休/PT報班' },
-    { label: '9/15 組長初審', date: '2026-09-15', desc: '15-18日 衝突透視/初審' },
-    { label: '9/19 高管初審', date: '2026-09-19', desc: '19-20日 全場調度/初審' },
-    { label: '9/21 全員簽回', date: '2026-09-21', desc: '21-23日 全員班表簽回' },
-    { label: '9/24 全店產出', date: '2026-09-24', desc: '24-25日 全店班表產出' },
-    { label: '9/30 月底確認', date: '2026-09-30', desc: '月底 出勤確認/覆核' },
-    { label: '10/02 次月簽認', date: '2026-10-02', desc: '次月2日 考勤簽認' }
+    { label: `${monthNum}/08 主管設定`, date: `${ymPrefix}-08`, desc: '8-10日 規則/指派組長' },
+    { label: `${monthNum}/11 員工劃選`, date: `${ymPrefix}-11`, desc: '11-14日 劃休/PT報班' },
+    { label: `${monthNum}/15 組長初審`, date: `${ymPrefix}-15`, desc: '15-18日 衝突透視/初審' },
+    { label: `${monthNum}/19 高管初審`, date: `${ymPrefix}-19`, desc: '19-20日 全場調度/初審' },
+    { label: `${monthNum}/21 全員簽回`, date: `${ymPrefix}-21`, desc: '21-23日 全員班表簽回' },
+    { label: `${monthNum}/24 全店產出`, date: `${ymPrefix}-24`, desc: '24-25日 全店班表產出' },
+    { label: `${monthNum}/30 月底確認`, date: `${ymPrefix}-30`, desc: '月底 出勤確認/覆核' }
   ];
 
   const isManager = currentUser?.role === 'Manager';
@@ -118,9 +122,9 @@ export default function SchedulingTimelineStepper({
               />
               <button
                 type="button"
-                onClick={() => onSimulateDateChange && onSimulateDateChange('2026-09-10')}
+                onClick={() => onSimulateDateChange && onSimulateDateChange(new Date().toISOString().slice(0, 10))}
                 className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                title="還原至預設 2026-09-10"
+                title="還原至當前真實系統日期"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>

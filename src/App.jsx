@@ -63,8 +63,9 @@ export default function App() {
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [isCloudMode, setIsCloudMode] = useState(() => ApiService.isCloudMode());
 
-  // 全月排班生命週期時限排程狀態 (Issue #016) - 預設對齊當前進度基準日 2026-09-12
-  const [currentSimulatedDate, setCurrentSimulatedDate] = useState('2026-09-12');
+  // 全月排班生命週期時限排程狀態 - 動態預設對齊真實系統今日日期 (getTodayStr)
+  const getTodayStr = () => new Date().toISOString().slice(0, 10);
+  const [currentSimulatedDate, setCurrentSimulatedDate] = useState(getTodayStr);
 
   // 當前瀏覽功能分頁 (支援 localStorage 本機持久化，F5 重整保留在原來頁面)
   const [activeTab, setActiveTab] = useState(() => {
