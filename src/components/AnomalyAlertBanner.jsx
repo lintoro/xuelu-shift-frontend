@@ -25,9 +25,13 @@ export default function AnomalyAlertBanner({
   employees = [],
   currentUser,
   selectedDay,
-  onSelectDay
+  onSelectDay,
+  currentSimulatedDate
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // 當前基準日 (未發生日判斷)
+  const currentDay = currentSimulatedDate ? parseInt(currentSimulatedDate.split('-')[2], 10) : 1;
 
   // 判斷當前使用者角色與所屬站點
   const isManager = currentUser?.role === 'Manager';
@@ -56,8 +60,11 @@ export default function AnomalyAlertBanner({
 
   const { issues = [] } = validation;
 
-  // 依選取的站點過濾異常事件
+  // 依選取的站點與日期過濾異常事件（僅顯示未發生的日期，已發生者不干擾排班調度）
   const filteredIssues = issues.filter(issue => {
+    // 規則 1：僅顯示當日與未發生之未來日期 (issue.day >= currentDay)
+    if (issue.day && issue.day < currentDay) return false;
+
     if (effectiveStationFilter === 'ALL') return true;
 
     // 1. 站點專責缺工或缺少 C 班

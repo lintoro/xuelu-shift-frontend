@@ -116,9 +116,15 @@ export default function ScheduleTable({
     return (pendingAdjustments || []).find(a => a.emp_id === empId && a.day === day && a.status !== 'REJECTED');
   };
 
-  // 點擊格子開啟微調
+  // 點擊格子開啟微調（防呆規則：已發生日期禁止調動班表，僅供覆核；僅能改動未發生日期）
   const handleCellClick = (emp, day, currentShift) => {
     if (!canEditEmployeeCell(emp)) return;
+
+    if (day < simDay) {
+      alert(`⚠️【歷史排班鎖定】\n${month}月${day}日勤務已經發生，無法直接調動班表！\n若實際出勤工時或班別與原排定不符，請至上方【實勤覆核 (HOURS_OVERRIDE)】進行覆核記錄。`);
+      return;
+    }
+
     const existingAdj = getCellAdjustment(emp.emp_id, day);
     const initialCode = existingAdj ? existingAdj.new_shift : (currentShift?.shift_type || 'OFF');
     setEditingCell({

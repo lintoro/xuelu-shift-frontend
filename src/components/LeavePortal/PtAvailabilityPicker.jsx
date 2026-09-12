@@ -14,10 +14,19 @@ export default function PtAvailabilityPicker({
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
   const maxDays = employee.max_monthly_days || 10;
 
-  // 當前 PT 的報班狀態
-  const myAvail = availability[employee.emp_id] || {};
+  // 當前 PT 的報班狀態 (預設若未登記過，全月預設為「可排班 AVAILABLE」，同仁僅需點擊不能上的日期)
+  const myAvail = React.useMemo(() => {
+    const raw = availability[employee.emp_id];
+    if (raw && Object.keys(raw).length > 0) return raw;
+    // 初次載入預設全月可排班 (1 ~ totalDays)
+    const initialFull = {};
+    for (let d = 1; d <= totalDays; d++) {
+      initialFull[d] = 'AVAILABLE';
+    }
+    return initialFull;
+  }, [availability, employee.emp_id, totalDays]);
 
-  // 計算已報「可上班」的天數
+  // 計算已報「可上班」與「不可排班」天數
   const availableDaysCount = Object.values(myAvail).filter(v => v === 'AVAILABLE').length;
   const unavailableDaysCount = Object.values(myAvail).filter(v => v === 'UNAVAILABLE').length;
 
@@ -37,7 +46,7 @@ export default function PtAvailabilityPicker({
     const dayOfWeek = dateObj.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const quotaInfo = dailyQuotas[d] || { quota: 2, isRestricted: false };
-    const currentStatus = myAvail[d] || null;
+    const currentStatus = myAvail[d] || 'AVAILABLE';
 
     calendarDays.push({
       isEmpty: false,
@@ -51,21 +60,17 @@ export default function PtAvailabilityPicker({
     });
   }
 
-  // 點擊切換狀態
+  // 點擊切換狀態：預設為 AVAILABLE，點擊切換為 UNAVAILABLE，再點擊切回 AVAILABLE
   const handleToggleStatus = (day, cell) => {
     if (isWorkflowLocked) {
       alert('排班進程已進入組長/高管審查階段，PT 報班劃選已截止鎖定！');
       return;
     }
-    const current = myAvail[day];
+    const current = myAvail[day] || 'AVAILABLE';
 
-    if (!current) {
-      // None -> AVAILABLE
-      updateStatus(day, 'AVAILABLE');
-    } else if (current === 'AVAILABLE') {
-      // AVAILABLE -> UNAVAILABLE
+    if (current === 'AVAILABLE') {
+      // 可排班 ➔ 切換為 不可排班
       if (cell.isRestricted) {
-        // 柔性引導確認
         setConfirmDialog({
           day,
           tag: cell.tag || '大檔活動日',
@@ -75,105 +80,91 @@ export default function PtAvailabilityPicker({
         updateStatus(day, 'UNAVAILABLE');
       }
     } else {
-      // UNAVAILABLE -> None
-      updateStatus(day, null);
+      // 不可排班 ➔ 切回 可排班
+      updateStatus(day, 'AVAILABLE');
     }
   };
 
   const updateStatus = (day, newStatus) => {
-    const updated = { ...myAvail };
-    if (newStatus) {
-      updated[day] = newStatus;
-    } else {
-      delete updated[day];
-    }
+    const updated = { ...myAvail, [day]: newStatus };
     onSaveAvailability(employee.emp_id, updated);
     setConfirmDialog(null);
   };
 
-  // 一鍵填寫週末全部可上班
-  const handleSetAllWeekendsAvailable = () => {
-    const updated = { ...myAvail };
-    calendarDays.forEach(cell => {
-      if (!cell.isEmpty && cell.isWeekend) {
-        updated[cell.day] = 'AVAILABLE';
-      }
-    });
+  // 一鍵重設全月為可排班
+  const handleResetAllAvailable = () => {
+    const updated = {};
+    for (let d = 1; d <= totalDays; d++) {
+      updated[d] = 'AVAILABLE';
+    }
     onSaveAvailability(employee.emp_id, updated);
-    setFeedbackMsg('已批次標記全月週末為「✨ 可上班」！');
+    setFeedbackMsg('已將全月重設為「✨ 全天可排班」！');
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
+  const isFixedMode = employee.pt_schedule_mode === 'FIXED';
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
-      {/* 標題與 PT 進度警示條 (PT Quota Gauge) */}
+      {/* 標題與 PT 屬性資訊看板 */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100">
         <div>
           <div className="flex items-center space-x-2">
             <Sparkles className="w-5 h-5 text-amber-600" />
             <h2 className="text-base font-bold text-slate-900">
-              {employee.name} 計時人員 (PT) 雙軌報班日曆
+              {employee.name} 計時人員 (PT) 報班日曆
             </h2>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+              isFixedMode 
+                ? 'bg-purple-100 text-purple-800 border border-purple-300' 
+                : 'bg-blue-100 text-blue-800 border border-blue-300'
+            }`}>
+              {isFixedMode ? '📌 僅上固定班模式' : '🔄 自由排班模式'}
+            </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            正向報「✨ 可上班」/ 反向登記「🚫 不可排班」· 支援彈性候選池調度
+          <p className="text-xs text-slate-500 mt-1">
+            {isFixedMode 
+              ? '固定班同仁：請直接保留能出勤的日子，排班引擎將優先直接排入，不隨機變動' 
+              : '預設整月全設為可排班，僅需點擊不能出勤的日期標記為「🚫不可排」'}
           </p>
         </div>
 
-        {/* PT Quota Gauge 進度條 */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 min-w-[200px]">
+        {/* PT 出勤統計指標 (已取消 10 天天花板，依勞基法規動態檢核) */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 min-w-[220px]">
           <div className="flex justify-between items-center text-xs mb-1">
-            <span className="font-semibold text-slate-600">已登記可出勤</span>
-            <span className={`font-bold ${
-              availableDaysCount > maxDays ? 'text-rose-600' : availableDaysCount >= maxDays ? 'text-amber-600' : 'text-indigo-600'
-            }`}>
-              {availableDaysCount} / {maxDays} 天 (約定上限)
+            <span className="font-semibold text-slate-600">登記可出勤天數</span>
+            <span className="font-black text-emerald-700 text-sm">
+              {availableDaysCount} 天
             </span>
           </div>
-          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all ${
-                availableDaysCount > maxDays 
-                  ? 'bg-rose-500' 
-                  : availableDaysCount >= maxDays 
-                  ? 'bg-amber-500' 
-                  : 'bg-indigo-600'
-              }`}
-              style={{ width: `${Math.min((availableDaysCount / maxDays) * 100, 100)}%` }}
-            />
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-            <span>不可排班: {unavailableDaysCount} 天</span>
-            <span>{availableDaysCount >= maxDays ? '已達約定天數' : '名額充裕'}</span>
+          <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-200/60 mt-1">
+            <span>預約不排班: <b className="text-rose-600">{unavailableDaysCount}</b> 天</span>
+            <span className="text-slate-400">依合規彈性派工</span>
           </div>
         </div>
       </div>
 
-      {/* 快捷操作與圖例 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/60 text-xs">
-        <div className="flex items-center space-x-4">
-          <span className="font-semibold text-amber-900">點擊切換循環:</span>
-          <span className="flex items-center space-x-1 text-slate-600">
-            <span className="w-3.5 h-3.5 rounded bg-slate-100 border border-slate-300" />
-            <span>未登記</span>
-          </span>
-          <span>→</span>
-          <span className="flex items-center space-x-1 text-emerald-700 font-semibold">
+      {/* 快捷操作與圖例 (已移除舊版一鍵六日，新增重設全月可排) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+        <div className="flex items-center space-x-3">
+          <span className="font-bold text-slate-700">狀態點選：</span>
+          <span className="flex items-center space-x-1 text-emerald-700 font-bold">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            <span>可上班</span>
+            <span>✨ 可排班 (預設)</span>
           </span>
-          <span>→</span>
-          <span className="flex items-center space-x-1 text-rose-700 font-semibold">
+          <span className="text-slate-400">⇄</span>
+          <span className="flex items-center space-x-1 text-rose-700 font-bold">
             <XCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>不可排班</span>
+            <span>🚫 不可排班 (點擊切換)</span>
           </span>
         </div>
 
         <button
-          onClick={handleSetAllWeekendsAvailable}
-          className="px-3 py-1 bg-white hover:bg-amber-100 border border-amber-300 rounded text-amber-900 font-semibold text-[11px] cursor-pointer transition-colors shadow-2xs"
+          onClick={handleResetAllAvailable}
+          className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
+          title="將全月所有日期重設為可排班"
         >
-          ⚡ 一鍵填報全月週末可排
+          🔄 一鍵重設全月為可排班
         </button>
       </div>
 

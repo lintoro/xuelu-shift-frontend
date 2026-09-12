@@ -1736,6 +1736,7 @@ export default function App() {
                 currentUser={currentUser}
                 selectedDay={selectedDay}
                 onSelectDay={setSelectedDay}
+                currentSimulatedDate={currentSimulatedDate}
               />
             )}
 

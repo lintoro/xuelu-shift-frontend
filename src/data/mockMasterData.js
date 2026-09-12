@@ -441,6 +441,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_SERVICE', 'ST_DINING', 'ST_ADMIN'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FREE', // 自由排班
     status: 'Active',
     max_monthly_days: 12,
     hire_date: '2025-09-01'
@@ -458,6 +459,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_MAIN_SHOP', 'ST_SUB_SHOP'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FIXED', // 僅能上固定班 (例如固定某些平日或週末)
     status: 'Active',
     max_monthly_days: 10,
     hire_date: '2025-10-01'
@@ -475,6 +477,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_EXPERIENCE'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FREE',
     status: 'Active',
     max_monthly_days: 8,
     hire_date: '2025-11-01'
@@ -492,6 +495,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_CLEAN'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FREE',
     status: 'Active',
     max_monthly_days: 14,
     hire_date: '2025-08-01'
@@ -509,6 +513,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_Gagoo', 'ST_MSS'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FIXED', // 固定班
     status: 'Active',
     max_monthly_days: 10,
     hire_date: '2025-12-01'
@@ -526,6 +531,7 @@ export const EMPLOYEES = [
     supported_stations: ['ST_Gagoo', 'ST_MSS'],
     can_solo: false,
     is_self_scheduled: false,
+    pt_schedule_mode: 'FREE',
     status: 'Active',
     max_monthly_days: 8,
     hire_date: '2026-01-01'
