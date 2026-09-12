@@ -1,7 +1,9 @@
-# 學旅營運處多站點智慧排班與勞基法合規審查> **專案版本**：V2.4.0 正式完工驗收暨交接封裝版（最新標籤：`v2.4.0-admin-verify-manager-self-declared-done`）  
-> **更新日期**：2026-09-10  
+# 學旅營運處多站點智慧排班與勞基法合規審查系統 (Xuelu Shift System)
+
+> **專案版本**：V2.5.0 正式完工驗收暨全館試排準備版（最新 Commit：`48bcef9` / `93850eb`）  
+> **更新日期**：2026-09-12  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
-> **完整維運交接說明書**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)。
+> **維運交接與資料庫指南**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)、[`DATABASE_SCHEMA_MAPPING.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/DATABASE_SCHEMA_MAPPING.md) 與 [`OCTOBER_UAT_TEST_SCRIPT.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/OCTOBER_UAT_TEST_SCRIPT.md)。
 
 ---
 
