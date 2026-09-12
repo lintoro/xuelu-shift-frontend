@@ -338,37 +338,6 @@ export default function ScheduleTable({
         </div>
       )}
 
-      {/* 營運支援空班警示提示條 (規則 5: 平日 1A 1B、假日 1A 1C 空班警示手動修正) */}
-      {adminDeficitIssues.length > 0 && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between gap-3 text-xs text-amber-900">
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-            <span className="flex items-center space-x-1 font-bold text-amber-800 shrink-0">
-              <AlertTriangle className="w-4 h-4 text-amber-600 inline" />
-              <span>⚠️ 營運支援空班警示 (共 {adminDeficitIssues.length} 天)：</span>
-            </span>
-            <span className="text-amber-700 text-[11px]">
-              依規定營運支援平日需 1A 1B、假日需 1A 1C。部分日期因法規排休缺工，請點擊日期手動微調補班：
-            </span>
-            <div className="flex flex-wrap gap-1 items-center">
-              {adminDeficitIssues.map(issue => (
-                <button
-                  key={issue.day}
-                  type="button"
-                  onClick={() => onSelectDay && onSelectDay(issue.day)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
-                    selectedDay === issue.day 
-                      ? 'bg-amber-600 text-white border-amber-700 shadow-xs' 
-                      : 'bg-white hover:bg-amber-100 text-amber-800 border-amber-300'
-                  }`}
-                  title={issue.message}
-                >
-                  {issue.day}日 ({issue.missingShifts?.join('/') || '空班'})
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {feedbackMsg && (
         <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-xs font-bold flex items-center space-x-2 animate-fadeIn">

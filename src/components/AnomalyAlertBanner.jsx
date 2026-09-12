@@ -62,6 +62,9 @@ export default function AnomalyAlertBanner({
 
   // 依選取的站點與日期過濾異常事件（僅顯示未發生的日期，已發生者不干擾排班調度）
   const filteredIssues = issues.filter(issue => {
+    // 依使用者指示：徹底排除「營運支援空班」警示 (ST_ADMIN / ADMIN_SHIFT_DEFICIT)
+    if (issue.type === 'ADMIN_SHIFT_DEFICIT' || issue.station_id === 'ST_ADMIN') return false;
+
     // 規則 1：僅顯示當日與未發生之未來日期 (issue.day >= currentDay)
     if (issue.day && issue.day < currentDay) return false;
 

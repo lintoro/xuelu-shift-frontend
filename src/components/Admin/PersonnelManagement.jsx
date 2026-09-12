@@ -385,7 +385,13 @@ export default function PersonnelManagement({
                           ? 'bg-amber-100 text-amber-700' 
                           : 'bg-slate-100 text-slate-700'
                       }`}>
-                        {isManager ? '高管 (自主排班)' : emp.role === 'Leader' ? '站點組長' : emp.role === 'PT' ? '計時 PT' : '正職同仁'}
+                        {isManager 
+                          ? '高管 (自主排班)' 
+                          : emp.role === 'Leader' 
+                          ? '站點組長' 
+                          : emp.role === 'PT' 
+                          ? `計時 PT ${emp.pt_schedule_mode === 'FIXED' ? '🔒固定班' : '🌿自由排'}` 
+                          : '正職同仁'}
                       </span>
                     </td>
                     <td className="p-2.5 font-semibold text-slate-700">
@@ -501,7 +507,7 @@ export default function PersonnelManagement({
                   <label className="font-bold text-slate-700 block mb-1">業務角色</label>
                   <select
                     value={newEmpForm.role}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, role: e.target.value })}
+                    onChange={(e) => setNewEmpForm({ ...newEmpForm, role: e.target.value, pt_schedule_mode: e.target.value === 'PT' ? (newEmpForm.pt_schedule_mode || 'FREE') : undefined })}
                     className="w-full border border-slate-300 rounded p-2"
                   >
                     <option value="Staff">正職同仁 (Staff)</option>
@@ -509,6 +515,47 @@ export default function PersonnelManagement({
                     <option value="PT">計時人員 (PT)</option>
                   </select>
                 </div>
+
+                {newEmpForm.role === 'PT' && (
+                  <div className="col-span-2 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200">
+                    <label className="font-bold text-slate-800 block mb-1">
+                      ⏱️ PT 排班模式 (由高管核定)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <label className={`flex items-center space-x-2 p-2 rounded border cursor-pointer ${
+                        (newEmpForm.pt_schedule_mode || 'FREE') === 'FREE' 
+                          ? 'bg-white border-amber-500 font-bold text-amber-900 shadow-2xs' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="pt_mode_new"
+                          value="FREE"
+                          checked={(newEmpForm.pt_schedule_mode || 'FREE') === 'FREE'}
+                          onChange={() => setNewEmpForm({ ...newEmpForm, pt_schedule_mode: 'FREE' })}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>🌿 自由彈性排班 (動態調度)</span>
+                      </label>
+
+                      <label className={`flex items-center space-x-2 p-2 rounded border cursor-pointer ${
+                        newEmpForm.pt_schedule_mode === 'FIXED' 
+                          ? 'bg-white border-amber-500 font-bold text-amber-900 shadow-2xs' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="pt_mode_new"
+                          value="FIXED"
+                          checked={newEmpForm.pt_schedule_mode === 'FIXED'}
+                          onChange={() => setNewEmpForm({ ...newEmpForm, pt_schedule_mode: 'FIXED' })}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>🔒 僅上固定班 (直接 100% 鎖定)</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">主屬站點</label>
@@ -727,6 +774,50 @@ export default function PersonnelManagement({
                   <option value="Manager">👑 營運高管 (Manager)</option>
                 </select>
               </div>
+
+              {editingEmp.role === 'PT' && (
+                <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200">
+                  <label className="font-bold text-slate-800 block mb-1">
+                    ⏱️ PT 排班模式 (由高管核定)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <label className={`flex items-center space-x-2 p-2 rounded border cursor-pointer ${
+                      (editingEmp.pt_schedule_mode || 'FREE') === 'FREE' 
+                        ? 'bg-white border-amber-500 font-bold text-amber-900 shadow-2xs' 
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="pt_mode_edit"
+                        value="FREE"
+                        checked={(editingEmp.pt_schedule_mode || 'FREE') === 'FREE'}
+                        onChange={() => setEditingEmp({ ...editingEmp, pt_schedule_mode: 'FREE' })}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>🌿 自由彈性排班 (動態調度)</span>
+                    </label>
+
+                    <label className={`flex items-center space-x-2 p-2 rounded border cursor-pointer ${
+                      editingEmp.pt_schedule_mode === 'FIXED' 
+                        ? 'bg-white border-amber-500 font-bold text-amber-900 shadow-2xs' 
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="pt_mode_edit"
+                        value="FIXED"
+                        checked={editingEmp.pt_schedule_mode === 'FIXED'}
+                        onChange={() => setEditingEmp({ ...editingEmp, pt_schedule_mode: 'FIXED' })}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>🔒 僅上固定班 (直接 100% 鎖定)</span>
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-amber-700 mt-1">
+                    設定為「僅上固定班」時，PT 自主報班劃選之日期將 100% 直排鎖定，不參與隨機輪更或空缺調度。
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center space-x-2 pt-0.5 pb-0.5">
                 <input

@@ -178,37 +178,7 @@ export function validateScheduleCompliance({
     const hasB = adminShifts.includes('B');
     const hasC = adminShifts.includes('C');
 
-    if (isWeekend) {
-      const missing = [];
-      if (!hasA) missing.push('A班');
-      if (!hasC) missing.push('C班');
-      if (missing.length > 0) {
-        issues.push({
-          type: 'ADMIN_SHIFT_DEFICIT',
-          severity: 'WARNING',
-          day: d,
-          station_id: 'ST_ADMIN',
-          station_name: '營運處(支援)',
-          missingShifts: missing,
-          message: `假日營運支援空班缺工：缺少 ${missing.join(' 及 ')}（規定需求 1A 1C），請手動微調補班`
-        });
-      }
-    } else {
-      const missing = [];
-      if (!hasA) missing.push('A班');
-      if (!hasB) missing.push('B班');
-      if (missing.length > 0) {
-        issues.push({
-          type: 'ADMIN_SHIFT_DEFICIT',
-          severity: 'WARNING',
-          day: d,
-          station_id: 'ST_ADMIN',
-          station_name: '營運處(支援)',
-          missingShifts: missing,
-          message: `平日營運支援空班缺工：缺少 ${missing.join(' 及 ')}（規定需求 1A 1B），請手動微調補班`
-        });
-      }
-    }
+    // 依使用者指示：不再檢查與顯示營運支援空班缺工警示 (ADMIN_SHIFT_DEFICIT)
   }
 
   // 2. 個人出勤法規檢驗（連續工作日、班距、總工時）
