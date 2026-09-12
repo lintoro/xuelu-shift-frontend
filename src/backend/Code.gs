@@ -620,6 +620,15 @@ function handleGetInitialData(yearMonth, session) {
     });
   }
 
+  // 10. 讀取排班發布與工作流狀態 (依 Schedules 中是否有 PUBLISHED 判斷)
+  var isPublished = false;
+  for (var sp = 1; sp < schData.length; sp++) {
+    if (schData[sp][1] === ym && schData[sp][34] === 'PUBLISHED') {
+      isPublished = true;
+      break;
+    }
+  }
+
   return {
     employees: employees,
     stations: stations,
@@ -629,7 +638,12 @@ function handleGetInitialData(yearMonth, session) {
     swaps: swaps,
     overrides: overrides,
     passbooks: passbooks,
-    auditLogs: auditLogs
+    auditLogs: auditLogs,
+    workflow_state: {
+      year_month: ym,
+      is_published: isPublished,
+      stage: isPublished ? 'PUBLISHED_LOCKED' : 'PREFERENCE_FILL'
+    }
   };
 }
 

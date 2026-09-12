@@ -41,6 +41,7 @@ import { generateSeedSchedule } from './engine/schedulerEngine.js';
 import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
 import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
+import { SCHEDULE_WORKFLOW_STAGES, canAdvanceWorkflowStage } from './engine/schedulingTimelineEngine.js';
 
 export default function App() {
   // 當前登入同仁 (支援 localStorage 本機持久化，F5 重整保留登入狀態)
@@ -278,6 +279,47 @@ export default function App() {
       return [];
     }
   });
+
+  // 四階段單向排班審核工作流狀態 (PREFERENCE_FILL -> LEADER_SCHEDULING -> MANAGER_FINAL_REVIEW -> PUBLISHED_LOCKED)
+  const [scheduleWorkflowStage, setScheduleWorkflowStage] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`xuelu_schedule_workflow_${currentMonth}`);
+      return saved || 'PREFERENCE_FILL';
+    } catch {
+      return 'PREFERENCE_FILL';
+    }
+  });
+
+  const handleAdvanceWorkflowStage = useCallback((targetStage) => {
+    if (!SCHEDULE_WORKFLOW_STAGES[targetStage]) return;
+    setScheduleWorkflowStage(prev => {
+      if (!canAdvanceWorkflowStage(prev, targetStage)) {
+        alert(`無法回退排班進程！當前為【${SCHEDULE_WORKFLOW_STAGES[prev]?.name}】，遵循單向不可逆規範。`);
+        return prev;
+      }
+      try {
+        localStorage.setItem(`xuelu_schedule_workflow_${currentMonth}`, targetStage);
+      } catch (e) {
+        console.warn('儲存工作流進程失敗:', e);
+      }
+
+      // 寫入不可抹滅之 Audit Log
+      const stageLog = {
+        log_id: `LOG_${Date.now()}_STAGE`,
+        timestamp: new Date().toISOString(),
+        action_type: 'SCHEDULE_WORKFLOW_ADVANCE',
+        operator_id: currentUser?.emp_id || 'SYS',
+        operator_name: currentUser?.name || '系統',
+        notes: `排班進程推進：【${SCHEDULE_WORKFLOW_STAGES[prev]?.name}】➔【${SCHEDULE_WORKFLOW_STAGES[targetStage]?.name}】`,
+        before_snapshot: { stage: prev },
+        after_snapshot: { stage: targetStage }
+      };
+      setAuditLogs(logs => [stageLog, ...logs]);
+
+      alert(`✅ 排班進程已成功推進至【${SCHEDULE_WORKFLOW_STAGES[targetStage]?.name}】！`);
+      return targetStage;
+    });
+  }, [currentMonth, currentUser]);
 
   React.useEffect(() => {
     try {
@@ -1729,6 +1771,8 @@ export default function App() {
               onRejectAdjustment={handleRejectAdjustment}
               onSubmitAdjustmentsToManager={handleSubmitAdjustmentsToManager}
               leaveBalances={leaveBalances}
+              workflowStage={scheduleWorkflowStage}
+              onAdvanceWorkflowStage={handleAdvanceWorkflowStage}
             />
 
             {/* 勞基法合規證明書：僅主管與組長檢視法規審查細項 */}
@@ -1770,6 +1814,7 @@ export default function App() {
                 rules={currentRules}
                 dailyQuotas={dailyQuotas}
                 onSaveAvailability={handleSavePtAvailability}
+                workflowStage={scheduleWorkflowStage}
               />
             ) : (
               <RegularStaffPicker
@@ -1781,6 +1826,7 @@ export default function App() {
                 leaveBalance={leaveBalances[currentEmpId] || { annualLeaveDays: 0, compTimeHours: 0 }}
                 onSavePreferences={handleSavePreferences}
                 currentSimulatedDate={currentSimulatedDate}
+                workflowStage={scheduleWorkflowStage}
               />
             )}
           </>

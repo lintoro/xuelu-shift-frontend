@@ -6,8 +6,10 @@ export default function PtAvailabilityPicker({
   availability,
   rules,
   dailyQuotas,
-  onSaveAvailability
+  onSaveAvailability,
+  workflowStage = 'PREFERENCE_FILL'
 }) {
+  const isWorkflowLocked = workflowStage && workflowStage !== 'PREFERENCE_FILL';
   const totalDays = rules.days_in_month || 30;
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
   const maxDays = employee.max_monthly_days || 10;
@@ -51,6 +53,10 @@ export default function PtAvailabilityPicker({
 
   // 點擊切換狀態
   const handleToggleStatus = (day, cell) => {
+    if (isWorkflowLocked) {
+      alert('排班進程已進入組長/高管審查階段，PT 報班劃選已截止鎖定！');
+      return;
+    }
     const current = myAvail[day];
 
     if (!current) {

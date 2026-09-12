@@ -411,10 +411,53 @@ export function checkActionTimelineEligibility(action, role, dateInput = new Dat
           isExceptionAllowed: isManager
         };
       }
-      return { allowed: true, reason: '今日為月底出勤確認日，開放主管覆核。' };
-
     default:
       return { allowed: true, reason: '常態運作允許執行。' };
   }
+}
+
+// === 四階段單向排班審核狀態鏈 (SCHEDULE_WORKFLOW_STAGES) ===
+export const SCHEDULE_WORKFLOW_STAGES = {
+  PREFERENCE_FILL: {
+    stage: 'PREFERENCE_FILL',
+    order: 1,
+    name: '劃班與預休中',
+    desc: '員工/PT 填報希望休假與可出勤時段，主管可預填自排班表',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-300'
+  },
+  LEADER_SCHEDULING: {
+    stage: 'LEADER_SCHEDULING',
+    order: 2,
+    name: '組長智能排班與微調中',
+    desc: '員工劃班已截止鎖定。站點組長啟動 AI 智能排班並手動微調本組班別，確認後一鍵上呈',
+    badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300'
+  },
+  MANAGER_FINAL_REVIEW: {
+    stage: 'MANAGER_FINAL_REVIEW',
+    order: 3,
+    name: '高管跨組總審與補位中',
+    desc: '組長微調已截稿鎖定。營運高管自主輸入/確認個人班表，跨組調度補齊缺口，做最終定稿',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300'
+  },
+  PUBLISHED_LOCKED: {
+    stage: 'PUBLISHED_LOCKED',
+    order: 4,
+    name: '正式發布封存',
+    desc: '全館班表已正式定稿生成大表並上傳雲端，全員唯讀鎖定。異動一律走換班/請假後審機制',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300'
+  }
+};
+
+/**
+ * 檢查是否可進行目標工作流狀態轉移（遵循單向不可回頭原則）
+ * @param {string} currentStage 
+ * @param {string} targetStage 
+ * @returns {boolean}
+ */
+export function canAdvanceWorkflowStage(currentStage, targetStage) {
+  const currentOrder = SCHEDULE_WORKFLOW_STAGES[currentStage]?.order || 1;
+  const targetOrder = SCHEDULE_WORKFLOW_STAGES[targetStage]?.order || 1;
+  // 僅允許單向向上推進 (嚴禁回頭)
+  return targetOrder > currentOrder;
 }
 

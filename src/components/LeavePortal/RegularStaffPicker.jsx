@@ -10,7 +10,8 @@ export default function RegularStaffPicker({
   rules,
   leaveBalance,
   onSavePreferences,
-  currentSimulatedDate
+  currentSimulatedDate,
+  workflowStage = 'PREFERENCE_FILL'
 }) {
   const totalDays = rules.days_in_month || 30;
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
@@ -36,9 +37,9 @@ export default function RegularStaffPicker({
   const alSelectedCount = myPrefs.filter(p => p.leave_type === 'AL' || p.leave_type === '特休').length;
   const ctSelectedCount = myPrefs.filter(p => p.leave_type === 'CT' || p.leave_type === '補休').length;
 
-  // 2. 劃休月份剛性鎖定：已排定或非次月月份禁止劃休 (需求 2)
-  // 假定 2026-09 為當前營運發布月份，小於等於 2026-09 或明確標記 is_published 即鎖定
-  const isMonthLocked = rules.is_published || (rules.target_year_month && rules.target_year_month <= '2026-09');
+  // 2. 劃休月份剛性鎖定：已排定、非次月月份、或工作流已進入組長/高管審核階段即鎖定 (單向不可逆)
+  const isWorkflowLocked = workflowStage && workflowStage !== 'PREFERENCE_FILL';
+  const isMonthLocked = isWorkflowLocked || rules.is_published || (rules.target_year_month && rules.target_year_month <= '2026-09');
 
   const [activeDay, setActiveDay] = useState(null); // 目前正在編輯的日期
   const [selectedPriority, setSelectedPriority] = useState(1);

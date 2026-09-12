@@ -22,13 +22,15 @@ export default function ScheduleTable({
   shiftTypes = SHIFT_TYPES,
   currentSimulatedDate,
   holidayConsents = {},
-  // 微調與二階審核 props
   pendingAdjustments = [],
   onSaveAdjustment,
   onBatchApproveAdjustments,
   onRejectAdjustment,
   onSubmitAdjustmentsToManager,
-  leaveBalances = {}
+  leaveBalances = {},
+  // 工作流狀態控制
+  workflowStage = 'PREFERENCE_FILL',
+  onAdvanceWorkflowStage
 }) {
   const statusInfo = getTimelineStatus(currentSimulatedDate || '2026-09-10');
   const simDay = statusInfo.day;
@@ -92,9 +94,18 @@ export default function ScheduleTable({
 
   // 判定當前登入者是否可以微調該同仁的格子
   const canEditEmployeeCell = (emp) => {
+    // 狀態 4: 已發布封存，全員嚴格唯讀鎖定
+    if (workflowStage === 'PUBLISHED_LOCKED') return false;
+
+    // Manager 自排同仁：僅 Manager 具備編輯權限（任何未發布階段皆可填寫）
     if (emp.is_self_scheduled) return isManager;
+
+    // Manager: 在階段 1, 2, 3 均具備全館調整權限（階段 4 唯讀鎖定）
     if (isManager) return true;
+
+    // Leader: 僅在階段 2 (組長排班中) 或預設情況下可編輯本組人員；階段 3 (高管審查中) 進入唯讀送審狀態
     if (isLeader && myLeaderStation) {
+      if (workflowStage === 'MANAGER_FINAL_REVIEW') return false; // 已經上呈高管審核，組長進入鎖定
       return emp.primary_station === myLeaderStation.station_id || (emp.supported_stations || []).includes(myLeaderStation.station_id);
     }
     return false;
@@ -191,12 +202,103 @@ export default function ScheduleTable({
         </div>
       )}
 
+      {/* 工作流狀態推進提示條 (四階段單向流) */}
+      <div className="px-4 py-2 bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
+        <div className="flex items-center space-x-2">
+          <span className="font-bold text-amber-400">當前排班進程：</span>
+          <span className={`px-2 py-0.5 rounded font-black text-[11px] ${
+            workflowStage === 'PREFERENCE_FILL' ? 'bg-blue-600 text-white' :
+            workflowStage === 'LEADER_SCHEDULING' ? 'bg-indigo-600 text-white' :
+            workflowStage === 'MANAGER_FINAL_REVIEW' ? 'bg-amber-600 text-white' :
+            'bg-emerald-600 text-white'
+          }`}>
+            {workflowStage === 'PREFERENCE_FILL' ? '階段 1: 員工/PT劃班預休中' :
+             workflowStage === 'LEADER_SCHEDULING' ? '階段 2: 站點組長智能排班中' :
+             workflowStage === 'MANAGER_FINAL_REVIEW' ? '階段 3: 營運高管總審中' :
+             '階段 4: 正式發布固定 (唯讀)'}
+          </span>
+          <span className="text-slate-300 text-[11px] hidden sm:inline">
+            {workflowStage === 'PREFERENCE_FILL' && '（同仁填寫預休與報班中）'}
+            {workflowStage === 'LEADER_SCHEDULING' && '（同仁劃休已截稿，組長微調中）'}
+            {workflowStage === 'MANAGER_FINAL_REVIEW' && '（組長排班已送審，高管總審中）'}
+            {workflowStage === 'PUBLISHED_LOCKED' && '（大表已固定發布，異動請走調班後審）'}
+          </span>
+        </div>
+
+        {/* 階段切換操作按鈕 */}
+        <div className="flex items-center space-x-2">
+          {/* 組長在階段 2 完成微調送審 */}
+          {isLeader && workflowStage === 'LEADER_SCHEDULING' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定本組班表已確認無誤，要正式「一鍵送交高管審核」嗎？\n送審後本組班表將進入鎖定唯讀狀態。')) {
+                  if (onSubmitAdjustmentsToManager) onSubmitAdjustmentsToManager(myLeaderStation?.station_id);
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
+                }
+              }}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>本組確認無誤 · 送高管審核</span>
+            </button>
+          )}
+
+          {/* 高管在階段 1 推進至階段 2 截止劃休 */}
+          {isManager && workflowStage === 'PREFERENCE_FILL' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要截止同仁劃休，推進至【階段 2: 組長排班中】嗎？\n推進後一般同仁將無法再新增或修改劃休。')) {
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('LEADER_SCHEDULING');
+                }
+              }}
+              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              截止同仁劃休 ➔ 啟動組長排班
+            </button>
+          )}
+
+          {/* 高管在階段 2 直接切換至階段 3 */}
+          {isManager && workflowStage === 'LEADER_SCHEDULING' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要進入【階段 3: 高管總審】嗎？\n進入後各站組長將停止微調權限，由高管統一覆核與補位。')) {
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
+                }
+              }}
+              className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              結束組長排班 ➔ 進入高管總審
+            </button>
+          )}
+
+          {/* 高管在階段 3 發布大表並鎖定 */}
+          {isManager && workflowStage === 'MANAGER_FINAL_REVIEW' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要發布並固定大表嗎？\n發布後全館班表將進入【階段 4: 正式發布固定】，全員鎖定不可任意更動，後續異動將走調班/請假後審機制！')) {
+                  if (onSaveToCloud) onSaveToCloud();
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('PUBLISHED_LOCKED');
+                }
+              }}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>🔒 固定生成大表 · 正式發布</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 微調作業操作提示橫幅 (Leader 暫存上呈 / Manager 覆核) */}
-      {isLeader && myStationDraftCount > 0 && (
+      {isLeader && myStationDraftCount > 0 && workflowStage === 'LEADER_SCHEDULING' && (
         <div className="px-4 py-2 bg-indigo-50 border-b border-indigo-200 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-2 text-indigo-900 font-bold">
             <Edit3 className="w-4 h-4 text-indigo-600" />
-            <span>本組有 {myStationDraftCount} 筆排班微調暫存中（點擊格子可繼續微調）：</span>
+            <span>本組有 {myStationDraftCount} 筆排班微調暫存中（點擊格子可微調）：</span>
           </div>
           <button
             type="button"
@@ -208,12 +310,12 @@ export default function ScheduleTable({
             className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>確認本組微調 · 一鍵上呈經理覆核</span>
+            <span>暫存微調上呈</span>
           </button>
         </div>
       )}
 
-      {isManager && pendingForManager.length > 0 && (
+      {isManager && pendingForManager.length > 0 && workflowStage !== 'PUBLISHED_LOCKED' && (
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-2 text-amber-900 font-bold">
             <AlertCircle className="w-4 h-4 text-amber-600 animate-bounce" />
@@ -315,14 +417,74 @@ export default function ScheduleTable({
         <div className="flex items-center flex-wrap gap-2">
           {isManager && (
             <>
-              <button
-                onClick={() => onRunEngine && onRunEngine()}
-                title="重新啟動排班引擎進行智慧排班計算"
-                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>啟動智慧排班</span>
-              </button>
+              {/* Manager 快速填報本人班表快捷鍵 */}
+              {workflowStage !== 'PUBLISHED_LOCKED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const managerEmp = employees.find(e => e.is_self_scheduled && e.emp_id === currentUser?.emp_id) || employees.find(e => e.is_self_scheduled);
+                    if (!managerEmp) {
+                      alert('未找到主管帳號資料！');
+                      return;
+                    }
+                    const fillChoice = window.prompt(
+                      `【主管自主排班快速通道】\n請輸入快捷代碼批次排定本人（${managerEmp.name}）整月班表：\n1: 週一至週五正常班 (D班 09:30-18:30)，週末例休 (REST_OFF)\n2: 整月常規班 (B班 10:00-19:00)\n3: 清空本人班表 (重設為留白)`,
+                      '1'
+                    );
+                    if (!fillChoice) return;
+
+                    const totalD = scheduleResult?.totalDays || 30;
+                    for (let d = 1; d <= totalD; d++) {
+                      const dateObj = new Date(year, month - 1, d);
+                      const isWk = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                      let assignedCode = 'D';
+                      if (fillChoice === '1') {
+                        assignedCode = isWk ? 'REST_OFF' : 'D';
+                      } else if (fillChoice === '2') {
+                        assignedCode = 'B';
+                      } else if (fillChoice === '3') {
+                        assignedCode = 'OFF';
+                      }
+
+                      if (onSaveAdjustment) {
+                        onSaveAdjustment({
+                          adj_id: `ADJ_MGR_${Date.now()}_${managerEmp.emp_id}_${d}`,
+                          emp_id: managerEmp.emp_id,
+                          emp_name: managerEmp.name,
+                          primary_station: managerEmp.primary_station || 'ST_ADMIN',
+                          day: d,
+                          original_shift: 'OFF',
+                          new_shift: assignedCode,
+                          reason: '主管自主輸入排定個人班表',
+                          proposed_by_id: currentUser?.emp_id || 'MGR',
+                          proposed_by_name: currentUser?.name || '主管',
+                          proposed_role: 'Manager',
+                          status: 'APPROVED_DIRECT',
+                          created_at: new Date().toISOString()
+                        });
+                      }
+                    }
+                    setFeedbackMsg(`已成功完成主管【${managerEmp.name}】全月班表自主排定！`);
+                    setTimeout(() => setFeedbackMsg(''), 3000);
+                  }}
+                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+                  title="高管不劃班，在此一鍵快速輸入本人全月班表"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>自填本人班表</span>
+                </button>
+              )}
+
+              {workflowStage !== 'PUBLISHED_LOCKED' && (
+                <button
+                  onClick={() => onRunEngine && onRunEngine()}
+                  title="重新啟動排班引擎進行智慧排班計算"
+                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>啟動智慧排班</span>
+                </button>
+              )}
 
               <button
                 onClick={() => onSaveToCloud && onSaveToCloud()}
@@ -451,7 +613,7 @@ export default function ScheduleTable({
                       let pillStyle = 'text-slate-300';
                       let label = '-';
 
-                      if (isEmpManager) {
+                      if (isEmpManager && !effectiveCode) {
                         pillStyle = 'text-slate-300 font-light';
                         label = '留白';
                       } else if (effectiveCode === 'REG_OFF') {
