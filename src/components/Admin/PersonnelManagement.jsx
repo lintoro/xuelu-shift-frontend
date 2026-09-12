@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles, RotateCcw, Archive, UserCheck, HeartPulse, PauseCircle } from 'lucide-react';
+import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles, RotateCcw, Archive, UserCheck, HeartPulse, PauseCircle, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 
 // 人員生命週期狀態設定字典
@@ -45,12 +45,16 @@ export default function PersonnelManagement({
   onUpdateEmployee,
   onAddEmployee,
   onUpdateStationLeader,
-  currentSimulatedDate
+  currentSimulatedDate,
+  isCloudMode = false,
+  onRefreshRoster = null
 }) {
   const [personnelTab, setPersonnelTab] = useState('ACTIVE'); // 'ACTIVE' (在勤) | 'ARCHIVED' (離退與非在勤封存)
   const [editingEmp, setEditingEmp] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  // 雲端名冊強制刷新 loading 狀態
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 新增同仁表單狀態
   const [newEmpForm, setNewEmpForm] = useState({
@@ -201,15 +205,64 @@ export default function PersonnelManagement({
           <p className="text-xs text-slate-500 mt-0.5">
             核心架構：在勤名冊 · 離退與留停封存區 · 一鍵復職 · 9大站點平假日出勤連動
           </p>
+          {/* 即時在勤人數徽章 */}
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold">
+              <UserCheck className="w-3 h-3" />
+              在勤 {activeEmployees.length} 人
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300 font-medium">
+              建檔總計 {employees.length} 人（含封存 {archivedEmployees.length} 人）
+            </span>
+            {isCloudMode ? (
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300 font-medium">
+                <Cloud className="w-3 h-3" />
+                即時雲端名冊
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium">
+                <CloudOff className="w-3 h-3" />
+                本地沙盒
+              </span>
+            )}
+          </div>
         </div>
 
-        <button
-          onClick={() => setIsAddingNew(true)}
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer active:scale-95"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>新增在勤同仁</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 一鍵強制刷新雲端名冊按鈕（僅雲端模式顯示） */}
+          {isCloudMode && onRefreshRoster && (
+            <button
+              type="button"
+              id="btn-refresh-cloud-roster"
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await onRefreshRoster();
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              disabled={isRefreshing}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-sm transition-all cursor-pointer ${
+                isRefreshing
+                  ? 'bg-sky-100 text-sky-500 border border-sky-300 cursor-not-allowed'
+                  : 'bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 hover:border-sky-400 active:scale-95'
+              }`}
+              title="從 Google 試算表強制拉取最新人事名冊（以雲端為唯一真理源覆蓋本機快取）"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? '刷新中...' : '強制刷新雲端名冊'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsAddingNew(true)}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer active:scale-95"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>新增在勤同仁</span>
+          </button>
+        </div>
       </div>
 
       {feedbackMsg && (

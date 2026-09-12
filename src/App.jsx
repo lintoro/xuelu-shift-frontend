@@ -82,16 +82,22 @@ export default function App() {
   const [isMonthlyRulesOpen, setIsMonthlyRulesOpen] = useState(false);
 
   // 動態人事主檔 (支援 localStorage 本機持久化，升級 v2 校正 Admin Manager/Staff)
+  // 三層動態資料架構 SSOT：雲端模式下以空陣列啟動，由 handlePullFromCloud 填充雲端真實名冊；
+  // 沙盒模式（本機開發/示範）下才 fallback 使用靜態 EMPLOYEES 示範名冊。
   const [allEmployees, setAllEmployees] = useState(() => {
     try {
       const saved = localStorage.getItem('xuelu_employees_v2') || localStorage.getItem('xuelu_employees_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.map(e => e);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(e => e);
+        }
       }
-      return EMPLOYEES;
+      // 雲端模式：回空陣列，等候 handlePullFromCloud 自動以試算表為唯一真理源填充
+      // 沙盒模式：回靜態示範名冊（方便本地開發預覽）
+      return ApiService.isCloudMode() ? [] : EMPLOYEES;
     } catch {
-      return EMPLOYEES;
+      return ApiService.isCloudMode() ? [] : EMPLOYEES;
     }
   });
   // 站點組織主檔 (支援 localStorage 本機持久化，F5 重整保留動態指派組長)
@@ -1827,6 +1833,8 @@ export default function App() {
             onAddEmployee={handleAddEmployee}
             onUpdateStationLeader={handleUpdateStationLeader}
             currentSimulatedDate={currentSimulatedDate}
+            isCloudMode={isCloudMode}
+            onRefreshRoster={handleManualRefreshFromCloud}
           />
         )}
 
