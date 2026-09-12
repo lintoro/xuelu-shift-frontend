@@ -1,6 +1,6 @@
 // src/components/ScheduleTable.jsx
 import React, { useState } from 'react';
-import { SHIFT_TYPES, isWorkingShift } from '../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, NON_WORKING_CODES } from '../types/scheduler.js';
 import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight } from 'lucide-react';
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
@@ -579,8 +579,8 @@ export default function ScheduleTable({
             <span>排定補休</span>
           </div>
 
-          {/* 各出勤班別 */}
-          {Object.values(effectiveShiftDefs).filter(s => !['OFF', 'TERM_OFF', 'AL', 'CT', 'REG_OFF', 'REST_OFF'].includes(s.code)).map(s => {
+          {/* 各出勤班別：使用 NON_WORKING_CODES 常數，包含全量法定假別，不再寫死部分項目 */}
+          {Object.values(effectiveShiftDefs).filter(s => !NON_WORKING_CODES.includes(s.code)).map(s => {
             const timeDisplay = s.startTime && s.startTime !== '-' 
               ? ` (${formatShiftTime(s.startTime)}~${formatShiftTime(s.endTime)})` 
               : '';

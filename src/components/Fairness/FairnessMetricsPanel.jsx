@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BarChart3, Sparkles, TrendingUp, Award, CheckCircle2, ShieldAlert, Cpu } from 'lucide-react';
+import { isWorkingShift } from '../../types/scheduler.js';
 
 export default function FairnessMetricsPanel({
   employees,
@@ -26,7 +27,8 @@ export default function FairnessMetricsPanel({
       const shift = scheduleMap[emp.emp_id]?.[d];
 
       if (isWeekend) {
-        if (shift?.shift_type && shift.shift_type !== 'OFF' && shift.shift_type !== 'TERM_OFF') {
+        // 改用 isWorkingShift API，涉蓋全量 12+ 種法定假別，不再寫死 OFF/TERM_OFF
+        if (isWorkingShift(shift?.shift_type)) {
           weekendWorkCount++;
         } else {
           weekendOffCount++;

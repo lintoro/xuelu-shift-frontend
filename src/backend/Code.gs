@@ -418,9 +418,25 @@ function handleGetInitialData(yearMonth, session) {
     var fmtStart = sRow[2] instanceof Date ? Utilities.formatDate(sRow[2], 'GMT+8', 'HH:mm') : String(sRow[2] || '-');
     var fmtEnd = sRow[3] instanceof Date ? Utilities.formatDate(sRow[3], 'GMT+8', 'HH:mm') : String(sRow[3] || '-');
 
+    // === 自動無縫遷移 v1：校正 D班舊名稱 ===
+    // 若 D班名稱為舊文案（專櫃短班/假日機動班），自動更新試算表並回傳正確名稱
+    var rowName = sRow[1];
+    if (sRow[0] === 'D' && (rowName === '專櫃短班' || rowName === '專櫃彈性短班' || rowName === '假日機動班')) {
+      rowName = '正常班';
+      if (shiftSheet) {
+        shiftSheet.getRange(sIdx + 1, 2).setValue('正常班');  // 第 2 欄 = name
+        shiftSheet.getRange(sIdx + 1, 3).setValue('09:30');   // 校正上班時間
+        shiftSheet.getRange(sIdx + 1, 4).setValue('18:30');   // 校正下班時間
+        shiftSheet.getRange(sIdx + 1, 5).setValue(1);         // breakHours
+        shiftSheet.getRange(sIdx + 1, 6).setValue(8);         // workHours
+      }
+      fmtStart = '09:30';
+      fmtEnd = '18:30';
+    }
+
     shiftTypes.push({
       code: sRow[0],
-      name: sRow[1],
+      name: rowName,
       startTime: fmtStart,
       endTime: fmtEnd,
       breakHours: Number(sRow[4] || 1),
@@ -431,6 +447,44 @@ function handleGetInitialData(yearMonth, session) {
       badgeColor: sRow[7] || '#334155',
       isActive: sRow[8] !== false && sRow[8] !== 'false'
     });
+  }
+
+  // === 自動無縫遷移 v2：補齊缺漏的全量法定假別 ===
+  // 雲端試算表若缺少下列法定假別，系統自動追加，確保前端能完整顯示所有假別卡片
+  if (shiftSheet) {
+    var existingCodes = shiftTypes.map(function(st) { return st.code; });
+    var nowIso = new Date().toISOString();
+    // 全量法定假別定義（前端 NON_WORKING_CODES 完整清單，除 OFF/TERM_OFF/AL/CT 外的補充部分）
+    var mandatoryLeaveTypes = [
+      { code: 'TERM_OFF', name: '離職真空', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#f1f5f9', badge: '#9ca3af', desc: '離職生效後絕對真空，不計產能' },
+      { code: 'AL',       name: '特休',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fef3c7', badge: '#92400e', desc: '法定週年制特別休假 (全日 8h)' },
+      { code: 'CT',       name: '補休',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#ede9fe', badge: '#5b21b6', desc: '加班核轉彈性補償休假 (全日 8h)' },
+      { code: 'SL',       name: '病假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fff1f2', badge: '#be123c', desc: '傷病請假 (一年內未住院30日內半薪)' },
+      { code: 'PL',       name: '事假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#f1f5f9', badge: '#475569', desc: '個人私事請假 (一年內合計不得超過14日)' },
+      { code: 'ML',       name: '婚假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fdf2f8', badge: '#be185d', desc: '法定結婚假別 (8日，工資照給)' },
+      { code: 'FL',       name: '喪假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#f5f5f4', badge: '#57534e', desc: '親屬喪葬法定假別 (3~8日，工資照給)' },
+      { code: 'MAT',      name: '產假/陪產假', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fdf4ff', badge: '#86198f', desc: '分娩產假(8週)或陪產檢及陪產假(7日)' },
+      { code: 'CL',       name: '公假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#ecfeff', badge: '#0e7490', desc: '依法給予公假 (兵役/公務出庭，工資照給)' },
+      { code: 'REG_OFF',  name: '法定例假', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fff1f2', badge: '#e11d48', desc: '勞基法第36條每7日至少1例假 (不得安排出勤)' },
+      { code: 'REST_OFF', name: '休息日',   startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fef2f2', badge: '#dc2626', desc: '一例一休之休息日 (出勤加計加班費)' }
+    ];
+    var needsFlush = false;
+    mandatoryLeaveTypes.forEach(function(lt) {
+      if (existingCodes.indexOf(lt.code) === -1) {
+        // 試算表缺少此假別，自動追加
+        shiftSheet.appendRow([lt.code, lt.name, lt.startTime, lt.endTime, lt.breakH, lt.workH, lt.color, lt.badge, true, nowIso]);
+        // 同時補齊回傳陣列，讓本次 API 回應立即包含完整假別
+        shiftTypes.push({
+          code: lt.code, name: lt.name, startTime: lt.startTime, endTime: lt.endTime,
+          breakHours: lt.breakH, workHours: lt.workH,
+          color: lt.color, bgColor: lt.color, textColor: lt.badge, badgeColor: lt.badge, isActive: true
+        });
+        needsFlush = true;
+      }
+    });
+    if (needsFlush) {
+      SpreadsheetApp.flush(); // 確保所有寫入即時生效
+    }
   }
 
   // 4. 讀取 Schedules (指定 yearMonth)
@@ -1327,11 +1381,22 @@ function setupSpreadsheet() {
   var shiftSheet = ss.getSheetByName('Shift_Types');
   if (shiftSheet && shiftSheet.getLastRow() === 1) {
     var defaultShifts = [
-      ['A', '早班', '08:30', '17:30', 1, 8, '#dbeafe', '#1e40af', true, new Date().toISOString()],
-      ['B', '常規班', '10:00', '19:00', 1, 8, '#e0e7ff', '#3730a3', true, new Date().toISOString()],
-      ['C', '晚班', '13:30', '22:30', 1, 8, '#fae8ff', '#86198f', true, new Date().toISOString()],
-      ['D', '假日機動班', '11:00', '20:00', 1, 8, '#fef3c7', '#92400e', true, new Date().toISOString()],
-      ['OFF', '例休假', '', '', 0, 0, '#f1f5f9', '#475569', true, new Date().toISOString()]
+      ['A',       '早班',       '08:30', '17:30', 1, 8, '#dbeafe', '#1e40af', true, new Date().toISOString()],
+      ['B',       '常規班',     '10:00', '19:00', 1, 8, '#e0e7ff', '#3730a3', true, new Date().toISOString()],
+      ['C',       '晚班',       '13:30', '22:30', 1, 8, '#fae8ff', '#86198f', true, new Date().toISOString()],
+      ['D',       '正常班',     '09:30', '18:30', 1, 8, '#f3e8ff', '#7c3aed', true, new Date().toISOString()],
+      ['OFF',     '休假',       '-',     '-',     0, 0, '#fff1f2', '#e11d48', true, new Date().toISOString()],
+      ['TERM_OFF','離職真空',   '-',     '-',     0, 0, '#f1f5f9', '#9ca3af', true, new Date().toISOString()],
+      ['AL',      '特休',       '-',     '-',     0, 0, '#fef3c7', '#92400e', true, new Date().toISOString()],
+      ['CT',      '補休',       '-',     '-',     0, 0, '#ede9fe', '#5b21b6', true, new Date().toISOString()],
+      ['SL',      '病假',       '-',     '-',     0, 0, '#fff1f2', '#be123c', true, new Date().toISOString()],
+      ['PL',      '事假',       '-',     '-',     0, 0, '#f1f5f9', '#475569', true, new Date().toISOString()],
+      ['ML',      '婚假',       '-',     '-',     0, 0, '#fdf2f8', '#be185d', true, new Date().toISOString()],
+      ['FL',      '喪假',       '-',     '-',     0, 0, '#f5f5f4', '#57534e', true, new Date().toISOString()],
+      ['MAT',     '產假/陪產假','-',     '-',     0, 0, '#fdf4ff', '#86198f', true, new Date().toISOString()],
+      ['CL',      '公假',       '-',     '-',     0, 0, '#ecfeff', '#0e7490', true, new Date().toISOString()],
+      ['REG_OFF', '法定例假',   '-',     '-',     0, 0, '#fff1f2', '#e11d48', true, new Date().toISOString()],
+      ['REST_OFF','休息日',     '-',     '-',     0, 0, '#fef2f2', '#dc2626', true, new Date().toISOString()]
     ];
     defaultShifts.forEach(function(ds) { shiftSheet.appendRow(ds); });
   }

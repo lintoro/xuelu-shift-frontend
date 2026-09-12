@@ -36,14 +36,14 @@ export const DEFAULT_SHIFT_TYPES = {
   },
   D: {
     code: 'D',
-    name: '專櫃短班',
+    name: '正常班',
     startTime: '09:30',
-    endTime: '16:30',
+    endTime: '18:30',
     breakHours: 1,
-    workHours: 6,
+    workHours: 8,
     color: 'bg-purple-100 text-purple-800 border-purple-300',
     badgeColor: 'bg-purple-500 text-white',
-    description: '專櫃彈性短班'
+    description: '常態標準工時班別'
   },
   OFF: {
     code: 'OFF',

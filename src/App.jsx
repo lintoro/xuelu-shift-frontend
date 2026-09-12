@@ -1141,7 +1141,10 @@ export default function App() {
         });
       }
       if (data.shiftTypes && Array.isArray(data.shiftTypes) && data.shiftTypes.length > 0) {
-        const shiftsObj = {};
+        // 「全量 Merge 補齊策略」:
+        // 1. 先以 DEFAULT_SHIFT_TYPES 所有定義為基底，確保全量法定假別永不被沖销
+        // 2. 再將雲端語中設定 merge 上去，讓 Manager 自訂的班別名稱與時段生效
+        const shiftsObj = { ...DEFAULT_SHIFT_TYPES }; // 起點：全量預設定義
         data.shiftTypes.forEach(st => {
           const defaultRef = DEFAULT_SHIFT_TYPES[st.code] || {};
           shiftsObj[st.code] = {
@@ -1661,6 +1664,7 @@ export default function App() {
             onExportMyIcs={handleExportMyIcs}
             onNavigateTab={setActiveTab}
             onSubmitLeaveApplication={handleSubmitLeaveApplication}
+            shiftTypes={shiftTypes}
           />
         )}
 

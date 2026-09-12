@@ -1,5 +1,5 @@
 // src/engine/schedulerEngine.js
-import { SHIFT_TYPES } from '../types/scheduler.js';
+import { SHIFT_TYPES, isOffShift } from '../types/scheduler.js';
 
 /**
  * 確定性啟發式排班種子引擎 (Staggered Rotation Heuristic Seed Engine - V2.3 增強版)
@@ -269,7 +269,8 @@ export function generateSeedSchedule({
     const canWorkToday = (emp) => {
       if (assignedToday.has(emp.emp_id)) return false;
       const cur = scheduleMap[emp.emp_id][day];
-      if (cur && (cur.shift_type === 'OFF' || cur.shift_type === 'TERM_OFF')) return false;
+      // 全量假別判定：使用 isOffShift API，避免漏判例假/特休等法定假別作為休息天
+      if (cur && isOffShift(cur.shift_type)) return false;
       if (consecutiveDaysMap[emp.emp_id] >= maxConsecutiveAllowed) return false;
       return true;
     };
@@ -460,7 +461,8 @@ export function generateSeedSchedule({
           assignStaff(emp, targetStation, shiftCode, isSupport);
           stationStaffCount[targetStation.station_id]++;
           if (emp.can_solo) stationHasSolo[targetStation.station_id] = true;
-        } else if (cur.shift_type === 'OFF' || cur.shift_type === 'TERM_OFF') {
+        } else if (isOffShift(cur.shift_type)) {
+          // 不論是何種假別均重置連續天數
           consecutiveDaysMap[emp.emp_id] = 0;
         }
       }
@@ -493,7 +495,7 @@ export function generateSeedSchedule({
     if (offDays < requiredOffDays) {
       for (let d = totalDays; d >= 1 && offDays < requiredOffDays; d--) {
         const item = scheduleMap[emp.emp_id][d];
-        if (item && item.shift_type !== 'OFF' && item.shift_type !== 'TERM_OFF' && item.note.includes('機動')) {
+        if (item && !isOffShift(item.shift_type) && item.note.includes('機動')) {
           scheduleMap[emp.emp_id][d] = {
             shift_type: 'OFF',
             station_id: null,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle, FileText, Check } from 'lucide-react';
-import { SHIFT_TYPES, isWorkingShift } from '../../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
 import { checkEmployeeHolidayConsent } from '../../data/holidayTransferStore.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 import LeaveApplicationModal from './LeaveApplicationModal.jsx';
@@ -20,7 +20,8 @@ export default function MyDashboard({
   onSignOff,
   onExportMyIcs,
   onNavigateTab,
-  onSubmitLeaveApplication
+  onSubmitLeaveApplication,
+  shiftTypes        // 動態班別主檔（由 Manager 開立，不傳則 fallback 到 DEFAULT_SHIFT_TYPES）
 }) {
   const [isPassbookOpen, setIsPassbookOpen] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -37,6 +38,9 @@ export default function MyDashboard({
   let myOffDays = 0;
   let myTotalHours = 0;
 
+  // 利用動態班別主檔，不傳則 fallback 到預設 SHIFT_TYPES
+  const effectiveShiftTypes = shiftTypes || SHIFT_TYPES;
+
   const myShiftsList = [];
   for (let d = 1; d <= totalDays; d++) {
     const shift = mySchedule[d];
@@ -44,7 +48,8 @@ export default function MyDashboard({
       myWorkDays++;
       const hrs = shift.actual_hours !== undefined ? shift.actual_hours : shift.work_hours || 8;
       myTotalHours += hrs;
-      myShiftsList.push({ day: d, shift, shiftInfo: SHIFT_TYPES[shift.shift_type] });
+      // 動態讀取班別定義，不再寫死 SHIFT_TYPES
+      myShiftsList.push({ day: d, shift, shiftInfo: effectiveShiftTypes[shift.shift_type] || SHIFT_TYPES[shift.shift_type] });
     } else if (shift?.shift_type) {
       myOffDays++;
     }
@@ -355,8 +360,10 @@ export default function MyDashboard({
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
             const shift = mySchedule[day];
-            const isOff = !shift || shift.shift_type === 'OFF' || shift.shift_type === 'TERM_OFF';
-            const shiftInfo = SHIFT_TYPES[shift?.shift_type];
+            // 全量假別判定：使用 isOffShift API，涵蓋 OFF/TERM_OFF/AL/CT/SL/PL/ML/FL/MAT/CL/REG_OFF/REST_OFF
+            const isOff = !shift || isOffShift(shift.shift_type);
+            // 動態讀取班別定義，不再寫死 SHIFT_TYPES
+            const shiftInfo = effectiveShiftTypes[shift?.shift_type] || SHIFT_TYPES[shift?.shift_type];
             const dateObj = new Date(2026, 8, day);
             const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
 

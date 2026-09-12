@@ -17,6 +17,7 @@ import {
   Filter,
   Users
 } from 'lucide-react';
+import { isOffShift } from '../../types/scheduler.js';
 
 /**
  * 主管端實勤覆核與工時微調面板 (Hours Override)
@@ -158,7 +159,8 @@ export default function ActualHoursOverride({
       setIsAbsent(false);
       return;
     }
-    if (!shiftCode || shiftCode === 'OFF' || shiftCode === 'TERM_OFF') {
+    // 全量假別判定：使用 isOffShift API，涵蓋 OFF/TERM_OFF/AL/CT/SL/PL/ML/FL/MAT/CL/REG_OFF/REST_OFF
+    if (!shiftCode || isOffShift(shiftCode)) {
       setIsAbsent(true);
       return;
     }
