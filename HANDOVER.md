@@ -1,8 +1,8 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發工作交接與架構演進報告 (HANDOVER.md)
 
-- **最新更新日期**：2026-09-12 17:30 (GMT+8)
-- **當前核心版本**：`v2.8.0-data-consistency-mirror-cache-ready` (全域變數一致性與防污染強化版)
+- **最新更新日期**：2026-09-12 18:45 (GMT+8)
+- **當前核心版本**：`v2.9.0-ssot-cloud-roster-mirror-cache-done` (三層動態資料架構 SSOT 落地版)
 - **前端部署網址 (Vercel)**：已連動 GitHub 倉庫，支援手機 PWA / 桌面瀏覽器 24 小時免開電腦在線運作
 - **GitHub 儲存庫**：`https://github.com/lintoro/xuelu-shift-frontend.git`
 - **後端資料庫**：Google Sheets 7+1+4 資料庫 + Google Apps Script (GAS) 原生 JSON-RPC 2.0 微服務
@@ -19,19 +19,20 @@
 2. **班表矩陣正規化與防污染**：
    - 班表拉取時無論字串或物件一律全量正規化為標準出勤物件。
    - **徹底隔離 Google Sheets 工時覆核數據（`Overrides` 表），嚴禁污染排班覆寫層（`scheduleOverrides`）**，徹底終結「F5 重新整理與按網頁刷新試算表時資料錯亂破版」的根本病因。
-3. **全套測試與建置 100% 通過**：
+3. **三層動態資料架構（SSOT 雲端單一真實來源）正式落地** ✅ **(2026-09-12 新完成)**：
+   - `App.jsx` `allEmployees` 初始化策略重構：雲端模式下回空陣列（等 `handlePullFromCloud` 以試算表為唯一真理源填充），徹底去除雲端環境對靜態 25 人 `EMPLOYEES` 的 fallback 依賴。
+   - `PersonnelManagement.jsx` 頂部標題區新增**即時在勤人數徽章**（在勤 N 人 / 建檔總計 M 人 / 含封存 K 人，三維度即時顯示）。
+   - **一鍵強制刷新雲端名冊**按鈕（帶旋轉 Loading 動態，僅雲端模式顯示），點擊後以試算表為唯一真理源覆蓋本機快取，支援動態 37 人名冊即時伸縮。
+   - 雲端 / 沙盒狀態即時徽章指示器（Cloud / CloudOff icon）。
+4. **全套測試與建置 100% 通過**：
    - 42 原始檔 AST 語法檢查 0 個未定義變數。
    - 21/21 大情境 SSR 模擬渲染通過。
-   - Vite Production Build 生產構建通過（3.64 秒）。
+   - Vite Production Build 生產構建通過。
 
-### 🎯 換機重開後「接續執行目標」
-- **落實「三層動態資料架構（SSOT 雲端單一真實來源）」**：
-  1. 徹底去除前端 `App.jsx` 與 `apiService.js` 中對寫死 25 人名冊（`EMPLOYEES`）的 fallback 依賴。
-  2. 人事名冊改以雲端 Google 試算表（即時動態 37 人，隨雲端新增/離職動態伸縮）為唯一真理源。
-  3. 本機改為純雲端快取鏡像（Mirror Cache），並於 `PersonnelManagement.jsx` 新增「即時在勤人數徽章」與「一鍵強制刷新雲端名冊」功能。
+### 🎯 下一步接續目標（已無緊急開發債務）
+- 系統已達生產就緒（Production-Ready）狀態，核心功能已 100% 完工。
+- 若有新需求（如新站點、新班別、新法規），依標準 SOP 增量迭代即可。
 
-
----
 
 ## 📋 重大開發進展與更新紀錄總覽
 
