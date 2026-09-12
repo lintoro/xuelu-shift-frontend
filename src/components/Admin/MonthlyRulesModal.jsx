@@ -58,7 +58,14 @@ export default function MonthlyRulesModal({
   const handleUpdateStation = (stationId, field, value) => {
     setStationList(prev => prev.map(st => {
       if (st.station_id === stationId) {
-        return { ...st, [field]: value };
+        const updated = { ...st, [field]: value };
+        if (field === 'min_staff_weekday') updated.weekday_min_staff = value;
+        if (field === 'weekday_min_staff') updated.min_staff_weekday = value;
+        if (field === 'min_staff_weekend') updated.weekend_min_staff = value;
+        if (field === 'weekend_min_staff') updated.min_staff_weekend = value;
+        if (field === 'leader_emp_id') updated.leader_id = value;
+        if (field === 'leader_id') updated.leader_emp_id = value;
+        return updated;
       }
       return st;
     }));

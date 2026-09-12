@@ -1116,10 +1116,16 @@ export default function App() {
           const normalized = data.stations.map(st => {
             const cloudLeader = st.leader_emp_id || st.leader_id || '';
             const leader = (cloudLeader && cloudLeader.trim()) ? cloudLeader.trim() : (prevMap[st.station_id] || null);
+            const wkMin = Number(st.min_staff_weekday ?? st.weekday_min_staff ?? 1);
+            const weMin = Number(st.min_staff_weekend ?? st.weekend_min_staff ?? 2);
             return {
               ...st,
               leader_emp_id: leader,
-              leader_id: leader
+              leader_id: leader,
+              min_staff_weekday: wkMin,
+              weekday_min_staff: wkMin,
+              min_staff_weekend: weMin,
+              weekend_min_staff: weMin
             };
           });
           try {
