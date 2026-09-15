@@ -374,7 +374,8 @@ function handleGetInitialData(yearMonth, session) {
       can_solo: r[9] === true || r[9] === 'true',
       hire_date: r[10] ? (r[10] instanceof Date ? Utilities.formatDate(r[10], 'GMT+8', 'yyyy-MM-dd') : String(r[10])) : '',
       status: r[12] || r[11] || 'Active',
-      is_self_scheduled: r[2] === 'Manager'
+      is_self_scheduled: r[2] === 'Manager',
+      pt_schedule_mode: r[13] ? String(r[13]).trim() : (r[2] === 'PT' ? 'FREE' : undefined)
     });
   }
 
@@ -1015,6 +1016,7 @@ function handleSavePersonnel(session, employeeData) {
     sheet.getRange(foundRow, 9).setValue(soloStr);
     sheet.getRange(foundRow, 10).setValue(!!employeeData.can_solo);
     sheet.getRange(foundRow, 13).setValue(employeeData.status || 'Active');
+    sheet.getRange(foundRow, 14).setValue(employeeData.pt_schedule_mode || (employeeData.role === 'PT' ? 'FREE' : ''));
   } else {
     // 新增同仁：預設密碼 000000
     var defaultSalt = Utilities.getUuid().substring(0, 8);
@@ -1032,7 +1034,8 @@ function handleSavePersonnel(session, employeeData) {
       !!employeeData.can_solo,
       employeeData.hire_date || '2026-09-01',
       new Date().toISOString(),
-      employeeData.status || 'Active'
+      employeeData.status || 'Active',
+      employeeData.pt_schedule_mode || (employeeData.role === 'PT' ? 'FREE' : '')
     ]);
   }
 

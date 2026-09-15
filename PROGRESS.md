@@ -276,6 +276,64 @@ git checkout v2.4.0-admin-verify-manager-self-declared-done
 # 查看所有已建立的穩定版本標籤
 git tag -l
 
-# 一鍵回退至當前 V2.4 完工定稿版本
-git checkout v1.6.0-issue004-done
+# 一鍵回退至當前穩定版本
+git checkout main
 ```
+
+---
+
+## 六、 最新開發進展與換機交接紀錄 (2026-09-16 換機定案)
+
+### 1. 本階段已完成之關鍵架構與修復
+1. **雲端安全防護閘門 (Connection Gate & Fail-Closed)**：
+   - 實作 [`ConnectionGate.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/components/Common/ConnectionGate.jsx)，當雲端連線中斷時，「寧缺毋濫」立即安全阻絕假資料或舊預設，不混淆管理者。
+   - [`App.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/App.jsx) 增設背景定時自動同步 (Auto-Sync, 每 60 秒) 與中斷自動重連重試 (Auto-Reconnect) 機制。
+2. **排班自填預設規範修正**：
+   - 選項 1 調整為：週一至週五排 A 班、週六休假、週日例休。
+   - 選項 2 調整為：常規班改為 A 班。
+3. **PT 固定班雲端讀寫持久化修復 (莊典蓉案)**：
+   - [`Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs)：`handleSavePersonnel` 與 `handleGetInitialData` 補齊試算表第 14 欄 `pt_schedule_mode` 讀寫。
+   - [`App.jsx`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/App.jsx)：`handlePullFromCloud` 合併名冊時加入空值保護，維持「📌 僅上固定班模式」。
+
+### 2. 重要業務邏輯最新定案 (接手重點)
+1. **同仁定位**：
+   - 同仁**只提報自己指定休的日數（平日休、假日休）與休假日期**（拉「志願劃休」資料），**不自選出勤班別**。
+2. **組長排班與志願劃休**：
+   - 組長本人亦保留志願劃休資料。
+   - 組長先排定組員出勤與休假，**最後填入組長本人的休假與班表**。
+   - 若組員與組長休假衝突，由組長在第一層自行協調並核可調動。
+3. **衝突第一層消解與雙通道（大幅減省高管作業）**：
+   - 開放【衝突透視】給組長（範圍為本組組員與組長本人）。
+   - **通路 A（全數排除）**：組長透過微調將衝突降至 0 後，**直接點擊【排定本組班表】即生效**，免除高管繁瑣審核。
+   - **通路 B（資源不足）**：若組長因站點既有人力不足無法全部調開衝突，**依然允許送出**，由高管進行跨組支援與二次調度。
+4. **真實登入與全域統一排序**：
+   - 登入頁與門戶徹底去除模擬切換身分，落實 1 對 1 工號與 PIN 碼。
+   - 全系統選單統一人員排序：`本人置頂 ➔ 部門 (9大站點) ➔ 級職 (高管➔組長➔正職➔PT) ➔ 工號`。
+
+---
+
+## 七、 換機作業接續指南 (Machine Switch Runbook)
+
+當您更換至另一台電腦接續開發或維運時，請依照下列步驟執行：
+
+```powershell
+# 1. 於新電腦複製或拉取最新主分支程式碼
+cd <您的工作目錄>
+git clone https://github.com/lintoro/xuelu-shift-frontend.git
+cd xuelu-shift-frontend
+git pull origin main
+
+# 2. 安裝相依套件
+npm install
+
+# 3. 啟動地端開發伺服器
+npm run dev
+
+# 4. 驗證服務運行正常
+# 開啟瀏覽器訪問 http://localhost:3000 或 http://localhost:3001
+```
+
+### 換機後接續執行任務清單：
+1. 依據 [`implementation_plan.md`](file:///C:/Users/Administrator/.gemini/antigravity-ide/brain/13816036-9177-483a-a2ac-959582ade3cc/implementation_plan.md) 執行 `LoginView.jsx` 與 `EmployeeSelector.jsx` 之模擬登入卡片移除。
+2. 建立 `src/utils/employeeSortUtils.js` 並套用全域統一排序。
+3. 實作組長次月大表免審直接排班與雙通道送出（0 衝突直接生效 / 資源不足上呈高管）。

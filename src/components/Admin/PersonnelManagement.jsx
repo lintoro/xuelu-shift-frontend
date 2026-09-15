@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles, RotateCcw, Archive, UserCheck, HeartPulse, PauseCircle, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
+import ConnectionGate from '../Common/ConnectionGate.jsx';
 
 // 人員生命週期狀態設定字典
 export const PERSONNEL_STATUS_CONFIG = {
@@ -23,10 +24,10 @@ export const PERSONNEL_STATUS_CONFIG = {
     desc: '醫療休養 · 暫停排班'
   },
   Resigned: {
-    label: '離退職',
+    label: '離職封存',
     badgeClass: 'bg-slate-200 text-slate-700 border-slate-300',
     icon: Archive,
-    desc: '已離退 · 銷假真空'
+    desc: '結束聘僱 · 封存唯讀'
   }
 };
 
@@ -47,8 +48,26 @@ export default function PersonnelManagement({
   onUpdateStationLeader,
   currentSimulatedDate,
   isCloudMode = false,
-  onRefreshRoster = null
+  onRefreshRoster = null,
+  dbConnectionStatus = 'CONNECTED',
+  dbLastError = null,
+  onOpenSettings = null
 }) {
+  // 安全原則：若處於雲端模式，且資料庫連線中斷或驗證中，嚴禁秀出任何未核實假名冊
+  if (isCloudMode && (dbConnectionStatus === 'CONNECTING' || dbConnectionStatus === 'ERROR')) {
+    return (
+      <div className="space-y-6">
+        <ConnectionGate
+          status={dbConnectionStatus}
+          error={dbLastError}
+          title="人事資料庫連線防護中"
+          description="無法連線至 Google 試算表取得真實人事名冊。為落實「寧缺毋濫」資料真實性政策，系統已安全暫停顯示名冊，直到正確連線為止（絕不顯示假資料或舊預設）。"
+          onRetry={onRefreshRoster}
+          onOpenSettings={onOpenSettings}
+        />
+      </div>
+    );
+  }
   const [personnelTab, setPersonnelTab] = useState('ACTIVE'); // 'ACTIVE' (在勤) | 'ARCHIVED' (離退與非在勤封存)
   const [editingEmp, setEditingEmp] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);

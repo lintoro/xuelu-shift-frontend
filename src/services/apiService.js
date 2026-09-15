@@ -130,9 +130,11 @@ export const ApiService = {
             else resolve(res ? res.result : null);
           })
           .withFailureHandler((err) => {
-            if (options.noFallback) reject(err);
-            else {
-              console.warn('[API 降級] google.script.run 失敗，切換本地沙盒:', err);
+            if (!options.allowFallback) {
+              console.error('[API 錯誤] 原生 google.script.run 失敗，依安全政策禁止以假資料降級:', err);
+              reject(err);
+            } else {
+              console.warn('[API 降級] google.script.run 失敗，允許回退本地沙盒:', err);
               resolve(this.mockHandler(method, params));
             }
           })
@@ -180,15 +182,17 @@ export const ApiService = {
         }
         return data.result;
       } catch (err) {
-        if (options.noFallback) {
+        // 安全原則：雲端模式下線路不穩或失敗時，嚴禁偷偷塞靜態假資料（Fail-Closed 原則）
+        if (!options.allowFallback) {
+          console.error(`[API 錯誤] 呼叫 ${method} 失敗 (${err.message})，依資料真實性防護政策禁止偽造假資料降級。`);
           throw err;
         }
-        console.warn(`[API 降級] 呼叫 ${method} 失敗 (${err.message})，自動回退至本地沙盒模式。`);
+        console.warn(`[API 降級] 呼叫 ${method} 失敗 (${err.message})，依參數允許回退至本地沙盒。`);
         return this.mockHandler(method, params);
       }
     }
 
-    // 3. 本地 Mock 沙盒模式（預設）
+    // 3. 本地 Mock 沙盒模式（使用者主動切換為本地沙盒離線開發時使用）
     return this.mockHandler(method, params);
   },
 

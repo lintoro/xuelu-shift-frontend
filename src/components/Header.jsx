@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap, HeartHandshake } from 'lucide-react';
+import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap, HeartHandshake, ShieldAlert, Database } from 'lucide-react';
 
 export default function Header({
   currentUser,
@@ -15,7 +15,10 @@ export default function Header({
   onRefreshFromCloud,
   onOpenRulesModal,
   isCloudMode = false,
-  isValid = true
+  isValid = true,
+  dbConnectionStatus = 'CONNECTED',
+  lastSyncTime = null,
+  autoSyncStatus = 'idle'
 }) {
   const isManager = currentUser?.role === 'Manager';
   const isAdmin = !!currentUser?.is_admin;
@@ -63,28 +66,76 @@ export default function Header({
 
         {/* 右側：雲端狀態、月份與工時模式、同仁資訊、密碼按鈕、登出 */}
         <div className="flex items-center flex-wrap gap-2.5">
-          {/* 雲端連線狀態動態指示按鈕 */}
+          {/* 雲端連線狀態動態指示按鈕 (三態安全連線閘門) */}
           <button
             type="button"
             onClick={onOpenCloudModal}
-            title={isCloudMode ? "Google Sheets 雲端連線中 (點擊開啟設定與同步)" : "目前處於本地沙盒模式 (點擊配置 Google Sheets GAS 雲端連線)"}
+            title={
+              dbConnectionStatus === 'CONNECTED'
+                ? `Google Sheets 資料庫連線正常 (最新同步: ${lastSyncTime || '剛剛'})，點擊開啟設定與同步`
+                : dbConnectionStatus === 'CONNECTING'
+                ? '正在與 Google Sheets 資料庫安全連線與核實資料...'
+                : dbConnectionStatus === 'ERROR'
+                ? '資料庫連線中斷！安全防護鎖定已啟動，暫停展示未核實資料，點擊查看診斷'
+                : '目前處於本地沙盒模式 (點擊配置 Google Sheets GAS 雲端連線)'
+            }
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-              isCloudMode
+              dbConnectionStatus === 'CONNECTED'
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                : dbConnectionStatus === 'CONNECTING'
+                ? 'bg-sky-50 border-sky-300 text-sky-800 hover:bg-sky-100 animate-pulse shadow-2xs'
+                : dbConnectionStatus === 'ERROR'
+                ? 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
                 : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
             }`}
           >
-            {isCloudMode ? (
+            {dbConnectionStatus === 'CONNECTED' ? (
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
+            ) : dbConnectionStatus === 'CONNECTING' ? (
+              <RotateCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+            ) : dbConnectionStatus === 'ERROR' ? (
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
             ) : (
               <span className="inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
             )}
             <Cloud className="w-3.5 h-3.5" />
-            <span>{isCloudMode ? '雲端同步' : '本地沙盒'}</span>
+            <span>
+              {dbConnectionStatus === 'CONNECTED'
+                ? '雲端已連線'
+                : dbConnectionStatus === 'CONNECTING'
+                ? '連線驗證中'
+                : dbConnectionStatus === 'ERROR'
+                ? '連線中斷(保護)'
+                : '本地沙盒'}
+            </span>
           </button>
+
+          {/* 自動非同步背景同步即時狀態反饋 (免手動按上傳) */}
+          {isCloudMode && (
+            <>
+              {autoSyncStatus === 'syncing' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200 animate-pulse" title="班表變動正在自動非同步同步至 Google 試算表">
+                  <RotateCw className="w-3 h-3 animate-spin" />
+                  自動同步中...
+                </span>
+              )}
+              {autoSyncStatus === 'synced' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200" title="班表已即時自動儲存至 Google 試算表">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  已自動同步
+                </span>
+              )}
+              {autoSyncStatus === 'error' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title="自動同步暫時中斷，系統已保留變更待線路通暢時自動補傳">
+                  <ShieldAlert className="w-3 h-3 text-rose-600" />
+                  待補同步
+                </span>
+              )}
+            </>
+          )}
 
           {/* 雲端手動快速刷新按鈕 */}
           {isCloudMode && (

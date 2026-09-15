@@ -420,20 +420,29 @@ export default function ScheduleTable({
                       return;
                     }
                     const fillChoice = window.prompt(
-                      `【主管自主排班快速通道】\n請輸入快捷代碼批次排定本人（${managerEmp.name}）整月班表：\n1: 週一至週五正常班 (D班 09:30-18:30)，週末例休 (REST_OFF)\n2: 整月常規班 (B班 10:00-19:00)\n3: 清空本人班表 (重設為留白)`,
+                      `【主管自主排班快速通道】\n請輸入快捷代碼批次排定本人（${managerEmp.name}）整月班表：\n1: 週一至週五 A班，週六休假 (REST_OFF)，週日例休 (REST_OFF)\n2: 整月常規班 (A班)\n3: 清空本人班表 (重設為留白)\n\n注意：今日以前的歷史日期不會被覆寫。`,
                       '1'
                     );
                     if (!fillChoice) return;
 
                     const totalD = scheduleResult?.totalDays || 30;
+                    const targetYM = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+                    const simDateStr = currentSimulatedDate || `${year}-${String(month).padStart(2, '0')}-01`;
                     for (let d = 1; d <= totalD; d++) {
+                      // 歷史日期防呆：已發生的日期不覆寫
+                      const dayStr = d < 10 ? '0' + d : '' + d;
+                      const cellDateStr = `${targetYM}-${dayStr}`;
+                      if (cellDateStr < simDateStr) continue;
+
                       const dateObj = new Date(year, month - 1, d);
-                      const isWk = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-                      let assignedCode = 'D';
+                      const dow = dateObj.getDay();
+                      const isSunday = dow === 0;
+                      const isSaturday = dow === 6;
+                      let assignedCode = 'A';
                       if (fillChoice === '1') {
-                        assignedCode = isWk ? 'REST_OFF' : 'D';
+                        assignedCode = (isSunday || isSaturday) ? 'REST_OFF' : 'A';
                       } else if (fillChoice === '2') {
-                        assignedCode = 'B';
+                        assignedCode = 'A';
                       } else if (fillChoice === '3') {
                         assignedCode = 'OFF';
                       }

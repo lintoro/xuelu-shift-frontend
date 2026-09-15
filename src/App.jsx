@@ -23,6 +23,7 @@ import ShiftMasterManagement from './components/Admin/ShiftMasterManagement.jsx'
 import GasConnectionModal from './components/Cloud/GasConnectionModal.jsx';
 import SchedulingTimelineStepper from './components/Timeline/SchedulingTimelineStepper.jsx';
 import MonthlyRulesModal from './components/Admin/MonthlyRulesModal.jsx';
+import ConnectionGate from './components/Common/ConnectionGate.jsx';
 
 import { ApiService } from './services/apiService.js';
 import { DEFAULT_SHIFT_TYPES } from './types/scheduler.js';
@@ -62,6 +63,21 @@ export default function App() {
   // 雲端連線與同步狀態 (Issue #015)
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [isCloudMode, setIsCloudMode] = useState(() => ApiService.isCloudMode());
+
+  // 資料庫連線狀態機 (Fail-Closed 寧缺毋濫原則)
+  // 'CONNECTING': 連線/驗證中 (此時安全鎖定，不秀未核實資料)
+  // 'CONNECTED': 已成功握手，資料為 100% 雲端真資料
+  // 'ERROR': 線路異常/連線中斷 (此時安全阻斷，寧可不秀也不要秀錯)
+  // 'OFFLINE': 本地沙盒模式
+  const [dbConnectionStatus, setDbConnectionStatus] = useState(() => ApiService.isCloudMode() ? 'CONNECTING' : 'OFFLINE');
+  const [dbLastError, setDbLastError] = useState(null);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+
+  // 自動非同步背景同步 (Auto-Sync Pipeline - 免手動按上傳)
+  const [autoSyncStatus, setAutoSyncStatus] = useState('idle'); // 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
+  const [autoSyncTime, setAutoSyncTime] = useState(null);
+  const lastSyncedMatrixRef = React.useRef(null);
+  const autoSyncTimerRef = React.useRef(null);
 
   // 全月排班生命週期時限排程狀態 - 動態預設對齊真實系統今日日期 (getTodayStr)
   const getTodayStr = () => new Date().toISOString().slice(0, 10);
@@ -231,8 +247,24 @@ export default function App() {
     }
   }, [shiftTypes]);
 
-  // 調班/手動覆寫層 (Schedule Overrides)
-  const [scheduleOverrides, setScheduleOverrides] = useState({});
+  // 調班/手動覆寫層 (Schedule Overrides) - 按月份分區持久化，防跨月污染與 F5 消失
+  const [scheduleOverrides, setScheduleOverrides] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xuelu_schedule_overrides_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // scheduleOverrides 持久化監聽（任何月份的覆寫變動都即時寫入 localStorage）
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('xuelu_schedule_overrides_v1', JSON.stringify(scheduleOverrides));
+    } catch (e) {
+      console.warn('scheduleOverrides 持久化失敗', e);
+    }
+  }, [scheduleOverrides]);
 
   // 月底考勤結算發布狀態與全員簽認記錄 (需求 #004 雙確認閉環機制)
   const [isSettlementPublished, setIsSettlementPublished] = useState(false);
@@ -344,16 +376,19 @@ export default function App() {
       return [...filtered, adj];
     });
 
-    // 若為 Manager 調整，直接覆寫套用入班表
+    // 若為 Manager 調整，直接覆寫套用入班表（月份分區，防跨月污染）
     if (adj.status === 'APPROVED_DIRECT') {
       setScheduleOverrides(prev => ({
         ...prev,
-        [adj.emp_id]: {
-          ...(prev[adj.emp_id] || {}),
-          [adj.day]: {
-            shift_type: adj.new_shift,
-            station_id: adj.primary_station,
-            note: adj.reason
+        [currentMonth]: {
+          ...(prev[currentMonth] || {}),
+          [adj.emp_id]: {
+            ...((prev[currentMonth] || {})[adj.emp_id] || {}),
+            [adj.day]: {
+              shift_type: adj.new_shift,
+              station_id: adj.primary_station,
+              note: adj.reason
+            }
           }
         }
       }));
@@ -395,12 +430,12 @@ export default function App() {
     const approvedIds = new Set(adjList.map(a => a.adj_id));
     setPendingAdjustments(prev => prev.map(a => approvedIds.has(a.adj_id) ? { ...a, status: 'APPROVED' } : a));
 
-    // 批次覆寫 scheduleOverrides
+    // 批次覆寫 scheduleOverrides（月份分區，防跨月污染）
     setScheduleOverrides(prev => {
-      const nextOverrides = { ...prev };
+      const monthData = { ...(prev[currentMonth] || {}) };
       adjList.forEach(adj => {
-        nextOverrides[adj.emp_id] = {
-          ...(nextOverrides[adj.emp_id] || {}),
+        monthData[adj.emp_id] = {
+          ...(monthData[adj.emp_id] || {}),
           [adj.day]: {
             shift_type: adj.new_shift,
             station_id: adj.primary_station,
@@ -408,7 +443,7 @@ export default function App() {
           }
         };
       });
-      return nextOverrides;
+      return { ...prev, [currentMonth]: monthData };
     });
 
     // 批次扣抵特休或補休
@@ -480,16 +515,20 @@ export default function App() {
     setLeaveApplications(prev => prev.map(app => {
       if (app.app_id === appId) {
         if (outcome === 'APPROVED') {
-          // 覆寫班表
+          // 覆寫班表（月份分區，防跨月污染）
+          const leaveMonth = app.date ? app.date.slice(0, 7) : currentMonth;
           setScheduleOverrides(prevOverrides => ({
             ...prevOverrides,
-            [app.emp_id]: {
-              ...(prevOverrides[app.emp_id] || {}),
-              [app.day]: {
-                shift_type: app.leave_type,
-                station_id: null,
-                work_hours: 0,
-                note: `事前請假核准 (${app.leave_type === 'AL' ? '特休' : app.leave_type === 'CT' ? '補休' : app.leave_type === 'PERSONAL' ? '事假' : '病假'})`
+            [leaveMonth]: {
+              ...(prevOverrides[leaveMonth] || {}),
+              [app.emp_id]: {
+                ...((prevOverrides[leaveMonth] || {})[app.emp_id] || {}),
+                [app.day]: {
+                  shift_type: app.leave_type,
+                  station_id: null,
+                  work_hours: 0,
+                  note: `事前請假核准 (${app.leave_type === 'AL' ? '特休' : app.leave_type === 'CT' ? '補休' : app.leave_type === 'PERSONAL' ? '事假' : '病假'})`
+                }
               }
             }
           }));
@@ -604,7 +643,7 @@ export default function App() {
   const [cloudScheduleMap, setCloudScheduleMap] = useState(null);
 
   const baseScheduleResult = useMemo(() => {
-    // 若雲端已有真實班表，優先使用雲端班表；否則使用演算法生成之種子班表
+    // 1. 若雲端已有真實班表，優先使用雲端班表
     if (cloudScheduleMap && Object.keys(cloudScheduleMap).length > 0) {
       return {
         scheduleMap: cloudScheduleMap,
@@ -613,6 +652,17 @@ export default function App() {
       };
     }
 
+    // 2. 關鍵防偽安全閘門：若處於雲端模式且連線中斷或驗證中，嚴禁自動以演算法偽造幽靈班表！
+    if (ApiService.isCloudMode() && (dbConnectionStatus === 'CONNECTING' || dbConnectionStatus === 'ERROR')) {
+      return {
+        scheduleMap: {},
+        totalDays: currentRules.days_in_month || 30,
+        durationMs: 0,
+        isBlocked: true
+      };
+    }
+
+    // 3. 本地沙盒模式、或雲端已成功連線確認當月為空、或主管明確手動運算
     return generateSeedSchedule({
       employees: allEmployees,
       stations: allStations,
@@ -621,12 +671,13 @@ export default function App() {
       monthBorders: MOCK_MONTH_BORDERS,
       resignationData
     });
-  }, [cloudScheduleMap, allEmployees, allStations, currentRules, engineLeaveRequests, resignationData, scheduleVersion]);
+  }, [cloudScheduleMap, allEmployees, allStations, currentRules, engineLeaveRequests, resignationData, scheduleVersion, dbConnectionStatus]);
 
-  // 合併種子排班與調班/實勤覆寫層 -> 產出最終生效排班矩陣
+  // 合併種子排班與調班/實勤覆寫層 -> 產出最終生效排班矩陣（僅讀取當前月份分區，防跨月污染）
   const effectiveScheduleMap = useMemo(() => {
     const merged = JSON.parse(JSON.stringify(baseScheduleResult.scheduleMap));
-    Object.entries(scheduleOverrides).forEach(([empId, days]) => {
+    const monthOverrides = scheduleOverrides[currentMonth] || {};
+    Object.entries(monthOverrides).forEach(([empId, days]) => {
       if (!merged[empId]) merged[empId] = {};
       Object.entries(days).forEach(([d, shift]) => {
         merged[empId][d] = {
@@ -636,7 +687,8 @@ export default function App() {
       });
     });
     return merged;
-  }, [baseScheduleResult.scheduleMap, scheduleOverrides]);
+  }, [baseScheduleResult.scheduleMap, scheduleOverrides, currentMonth]);
+
 
   const scheduleResult = useMemo(() => ({
     ...baseScheduleResult,
@@ -809,38 +861,39 @@ export default function App() {
 
     if (isApproved) {
       const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
-      const newOverrides = { ...scheduleOverrides };
+      // 月份分區存取，防跨月污染
+      const monthData = { ...(scheduleOverrides[currentMonth] || {}) };
 
       if (req.type === 'SELF_RESCHEDULE') {
         // 個人自調挪休覆寫
-        if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
+        if (!monthData[req.applicant_id]) monthData[req.applicant_id] = {};
         const empStation = allEmployees.find(e => e.emp_id === req.applicant_id)?.primary_station || 'ST_SERVICE';
 
-        newOverrides[req.applicant_id][req.applicant_day] = {
+        monthData[req.applicant_id][req.applicant_day] = {
           shift_type: 'OFF',
           station_id: null,
           work_hours: 0,
           note: `個人自調轉休 (原出勤日)`
         };
 
-        newOverrides[req.applicant_id][req.target_day] = {
+        monthData[req.applicant_id][req.target_day] = {
           shift_type: req.target_shift || 'B',
           station_id: empStation,
           work_hours: 8,
           is_support: false,
-          note: `自 9/${req.applicant_day} 挪調出勤`
+          note: `自 ${currentMonth.slice(5)}/${req.applicant_day} 挪調出勤`
         };
 
-        setScheduleOverrides(newOverrides);
+        setScheduleOverrides(prev => ({ ...prev, [currentMonth]: monthData }));
 
         const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
         if (!afterSnapshot[req.applicant_id]) afterSnapshot[req.applicant_id] = {};
-        afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
-        afterSnapshot[req.applicant_id][req.target_day] = newOverrides[req.applicant_id][req.target_day];
+        afterSnapshot[req.applicant_id][req.applicant_day] = monthData[req.applicant_id][req.applicant_day];
+        afterSnapshot[req.applicant_id][req.target_day] = monthData[req.applicant_id][req.target_day];
 
         const logNotes = isAdminArchived
-          ? `【最高主管自主申報 · 行政合規備查歸檔】管理員：${currentUser?.name || 'Admin'}，申報主管：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`
-          : `核准個人自調挪休：${req.applicant_name} (9/${req.applicant_day} 轉休 ⇄ 9/${req.target_day} 轉出勤 ${req.target_shift}班)`;
+          ? `【最高主管自主申報 · 行政合規備查歸檔】管理員：${currentUser?.name || 'Admin'}，申報主管：${req.applicant_name} (${currentMonth.slice(5)}/${req.applicant_day} 轉休 ⇄ ${currentMonth.slice(5)}/${req.target_day} 轉出勤 ${req.target_shift}班)`
+          : `核准個人自調挪休：${req.applicant_name} (${currentMonth.slice(5)}/${req.applicant_day} 轉休 ⇄ ${currentMonth.slice(5)}/${req.target_day} 轉出勤 ${req.target_shift}班)`;
 
         const newLog = {
           log_id: `LOG_${Date.now()}`,
@@ -858,36 +911,36 @@ export default function App() {
         const appShift = effectiveScheduleMap[req.applicant_id]?.[req.applicant_day];
         const tarShift = effectiveScheduleMap[req.target_id]?.[req.target_day];
 
-        if (!newOverrides[req.applicant_id]) newOverrides[req.applicant_id] = {};
-        if (!newOverrides[req.target_id]) newOverrides[req.target_id] = {};
+        if (!monthData[req.applicant_id]) monthData[req.applicant_id] = {};
+        if (!monthData[req.target_id]) monthData[req.target_id] = {};
 
         if (req.applicant_day === req.target_day) {
           // 同日對調
-          newOverrides[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-          newOverrides[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          monthData[req.applicant_id][req.applicant_day] = tarShift ? { ...tarShift, note: `與 ${req.target_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          monthData[req.target_id][req.target_day] = appShift ? { ...appShift, note: `與 ${req.applicant_name} 換班` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
         } else {
           // 跨日互調：雙方承接對方的出勤日與班別
-          newOverrides[req.applicant_id][req.target_day] = tarShift ? { ...tarShift, note: `接替 ${req.target_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-          newOverrides[req.target_id][req.target_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.applicant_name} 接替出勤` };
+          monthData[req.applicant_id][req.target_day] = tarShift ? { ...tarShift, note: `接替 ${req.target_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          monthData[req.target_id][req.target_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.applicant_name} 接替出勤` };
 
-          newOverrides[req.target_id][req.applicant_day] = appShift ? { ...appShift, note: `接替 ${req.applicant_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
-          newOverrides[req.applicant_id][req.applicant_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.target_name} 接替出勤` };
+          monthData[req.target_id][req.applicant_day] = appShift ? { ...appShift, note: `接替 ${req.applicant_name} 勤務` } : { shift_type: 'OFF', station_id: null, work_hours: 0 };
+          monthData[req.applicant_id][req.applicant_day] = { shift_type: 'OFF', station_id: null, work_hours: 0, note: `由 ${req.target_name} 接替出勤` };
         }
 
-        setScheduleOverrides(newOverrides);
+        setScheduleOverrides(prev => ({ ...prev, [currentMonth]: monthData }));
 
         const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
         if (!afterSnapshot[req.applicant_id]) afterSnapshot[req.applicant_id] = {};
         if (!afterSnapshot[req.target_id]) afterSnapshot[req.target_id] = {};
-        afterSnapshot[req.applicant_id][req.applicant_day] = newOverrides[req.applicant_id][req.applicant_day];
-        afterSnapshot[req.applicant_id][req.target_day] = newOverrides[req.applicant_id][req.target_day];
-        afterSnapshot[req.target_id][req.applicant_day] = newOverrides[req.target_id][req.applicant_day];
-        afterSnapshot[req.target_id][req.target_day] = newOverrides[req.target_id][req.target_day];
+        afterSnapshot[req.applicant_id][req.applicant_day] = monthData[req.applicant_id][req.applicant_day];
+        afterSnapshot[req.applicant_id][req.target_day] = monthData[req.applicant_id][req.target_day];
+        afterSnapshot[req.target_id][req.applicant_day] = monthData[req.target_id][req.applicant_day];
+        afterSnapshot[req.target_id][req.target_day] = monthData[req.target_id][req.target_day];
 
         const specialText = req.is_special_swap ? `【⚠️特例調班核定】事由: ${req.special_warnings?.join('; ') || '無常規支援/缺Solo'}。` : '';
         const logNotes = isAdminArchived
           ? `【最高主管自主申報 · 行政合規備查歸檔】管理員：${currentUser?.name || 'Admin'}，申報主管：${req.applicant_name} ⇄ ${req.target_name}`
-          : `${specialText}核准二階調班申請：${req.applicant_name} (9/${req.applicant_day}) ⇄ ${req.target_name} (9/${req.target_day})`;
+          : `${specialText}核准二階調班申請：${req.applicant_name} (${currentMonth.slice(5)}/${req.applicant_day}) ⇄ ${req.target_name} (${currentMonth.slice(5)}/${req.target_day})`;
 
         const newLog = {
           log_id: `LOG_${Date.now()}`,
@@ -897,6 +950,7 @@ export default function App() {
           operator_name: isAdminArchived ? `${currentUser?.name || 'Admin'} (Admin 備查員)` : (currentUser ? currentUser.name : '陳鵬宇 (營運長)'),
           notes: logNotes,
           before_snapshot: beforeSnapshot,
+
           after_snapshot: afterSnapshot
         };
 
@@ -941,10 +995,11 @@ export default function App() {
   }) => {
     const beforeSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
 
-    const newOverrides = { ...scheduleOverrides };
-    if (!newOverrides[empId]) newOverrides[empId] = {};
+    // 月份分區存取，防跨月污染
+    const monthData = { ...(scheduleOverrides[currentMonth] || {}) };
+    if (!monthData[empId]) monthData[empId] = {};
     const cur = effectiveScheduleMap[empId]?.[day] || {};
-    newOverrides[empId][day] = {
+    monthData[empId][day] = {
       ...cur,
       actual_hours: actualHours,
       actual_start_time: startTime,
@@ -957,7 +1012,7 @@ export default function App() {
       labor_violations: laborViolations,
       override_manager: overrideManager
     };
-    setScheduleOverrides(newOverrides);
+    setScheduleOverrides(prev => ({ ...prev, [currentMonth]: monthData }));
 
     // 正職同仁自動連動補休/特休增減與存摺流水紀錄 (需求 #002, #003 & #006 方案 A)
     if (diffHours && diffHours !== 0) {
@@ -1057,7 +1112,7 @@ export default function App() {
 
     const afterSnapshot = JSON.parse(JSON.stringify(effectiveScheduleMap));
     if (!afterSnapshot[empId]) afterSnapshot[empId] = {};
-    afterSnapshot[empId][day] = newOverrides[empId][day];
+    afterSnapshot[empId][day] = monthData[empId][day];
 
     const empName = allEmployees.find(e => e.emp_id === empId)?.name || empId;
     const diffText = diffHours ? ` (差額 ${diffHours >= 0 ? '+' : ''}${diffHours}h)` : '';
@@ -1149,9 +1204,19 @@ export default function App() {
   // ==========================================
   // 從 Google 試算表拉取最新全量資料
   const handlePullFromCloud = useCallback(async () => {
+    if (!ApiService.isCloudMode()) {
+      setDbConnectionStatus('OFFLINE');
+      return true;
+    }
+
+    setDbConnectionStatus('CONNECTING');
+    setDbLastError(null);
+
     try {
       const data = await ApiService.getInitialMasterData(currentMonth);
-      if (!data) return false;
+      if (!data) {
+        throw new Error('伺服器未回傳有效資料物件');
+      }
 
       if (data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
         setAllEmployees(prev => {
@@ -1164,7 +1229,8 @@ export default function App() {
               ...cloudEmp,
               pin_hash: local.pin_hash || cloudEmp.pin_hash,
               salt: local.salt || cloudEmp.salt,
-              is_self_scheduled: typeof cloudEmp.is_self_scheduled !== 'undefined' ? cloudEmp.is_self_scheduled : local.is_self_scheduled
+              is_self_scheduled: typeof cloudEmp.is_self_scheduled !== 'undefined' ? cloudEmp.is_self_scheduled : local.is_self_scheduled,
+              pt_schedule_mode: cloudEmp.pt_schedule_mode || local.pt_schedule_mode || (cloudEmp.role === 'PT' ? 'FREE' : undefined)
             };
           });
           try {
@@ -1221,7 +1287,7 @@ export default function App() {
       }
 
       // 班表矩陣標準化：無論雲端存的是字串代碼還是物件，全量正規化為前端標準物件矩陣
-      if (data.scheduleMap && typeof data.scheduleMap === 'object' && Object.keys(data.scheduleMap).length > 0) {
+      if (data.scheduleMap && typeof data.scheduleMap === 'object') {
         const normalizedMatrix = {};
         const empLookup = Object.fromEntries(
           (data.employees || allEmployees).map(e => [e.emp_id, e])
@@ -1255,6 +1321,10 @@ export default function App() {
           });
         });
         setCloudScheduleMap(normalizedMatrix);
+        lastSyncedMatrixRef.current = JSON.stringify(normalizedMatrix);
+      } else {
+        setCloudScheduleMap({});
+        lastSyncedMatrixRef.current = JSON.stringify({});
       }
 
       if (data.swaps && Array.isArray(data.swaps)) {
@@ -1268,12 +1338,60 @@ export default function App() {
       }
 
       setIsCloudMode(true);
+      setDbConnectionStatus('CONNECTED');
+      const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+      setLastSyncTime(timeStr);
       return true;
     } catch (err) {
-      console.error('從雲端試算表拉取失敗:', err);
+      console.error('從雲端試算表拉取失敗 (安全阻斷):', err);
+      setDbConnectionStatus('ERROR');
+      setDbLastError(err.message || '連線逾時或網路中斷');
       return false;
     }
   }, [currentMonth]);
+
+  // 自動非同步雲端背景同步 (Auto-Sync Pipeline - 免手動按上傳)
+  React.useEffect(() => {
+    if (!ApiService.isCloudMode() || dbConnectionStatus !== 'CONNECTED') return;
+    if (!effectiveScheduleMap || Object.keys(effectiveScheduleMap).length === 0) return;
+
+    const currentStr = JSON.stringify(effectiveScheduleMap);
+    // 初次載入或剛從雲端拉取下來時，記錄為基準線，不觸發重複回傳
+    if (lastSyncedMatrixRef.current === null) {
+      lastSyncedMatrixRef.current = currentStr;
+      return;
+    }
+
+    // 若有實質異動，啟動 2.5 秒防抖自動背景同步
+    if (currentStr !== lastSyncedMatrixRef.current) {
+      setAutoSyncStatus('pending');
+      if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+
+      autoSyncTimerRef.current = setTimeout(async () => {
+        setAutoSyncStatus('syncing');
+        try {
+          const res = await ApiService.saveScheduleMatrix(currentMonth, effectiveScheduleMap);
+          if (res && res.success) {
+            lastSyncedMatrixRef.current = currentStr;
+            setAutoSyncStatus('synced');
+            const nowTime = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+            setAutoSyncTime(nowTime);
+            setLastSyncTime(nowTime);
+          } else {
+            console.warn('[Auto-Sync] 雲端未回傳成功狀態');
+            setAutoSyncStatus('error');
+          }
+        } catch (err) {
+          console.error('[Auto-Sync] 背景自動儲存失敗 (線路中斷):', err);
+          setAutoSyncStatus('error');
+        }
+      }, 2500); // 2.5 秒防抖
+    }
+
+    return () => {
+      if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+    };
+  }, [effectiveScheduleMap, dbConnectionStatus, currentMonth]);
 
   // 當處於雲端模式時，頁面載入或切換月份時自動從 Google 試算表拉取最新人事與班表主檔
   React.useEffect(() => {
@@ -1481,7 +1599,8 @@ export default function App() {
     const beforeState = JSON.parse(JSON.stringify(effectiveScheduleMap));
     const targetSnapshot = targetLog.before_snapshot;
 
-    setScheduleOverrides(targetSnapshot);
+    // 回滾時以月份分區包裝，確保不影響其他月份資料
+    setScheduleOverrides(prev => ({ ...prev, [currentMonth]: targetSnapshot }));
 
     const rollbackLog = {
       log_id: `LOG_${Date.now()}`,
@@ -1693,6 +1812,9 @@ export default function App() {
         onOpenRulesModal={() => setIsMonthlyRulesOpen(true)}
         isCloudMode={isCloudMode}
         isValid={validation.isValid}
+        dbConnectionStatus={dbConnectionStatus}
+        lastSyncTime={lastSyncTime}
+        autoSyncStatus={autoSyncStatus}
       />
 
       {/* 主工作區 */}
@@ -1727,9 +1849,16 @@ export default function App() {
         )}
 
 
-        {/* TAB 1: 全館排班總表 (Schedule Matrix) */}
+        {/* TAB 1: 全館排班總表 (Schedule Matrix) - 雙重安全防護閘門 */}
         {effectiveActiveTab === 'SCHEDULE' && (
-          <>
+          <ConnectionGate
+            status={dbConnectionStatus}
+            error={dbLastError}
+            title={`【${currentMonth}】雲端排班資料庫連線中斷防護`}
+            description="無法連線至 Google 試算表取得真實排班表。為落實「寧缺毋濫」政策，排班表已進入安全保護鎖定，絕不呈現啟發式演算法偽造之幽靈班表。"
+            onRetry={handleManualRefreshFromCloud}
+            onOpenSettings={() => setIsCloudModalOpen(true)}
+          >
             {/* 僅營運高管 Manager 可檢視與操作排班演算法引擎除錯，Staff Admin 嚴格排除 */}
             {isManager && (
               <EngineDebugger
@@ -1800,7 +1929,7 @@ export default function App() {
                 rules={currentRules}
               />
             )}
-          </>
+          </ConnectionGate>
         )}
 
         {/* TAB 2: 同仁志願劃休 / 報班門戶 */}
@@ -1903,6 +2032,9 @@ export default function App() {
             currentSimulatedDate={currentSimulatedDate}
             isCloudMode={isCloudMode}
             onRefreshRoster={handleManualRefreshFromCloud}
+            dbConnectionStatus={dbConnectionStatus}
+            dbLastError={dbLastError}
+            onOpenSettings={() => setIsCloudModalOpen(true)}
           />
         )}
 
