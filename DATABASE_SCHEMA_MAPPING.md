@@ -17,6 +17,7 @@
 10. [10. Passbooks (特休/補休個人化存摺交易表)](#10-passbooks-特休補休個人化存摺交易表)
 11. [11. Settlements (月底考勤簽認與結算對帳表)](#11-settlements-月底考勤簽認與結算對帳表)
 12. [12. Audit_Logs (不可抹滅資安稽核日誌)](#12-audit_logs-不可抹滅資安稽核日誌)
+13. [13. Month_Borders (跨月連續出勤邊界表)](#13-month_borders-跨月連續出勤邊界表)
 
 ---
 
@@ -267,12 +268,29 @@
 
 ---
 
+## 13. Month_Borders (跨月連續出勤邊界表)
+- **主要用途**：
+  依照《勞基法》第 36 條規定「每 7 日應有 1 日之例假」，同仁**不得連續出勤工作超過 6 天**。為了避免單月排班各自獨立而導致「跨月連續出勤違法（例如上月最後 4 天上班 ＋ 本月前 3 天上班 ＝ 連續上班 7 天之剛性違法）」，本表紀錄並快取各同仁跨越月份邊界之真實出勤狀態。
+- **後端 Code.gs API**：`schedule.getInitialData`, `admin.syncAll`
+- **前端對應組件**：`heuristicScheduler.js` (排班引擎初始化 7 休 1 邊界), `swapStore.js` (換班門戶預檢邊界連日判定)
+
+| 欄位位置 | 欄位名稱 (Header) | 資料型態 | 業務用途說明與範例 | 程式碼對應屬性 (JS Key) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Col A (1)** | `border_id` | String | 邊界快取主鍵 (如 `MB_202609_B115101`) | `border.border_id` |
+| **Col B (2)** | `year_month` | String | 當前目標年月 (如 `2026-09`) | `border.year_month` |
+| **Col C (3)** | `emp_id` | String | 同仁員工工號 (如 `B115101`) | `border.emp_id` |
+| **Col D (4)** | `prev_month_last_7_days` | JSON String | 上個月最後 7 天出勤數據與月尾連續上班天數快取 (如 `{"consecutive_work_days_at_end": 2, "shifts": ["OFF","B","B"]}`) | `monthBorders[ym][empId].prev_month_last_7_days` |
+| **Col E (5)** | `next_month_first_7_days` | JSON String | 下個月前 7 天出勤排定或預排快取 (如 `{"shifts": ["B","OFF"]}`) | `monthBorders[ym][empId].next_month_first_7_days` |
+| **Col F (6)** | `updated_at` | String | 邊界快取運算或同步時間 (ISO 8601) | `border.updated_at` |
+
+---
+
 ## 🛠️ 三、 資料庫維護與初始化指南
 
-若欲在 Google Apps Script 中手動建構或重置這 12 大工作表，請開啟 [`Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs) 腳本視窗，選擇並執行函式：
+若欲在 Google Apps Script 中手動建構或重置這 13 大工作表，請開啟 [`Code.gs`](file:///c:/Github/ReactApp/xuelu-shift-frontend/src/backend/Code.gs) 腳本視窗，選擇並執行函式：
 
 ```javascript
 setupSpreadsheet();
 ```
 
-系統將會自動檢測並補齊上述全量標頭與 12 大試算表架構！
+系統將會自動檢測並補齊上述全量標頭與 13 大試算表架構！

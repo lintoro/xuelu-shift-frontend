@@ -95,6 +95,7 @@ export function exportScheduleToCsv({
 }) {
   const totalDays = rules.days_in_month || 30;
   const yearMonth = rules.target_year_month || '2026-09';
+  const monthNum = parseInt(yearMonth.split('-')[1], 10);
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
 
   // CSV 標頭
@@ -202,7 +203,7 @@ export function exportScheduleToCsv({
       const vios = (v.shift.labor_violations || []).join('; ') || '單日工時或休息時間未達勞基法規範';
       const mgr = v.shift.override_manager || {};
       rows.push([
-        `9月${v.day}日`,
+        `${monthNum}月${v.day}日`,
         v.emp.emp_id,
         v.emp.name,
         v.emp.role === 'Leader' ? '組長' : v.emp.role === 'PT' ? 'PT' : '正職',
@@ -211,7 +212,7 @@ export function exportScheduleToCsv({
         `${v.shift.actual_hours} 小時`,
         vios,
         `${mgr.name || '營運高管'} (${mgr.emp_id || 'B111014'})`,
-        `${mgr.emergency_reason || '現場突發緊急調度'} [核定時間: ${mgr.confirmed_at ? new Date(mgr.confirmed_at).toLocaleString('zh-TW') : '2026-09-10'}]`
+        `${mgr.emergency_reason || '現場突發緊急調度'} [核定時間: ${mgr.confirmed_at ? new Date(mgr.confirmed_at).toLocaleString('zh-TW') : `${yearMonth}-10`}]`
       ]);
     });
   }

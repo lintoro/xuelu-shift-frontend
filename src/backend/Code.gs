@@ -176,6 +176,22 @@ function doPost(e) {
         result = handleSaveStations(session, params.stations);
         break;
 
+      case 'admin.saveRules':
+        var session = validateToken(params.token);
+        if (session.role !== 'Manager' && !session.is_admin) {
+          throw new Error('403 Forbidden: 僅營運高管或系統管理員具備維護全月排班限定與考勤規則權限！');
+        }
+        result = handleSaveRules(session, params.year_month, params.rules);
+        break;
+
+      case 'admin.saveQuotas':
+        var session = validateToken(params.token);
+        if (session.role !== 'Manager' && !session.is_admin) {
+          throw new Error('403 Forbidden: 僅營運高管或系統管理員具備維護休假配額權限！');
+        }
+        result = handleSaveQuotas(session, params.year_month, params.quotas);
+        break;
+
       case 'admin.holidayTransfer':
         var session = validateToken(params.token);
         if (session.role !== 'Manager') {
@@ -1164,6 +1180,91 @@ function handleSaveStations(session, stations) {
   return { success: true, count: stations.length };
 }
 
+// 儲存全月排班限定與考勤規則至 Rules 工作表
+function handleSaveRules(session, yearMonth, rulesData) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Rules');
+  if (!sheet) throw new Error('500 Database Error: 找不到 Rules 表單！');
+
+  var ym = yearMonth || rulesData.target_year_month || '2026-09';
+  var data = sheet.getDataRange().getValues();
+  var foundRow = -1;
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][1]).trim() === ym) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+
+  var ruleId = rulesData.rule_id || ('R_' + ym.replace('-', '_'));
+  var holidaysJson = JSON.stringify(rulesData.holidays || rulesData.holidays_json || []);
+  var reqOff = Number(rulesData.required_off_days || 8);
+  var otDay = Number(rulesData.overtime_cap_day || 4);
+  var otMonth = Number(rulesData.overtime_cap_month || 46);
+  var nowIso = new Date().toISOString();
+
+  if (foundRow > 0) {
+    sheet.getRange(foundRow, 1).setValue(ruleId);
+    sheet.getRange(foundRow, 2).setValue(ym);
+    sheet.getRange(foundRow, 3).setValue(holidaysJson);
+    sheet.getRange(foundRow, 4).setValue(reqOff);
+    sheet.getRange(foundRow, 5).setValue(otDay);
+    sheet.getRange(foundRow, 6).setValue(otMonth);
+    sheet.getRange(foundRow, 7).setValue(nowIso);
+  } else {
+    sheet.appendRow([
+      ruleId,
+      ym,
+      holidaysJson,
+      reqOff,
+      otDay,
+      otMonth,
+      nowIso
+    ]);
+  }
+
+  logAuditEvent(session, 'RULES_UPDATE', '更新【' + ym + '】全月排班限定與考勤規則 (應休天數: ' + reqOff + ')', null, rulesData);
+  return { success: true, year_month: ym };
+}
+
+// 儲存每日休假配額至 Quotas 工作表
+function handleSaveQuotas(session, yearMonth, quotas) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Quotas');
+  if (!sheet) throw new Error('500 Database Error: 找不到 Quotas 表單！');
+
+  if (Array.isArray(quotas)) {
+    var data = sheet.getDataRange().getValues();
+    var existingRowMap = {};
+    for (var i = 1; i < data.length; i++) {
+      var qId = String(data[i][0]).trim();
+      if (qId) existingRowMap[qId] = i + 1;
+    }
+
+    quotas.forEach(function(q) {
+      var qId = q.quota_id || ('Q_' + (q.station_id || 'ALL') + '_' + (q.date || ''));
+      var stId = q.station_id || 'ALL';
+      var dt = q.date || '';
+      var maxOff = Number(q.max_off_count || 2);
+      var notes = q.notes || '';
+
+      var row = existingRowMap[qId];
+      if (row) {
+        sheet.getRange(row, 2).setValue(stId);
+        sheet.getRange(row, 3).setValue(dt);
+        sheet.getRange(row, 4).setValue(maxOff);
+        sheet.getRange(row, 5).setValue(notes);
+      } else {
+        sheet.appendRow([qId, stId, dt, maxOff, notes]);
+      }
+    });
+  }
+
+  logAuditEvent(session, 'QUOTAS_UPDATE', '更新休假配額管制日設定', null, quotas);
+  return { success: true, count: (quotas || []).length };
+}
+
 // 全量雙向備份同步函式 (一鍵將本地狀態覆寫至雲端)
 function handleSyncAll(session, payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1242,6 +1343,16 @@ function handleSyncAll(session, payload) {
   // 3. 同步排班矩陣
   if (payload.scheduleMap && payload.yearMonth) {
     handleSaveSchedule(session, payload.yearMonth, payload.scheduleMap);
+  }
+
+  // 4. 同步 Rules (全月排班限定與考勤規則)
+  if (payload.rules && payload.yearMonth) {
+    handleSaveRules(session, payload.yearMonth, payload.rules);
+  }
+
+  // 5. 同步 Quotas (每日休假配額)
+  if (payload.quotas && Array.isArray(payload.quotas)) {
+    handleSaveQuotas(session, payload.yearMonth, payload.quotas);
   }
 
   logAuditEvent(session, 'SYNC_ALL', logNotes, null, { timestamp: new Date().toISOString() });

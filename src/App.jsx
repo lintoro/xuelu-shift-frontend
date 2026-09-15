@@ -261,6 +261,13 @@ export default function App() {
       }
       return updated;
     });
+
+    // 若處於雲端模式，同步呼叫 ApiService.saveRules 寫入雲端 Rules 工作表
+    if (ApiService.isCloudMode() && typeof ApiService.saveRules === 'function') {
+      ApiService.saveRules(currentMonth, newRules)
+        .then(() => console.log(`[雲端同步] 成功將【${currentMonth}】全月排班限定與考勤規則同步至 Google 試算表 Rules 表！`))
+        .catch(e => console.warn('[雲端同步] 排班限定規則同步失敗:', e));
+    }
   }, [currentMonth]);
 
   // 規則組合
@@ -756,6 +763,13 @@ export default function App() {
       const otherEmpPrefs = prev.filter(p => p.emp_id !== empId);
       return [...otherEmpPrefs, ...updatedPrefsForEmp];
     });
+
+    // 若處於雲端模式，同步呼叫 ApiService.submitPreferences 寫入雲端 Leaves 工作表
+    if (ApiService.isCloudMode() && typeof ApiService.submitPreferences === 'function') {
+      ApiService.submitPreferences(empId, updatedPrefsForEmp)
+        .then(() => console.log(`[雲端同步] 成功將同仁【${empId}】劃休意願寫入 Google 試算表 Leaves 表！`))
+        .catch(e => console.warn('[雲端同步] 劃休意願寫入失敗:', e));
+    }
   }, [preferences, leaveBalances]);
 
   const handleSavePtAvailability = useCallback((empId, updatedAvailForEmp) => {
@@ -1290,7 +1304,8 @@ export default function App() {
         employees: allEmployees,
         stations: allStations,
         shiftTypes: Object.values(shiftTypes),
-        scheduleMap: effectiveScheduleMap
+        scheduleMap: effectiveScheduleMap,
+        rules: currentRules
       };
       const res = await ApiService.syncAllToCloud(payload);
       setIsCloudMode(true);
@@ -1738,6 +1753,7 @@ export default function App() {
                 selectedDay={selectedDay}
                 onSelectDay={setSelectedDay}
                 currentSimulatedDate={currentSimulatedDate}
+                targetYearMonth={currentRules?.target_year_month}
               />
             )}
 

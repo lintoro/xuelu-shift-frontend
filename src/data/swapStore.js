@@ -67,6 +67,10 @@ export function precheckSwapCompliance({
   const errors = [];
   const warnings = [];
 
+  const targetYearMonth = rules?.target_year_month || '2026-09';
+  const monthNum = parseInt(targetYearMonth.split('-')[1], 10);
+  const totalDays = rules?.total_days || (targetYearMonth.endsWith('-10') || targetYearMonth.endsWith('-12') || targetYearMonth.endsWith('-01') || targetYearMonth.endsWith('-03') || targetYearMonth.endsWith('-05') || targetYearMonth.endsWith('-07') || targetYearMonth.endsWith('-08') ? 31 : 30);
+
   const empMap = Object.fromEntries(employees.map(e => [e.emp_id, e]));
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s]));
 
@@ -88,12 +92,12 @@ export function precheckSwapCompliance({
 
     const appCurrentShift = simMap[applicantId]?.[applicantDay];
     if (!appCurrentShift || isOffShift(appCurrentShift.shift_type)) {
-      return { isSafe: false, errors: [`9月${applicantDay}日您原本已是休假，請選擇原本有出勤的日期進行改休！`], warnings: [] };
+      return { isSafe: false, errors: [`${monthNum}月${applicantDay}日您原本已是休假，請選擇原本有出勤的日期進行改休！`], warnings: [] };
     }
 
     const targetCurrentShift = simMap[applicantId]?.[targetDay];
     if (targetCurrentShift && isWorkingShift(targetCurrentShift.shift_type)) {
-      return { isSafe: false, errors: [`9月${targetDay}日您原本已有排定出勤班別 (${targetCurrentShift.shift_type})，無法重複挪調！`], warnings: [] };
+      return { isSafe: false, errors: [`${monthNum}月${targetDay}日您原本已有排定出勤班別 (${targetCurrentShift.shift_type})，無法重複挪調！`], warnings: [] };
     }
 
     // 執行個人挪休虛擬調整：原日改為休假，新日改為上班
@@ -106,8 +110,8 @@ export function precheckSwapCompliance({
     };
 
     // 檢驗個人 7 休 1 (連續出勤 <= 6 天)
-    let consecutive = monthBorders['2026-09']?.[appEmp.emp_id]?.consecutive_work_days_at_end || 0;
-    for (let d = 1; d <= 30; d++) {
+    let consecutive = monthBorders[targetYearMonth]?.[appEmp.emp_id]?.consecutive_work_days_at_end || 0;
+    for (let d = 1; d <= totalDays; d++) {
       const shift = simMap[appEmp.emp_id]?.[d];
       if (shift && isWorkingShift(shift.shift_type)) {
         consecutive++;
@@ -130,7 +134,7 @@ export function precheckSwapCompliance({
 
       const hasSolo = remainingAssigned.some(e => canEmployeeSoloAtStation(e, origStation.station_id));
       if (origStation.requires_solo_staff && !hasSolo) {
-        warnings.push(`提醒：9月${applicantDay}日您改為休假後，${origStation.station_name} 現場將缺少具備獨立顧站 (can_solo) 資格同仁，需組長調派機動支援。`);
+        warnings.push(`提醒：${monthNum}月${applicantDay}日您改為休假後，${origStation.station_name} 現場將缺少具備獨立顧站 (can_solo) 資格同仁，需組長調派機動支援。`);
       }
     }
 
@@ -197,8 +201,8 @@ export function precheckSwapCompliance({
 
   // 3. 檢驗連續上班天數與 7 休 1 (剛性法律底線：勞基法第 36 條)
   [appEmp, tarEmp].forEach(emp => {
-    let consecutive = monthBorders['2026-09']?.[emp.emp_id]?.consecutive_work_days_at_end || 0;
-    for (let d = 1; d <= 30; d++) {
+    let consecutive = monthBorders[targetYearMonth]?.[emp.emp_id]?.consecutive_work_days_at_end || 0;
+    for (let d = 1; d <= totalDays; d++) {
       const shift = simMap[emp.emp_id]?.[d];
       if (shift && isWorkingShift(shift.shift_type)) {
         consecutive++;
@@ -224,7 +228,7 @@ export function precheckSwapCompliance({
       if (station.requires_solo_staff && assigned.length > 0) {
         const hasSolo = assigned.some(e => canEmployeeSoloAtStation(e, station.station_id));
         if (!hasSolo) {
-          warnings.push(`⚠️ 現場缺Solo擔當：9月${d}日換班後，${station.station_name} 現場在勤同仁皆無該站獨立顧站 (Solo) 資格！需組長調派支援或親自帶班。`);
+          warnings.push(`⚠️ 現場缺Solo擔當：${monthNum}月${d}日換班後，${station.station_name} 現場在勤同仁皆無該站獨立顧站 (Solo) 資格！需組長調派支援或親自帶班。`);
         }
       }
     });

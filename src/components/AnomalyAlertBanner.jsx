@@ -26,12 +26,14 @@ export default function AnomalyAlertBanner({
   currentUser,
   selectedDay,
   onSelectDay,
-  currentSimulatedDate
+  currentSimulatedDate,
+  targetYearMonth = '2026-09'
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // 當前基準日 (未發生日判斷)
-  const currentDay = currentSimulatedDate ? parseInt(currentSimulatedDate.split('-')[2], 10) : 1;
+  // 當前模擬基準日與月份
+  const simDateStr = currentSimulatedDate || '2026-09-15';
+  const monthNum = parseInt((targetYearMonth || '2026-09').split('-')[1], 10);
 
   // 判斷當前使用者角色與所屬站點
   const isManager = currentUser?.role === 'Manager';
@@ -65,8 +67,12 @@ export default function AnomalyAlertBanner({
     // 依使用者指示：徹底排除「營運支援空班」警示 (ST_ADMIN / ADMIN_SHIFT_DEFICIT)
     if (issue.type === 'ADMIN_SHIFT_DEFICIT' || issue.station_id === 'ST_ADMIN') return false;
 
-    // 規則 1：僅顯示當日與未發生之未來日期 (issue.day >= currentDay)
-    if (issue.day && issue.day < currentDay) return false;
+    // 規則 1：僅顯示當日與未發生之未來日期 (比較完整 YYYY-MM-DD 日期)
+    if (issue.day) {
+      const dayStr = issue.day < 10 ? '0' + issue.day : '' + issue.day;
+      const issueDateStr = `${targetYearMonth || '2026-09'}-${dayStr}`;
+      if (issueDateStr < simDateStr) return false;
+    }
 
     if (effectiveStationFilter === 'ALL') return true;
 
@@ -254,7 +260,7 @@ export default function AnomalyAlertBanner({
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-bold text-xs flex items-center space-x-1">
-                      <span className="text-rose-400 font-extrabold">9月{day}日</span>
+                      <span className="text-rose-400 font-extrabold">{monthNum}月{day}日</span>
                       {hasCritical ? (
                         <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/40 text-rose-200 rounded">
                           空窗

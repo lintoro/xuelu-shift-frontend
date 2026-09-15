@@ -1,37 +1,37 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發工作交接與架構演進報告 (HANDOVER.md)
 
-- **最新更新日期**：2026-09-12 18:45 (GMT+8)
-- **當前核心版本**：`v2.9.0-ssot-cloud-roster-mirror-cache-done` (三層動態資料架構 SSOT 落地版)
+- **最新更新日期**：2026-09-15 22:45 (GMT+8)
+- **當前核心版本**：`v2.9.1-monthly-rules-sync-and-leader-scheduler` (跨月動態化、規則資料庫雙向寫入與組長一鍵排班下放版)
 - **前端部署網址 (Vercel)**：已連動 GitHub 倉庫，支援手機 PWA / 桌面瀏覽器 24 小時免開電腦在線運作
 - **GitHub 儲存庫**：`https://github.com/lintoro/xuelu-shift-frontend.git`
-- **後端資料庫**：Google Sheets 7+1+4 資料庫 + Google Apps Script (GAS) 原生 JSON-RPC 2.0 微服務
+- **後端資料庫**：Google Sheets 13 大表體系 (7+1 核心表 + 5 擴充表) + Google Apps Script (GAS) 原生 JSON-RPC 2.0 微服務
 
 ---
 
 ## ⚡ 換機下機狀態與接續工作指引 (Next Steps)
 
-### 📌 當前完成狀態（已驗證並推送至 GitHub main）
-1. **全域變數命名與屬性雙向相容**：
-   - 站點代碼全面清理統一，廢止舊代碼 `ST_OPS` / `ST_SHOP_MAIN`。
-   - 站點平假日最低人數全面相容 `min_staff_weekday` / `weekday_min_staff` 雙向屬性。
-   - 營業班別樣式色彩（`color`, `badgeColor`）與工時雙向對齊補齊。
-2. **班表矩陣正規化與防污染**：
-   - 班表拉取時無論字串或物件一律全量正規化為標準出勤物件。
-   - **徹底隔離 Google Sheets 工時覆核數據（`Overrides` 表），嚴禁污染排班覆寫層（`scheduleOverrides`）**，徹底終結「F5 重新整理與按網頁刷新試算表時資料錯亂破版」的根本病因。
-3. **三層動態資料架構（SSOT 雲端單一真實來源）正式落地** ✅ **(2026-09-12 新完成)**：
-   - `App.jsx` `allEmployees` 初始化策略重構：雲端模式下回空陣列（等 `handlePullFromCloud` 以試算表為唯一真理源填充），徹底去除雲端環境對靜態 25 人 `EMPLOYEES` 的 fallback 依賴。
-   - `PersonnelManagement.jsx` 頂部標題區新增**即時在勤人數徽章**（在勤 N 人 / 建檔總計 M 人 / 含封存 K 人，三維度即時顯示）。
-   - **一鍵強制刷新雲端名冊**按鈕（帶旋轉 Loading 動態，僅雲端模式顯示），點擊後以試算表為唯一真理源覆蓋本機快取，支援動態 37 人名冊即時伸縮。
-   - 雲端 / 沙盒狀態即時徽章指示器（Cloud / CloudOff icon）。
-4. **全套測試與建置 100% 通過**：
+### 📌 當前完成狀態（已驗證並通過全部測試）
+1. **跨月排班鎖定機制根治** ✅ **(2026-09-15 新完成)**：
+   - 原先在 9 月地端開發時切換 10 月班表被誤判「歷史排班鎖定」，根本原因在於原程式僅以天數數字比對（`d < simDay`）；現全面重構為 ISO 日期字串比對（`cellDateStr < simDateStr`），預排次月與後續月份排班格完全解鎖並正常提供點選與調整。
+2. **全系統月份寫死徹底動態化** ✅ **(2026-09-15 新完成)**：
+   - 全面清理並重構排班大表調整彈窗標題、日曆標籤、懸停提示、調班申請門戶、日曆匯出備註等寫死「9月/10月」之文字，所有月份與天數均依據所選年份月份動態生成。
+3. **Google Sheets 資料庫雙向持久化補齊 (`Rules` / `Quotas` / `Leaves`)** ✅ **(2026-09-15 新完成)**：
+   - 後端 `Code.gs` 補齊 `admin.saveRules`、`admin.saveQuotas` 端點與實作函式，並在 `handleSyncAll` 補齊 `Rules` 與 `Quotas` 同步。
+   - 前端 `ApiService.js` 實作 `saveRules`、`saveQuotas`、`submitPreferences` 路由與本地沙盒 Mock。
+   - `App.jsx` 於全月排班規則存檔、同仁劃休存檔與全館上傳雲端時，完整連動 API 寫入 Google Sheets，徹底解決資料庫表格空白無資料問題。
+4. **補齊第 13 大表 `Month_Borders` 規格** ✅ **(2026-09-15 新完成)**：
+   - 在 `DATABASE_SCHEMA_MAPPING.md` 完整補齊第 13 大表《跨月連續出勤邊界表 (`Month_Borders`)》之欄位規格、資料型態與勞基法第 36 條 7 休 1 邊界計算規則。
+5. **一鍵智慧排班功能下放站點組長 (LEADER)** ✅ **(2026-09-15 新完成)**：
+   - `ScheduleTable.jsx` 中將「啟動智慧排班」權限調整為 `(isManager || isLeader)`，賦予第一線站點組長基礎排班能力。
+6. **全套測試與建置 100% 通過**：
    - 42 原始檔 AST 語法檢查 0 個未定義變數。
    - 21/21 大情境 SSR 模擬渲染通過。
+   - 10 月預排班表（31 天、5 站點）Readiness 測試 100% 通過。
    - Vite Production Build 生產構建通過。
 
-### 🎯 下一步接續目標（已無緊急開發債務）
-- 系統已達生產就緒（Production-Ready）狀態，核心功能已 100% 完工。
-- 若有新需求（如新站點、新班別、新法規），依標準 SOP 增量迭代即可。
+### 🎯 下一步接續目標與部署提醒
+- **⚠️ 重要：Google Apps Script (GAS) 需重新部署**：因 `src/backend/Code.gs` 新增了 `admin.saveRules`、`admin.saveQuotas` 與 `syncAll` 寫入邏輯，請管理員進入 Google 試算表之 Apps Script 編輯器，重新點擊 **「部署」➜「管理部署作業」➜「編輯」➜ 版本選「新版本」➜「部署」**，以確保雲端 API 端點生效。
 
 
 ## 📋 重大開發進展與更新紀錄總覽
@@ -95,6 +95,22 @@
 ### 6. 全域錯誤邊界防護（ErrorBoundary）
 - 在 `src/main.jsx` 外圍加裝全域 **`ErrorBoundary.jsx`（錯誤邊界保護組件）**。
 - 阻絕未來任何非預期錯誤導致全頁白屏，並提供深色診斷卡片與一鍵快取清除重載按鈕，確保門市現場 100% 高可用性。
+
+---
+
+### 7. 跨月排班解鎖、全域動態月份、Google Sheets 資料庫持久化與組長一鍵排班 (2026-09-15)
+- **跨月歷史排班鎖定機制根治**：
+  - 排班大表（`ScheduleTable.jsx`）原先僅以日期日數比較（`d < simDay`），導致在 9 月地端開發時點選 10 月預排班表被誤鎖；現全面改以 ISO 日期格式比對（`cellDateStr < simDateStr`），預排跨月班表完全自由調整。
+- **全專案月份寫死徹底動態化**：
+  - 清理所有硬編碼寫死「9月」或「10月」之文字。排班調整彈窗標題由 `9月${day}日` 改為 `${month}月${day}日`，並動態計算當月天數 `new Date(year, month, 0).getDate()`。
+  - 異常看板（`AnomalyAlertBanner.jsx`）、調班門戶（`ShiftSwapPortal.jsx`）、換班預檢（`swapStore.js`）與日曆匯出（`calendarExport.js`）全面連動選定之月份。
+- **Google Sheets 雙向寫入補齊 (`Code.gs` / `ApiService.js` / `App.jsx`)**：
+  - 後端 `Code.gs` 補齊 `admin.saveRules`、`admin.saveQuotas` 端點，支援將全月考勤規則（平日天數、假日天數、總工時上限）與配額即時寫入試算表。
+  - `App.jsx` 連動 `ApiService.saveRules` 與 `ApiService.submitPreferences`，解決使用者反映「設定每月排班限定改好後沒寫上資料庫」與劃休表空白問題。
+- **補齊第 13 大表《跨月連續出勤邊界表 (`Month_Borders`)》**：
+  - 於 `DATABASE_SCHEMA_MAPPING.md` 完整定義表名、表頭結構、資料型別與勞基法第 36 條連續出勤邊界銜接規則。
+- **一鍵排班功能下放基層組長 (LEADER)**：
+  - 排班大表將「🚀 啟動智慧排班」按鈕調整為 `(isManager || isLeader)` 均可執行，使第一線排班組長在階段 2（排班調整）能直接一鍵生成排班。
 
 ---
 

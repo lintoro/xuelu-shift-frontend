@@ -1,7 +1,7 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統 (Xuelu Shift System)
 
-> **專案版本**：V2.5.0 正式完工驗收暨全館試排準備版（最新 Commit：`48bcef9` / `93850eb`）  
-> **更新日期**：2026-09-12  
+> **專案版本**：V2.9.1 跨月動態排班與 Google Sheets 規則雙向同步版  
+> **更新日期**：2026-09-15  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
 > **維運交接與資料庫指南**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)、[`DATABASE_SCHEMA_MAPPING.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/DATABASE_SCHEMA_MAPPING.md) 與 [`OCTOBER_UAT_TEST_SCRIPT.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/OCTOBER_UAT_TEST_SCRIPT.md)。
 
@@ -43,6 +43,9 @@
   - 導覽列與調班門戶權限收攏：PT 隱藏調班入口，Staff 呈現「線上調班申請」且鎖定初審/終審審核按鈕，僅 Leader/Manager 可進行初審終審。
 - [x] **異常顯示提醒看板 (`AnomalyAlertBanner.jsx`)**：當極限條件下人力吃緊時，保底輸出最佳班表，並以頂部互動式橫幅即時提示空窗站點與調度建議。
 - [x] **大表表頭與警示雙向平滑滾動**：點擊異常橫幅日期一鍵平滑滾動定位至排班大表對應欄位並產生視覺高亮動畫。
+- [x] **跨月歷史排班鎖定機制重構 (`ScheduleTable.jsx`)**：修正原程式依賴日期數字判定（`d < simDay`）造成 9 月看 10 月排班被誤鎖問題，全面升級為 ISO 日期字串比對（`cellDateStr < simDateStr`）。
+- [x] **全系統排班月份動態化**：排班微調彈窗標題、日曆標籤、換班申請選單、日曆匯出備註全面動態抓取當前選擇年月，徹底清除硬編碼寫死「9月」或「10月」之文本。
+- [x] **一鍵智慧排班功能下放 LEADER (`ScheduleTable.jsx`)**：開放「🚀 啟動智慧排班」權限予 `(isManager || isLeader)`，讓第一線組長在階段 2（排班調整）能自主啟動種子演算法排定基礎班表。
 
 ### 3. 同仁劃休與衝突透視門戶 (Leave Portal & Conflicts) — 100%
 - [x] **正職志願序劃休**：提供優先與備選志願填報，具備單日休假上限與週末休假上限防呆。
@@ -97,6 +100,12 @@
   - 主管端一鍵發布出勤定稿通知，實時追蹤全員簽認進度條，支援匯出對帳 CSV 清冊。
   - 同仁工作台即時浮現定稿對帳卡，支援一鍵完成電子簽認。
 - [x] **不可抹滅稽核日誌與一鍵回滾 (`AuditLogsPanel.jsx`)**：異動自動寫入含前後完整矩陣雙快照（Before/After Snapshot），支援一鍵安全回溯。
+- [x] **Google Sheets 雙向寫入與持久化補齊 (`Code.gs` / `apiService.js` / `App.jsx`)**：
+  - 後端 `Code.gs` 補齊 `admin.saveRules` 與 `admin.saveQuotas` 端點，支援全月排班限定考勤規則（`Rules` 表）與假勤額度（`Quotas` 表）雙向寫入。
+  - 前端 `ApiService` 補齊連動函式，並在本地沙盒提供 LocalStorage Mock 支援。
+  - `App.jsx` 在「設定每月排班限定」存檔、同仁劃休存檔（`Leaves` 表）與「儲存至 Google 試算表」時全面連動 API，徹底終結試算表無資料空白之問題。
+- [x] **資料庫架構規格補齊第 13 大表 (`DATABASE_SCHEMA_MAPPING.md`)**：
+  - 完整載明《跨月連續出勤邊界表 (`Month_Borders`)》之欄位規格、資料型態與勞基法第 36 條 7 休 1 邊界計算規則，使資料庫架構健全度達到 13 大表 100% 定義。
 
 ---
 

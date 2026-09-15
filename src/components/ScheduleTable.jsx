@@ -52,14 +52,14 @@ export default function ScheduleTable({
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
-  const totalDays = scheduleResult?.totalDays || 30;
+  // 取得平假日資訊與國定假日
+  const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
+  const daysInCurrentMonth = new Date(year, month, 0).getDate();
+  const totalDays = scheduleResult?.totalDays || rules?.total_days || daysInCurrentMonth;
   const scheduleMap = scheduleResult?.scheduleMap || {};
 
   const stationNameMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
   const effectiveShiftDefs = shiftTypes || SHIFT_TYPES;
-
-  // 取得平假日資訊與國定假日
-  const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
   const monthStr = month < 10 ? '0' + month : '' + month;
   const dayHeaders = [];
   for (let d = 1; d <= totalDays; d++) {
@@ -120,7 +120,12 @@ export default function ScheduleTable({
   const handleCellClick = (emp, day, currentShift) => {
     if (!canEditEmployeeCell(emp)) return;
 
-    if (day < simDay) {
+    const targetYearMonth = rules?.target_year_month || '2026-09';
+    const dayStr = day < 10 ? '0' + day : '' + day;
+    const cellDateStr = `${targetYearMonth}-${dayStr}`;
+    const simDateStr = currentSimulatedDate || '2026-09-15';
+
+    if (cellDateStr < simDateStr) {
       alert(`⚠️【歷史排班鎖定】\n${month}月${day}日勤務已經發生，無法直接調動班表！\n若實際出勤工時或班別與原排定不符，請至上方【實勤覆核 (HOURS_OVERRIDE)】進行覆核記錄。`);
       return;
     }
@@ -177,7 +182,7 @@ export default function ScheduleTable({
       onSaveAdjustment(adjEntry);
     }
     setEditingCell(null);
-    setFeedbackMsg(`已成功暫存【${emp.name}】9月${day}日班別微調 (${adjEntry.original_shift} → ${adjEntry.new_shift})！`);
+    setFeedbackMsg(`已成功暫存【${emp.name}】${month}月${day}日班別微調 (${adjEntry.original_shift} → ${adjEntry.new_shift})！`);
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
@@ -388,8 +393,20 @@ export default function ScheduleTable({
           </span>
         </div>
 
-        {/* 右側：主管智慧排班、發布雲端、匯出 */}
+        {/* 右側：組長/主管智慧排班、發布雲端、匯出 */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* 組長與經理專屬：一鍵啟動演算法智慧排班 (已發布封存除外) */}
+          {(isManager || isLeader) && workflowStage !== 'PUBLISHED_LOCKED' && (
+            <button
+              onClick={() => onRunEngine && onRunEngine()}
+              title="重新啟動排班引擎進行智慧排班計算"
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>啟動智慧排班</span>
+            </button>
+          )}
+
           {isManager && (
             <>
               {/* Manager 快速填報本人班表快捷鍵 */}
@@ -447,17 +464,6 @@ export default function ScheduleTable({
                 >
                   <User className="w-3.5 h-3.5" />
                   <span>自填本人班表</span>
-                </button>
-              )}
-
-              {workflowStage !== 'PUBLISHED_LOCKED' && (
-                <button
-                  onClick={() => onRunEngine && onRunEngine()}
-                  title="重新啟動排班引擎進行智慧排班計算"
-                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>啟動智慧排班</span>
                 </button>
               )}
 
@@ -521,7 +527,7 @@ export default function ScheduleTable({
                         ? 'bg-rose-50/70 text-rose-700 hover:bg-rose-100/70' 
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
-                    title={holidayObj ? `法定國定假日：${holidayObj.name}` : `點擊檢視 9月${day}日 (${weekDayStr}) 站點合規燈號`}
+                    title={holidayObj ? `法定國定假日：${holidayObj.name}` : `點擊檢視 ${month}月${day}日 (${weekDayStr}) 站點合規燈號`}
                   >
                     {holidayObj && (
                       <div className="text-[8px] leading-tight font-black text-rose-600 bg-white/90 rounded px-0.5 mb-0.5 truncate">
@@ -745,7 +751,7 @@ export default function ScheduleTable({
               <div className="flex items-center space-x-2">
                 <Edit3 className="w-4 h-4 text-indigo-600" />
                 <h4 className="text-xs font-bold text-slate-900">
-                  排班微調: {editingCell.emp.name} ({9}月{editingCell.day}日)
+                  排班微調: {editingCell.emp.name} ({month}月{editingCell.day}日)
                 </h4>
               </div>
               <button
@@ -886,7 +892,7 @@ export default function ScheduleTable({
                       <span className="font-bold text-slate-800">{adj.emp_name}</span>
                       <span className="text-[10px] text-slate-400 font-mono">({adj.emp_id})</span>
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">
-                        9月{adj.day}日
+                        {month}月{adj.day}日
                       </span>
                       <span className="text-[10px] text-indigo-600 font-bold">
                         提案人: {adj.proposed_by_name}

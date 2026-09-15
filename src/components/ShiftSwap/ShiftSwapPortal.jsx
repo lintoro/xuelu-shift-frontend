@@ -39,6 +39,8 @@ export default function ShiftSwapPortal({
 }) {
   const currentEmp = currentUser || employees.find(e => e.emp_id === currentEmpId) || employees[0];
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
+  const targetYearMonth = rules?.target_year_month || '2026-09';
+  const monthNum = parseInt(targetYearMonth.split('-')[1], 10);
 
   // 審核權限判定：組長初審 (Leader/Manager/Admin)、高管終審 (Manager/Admin)；一般 Staff / PT 僅有填報權，無審核核准權
   const isManager = currentEmp?.role === 'Manager';
@@ -391,7 +393,7 @@ export default function ShiftSwapPortal({
                     >
                       {myWorkDays.map(item => (
                         <option key={item.day} value={item.day}>
-                          9月{item.day}日 ({item.shift}班)
+                          {monthNum}月{item.day}日 ({item.shift}班)
                         </option>
                       ))}
                     </select>
@@ -424,7 +426,7 @@ export default function ShiftSwapPortal({
                     >
                       {myOffDays.map(d => (
                         <option key={d} value={d}>
-                          9月{d}日 (原為 OFF)
+                          {monthNum}月{d}日 (原為 OFF)
                         </option>
                       ))}
                     </select>

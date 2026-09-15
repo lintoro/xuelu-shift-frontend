@@ -263,6 +263,12 @@ export const ApiService = {
       case 'admin.saveStations':
         return { success: true, count: (params.stations || []).length };
 
+      case 'admin.saveRules':
+        return { success: true, year_month: params.year_month };
+
+      case 'admin.saveQuotas':
+        return { success: true, count: (params.quotas || []).length };
+
       case 'admin.holidayTransfer':
         return { success: true };
 
@@ -363,6 +369,33 @@ export const ApiService = {
   async saveStations(stations, token = 'session_active') {
     return this.callRpc('admin.saveStations', {
       stations: stations,
+      token: token
+    });
+  },
+
+  // 儲存全月排班限定與考勤規則 (Rules 表)
+  async saveRules(yearMonth, rules, token = 'session_active') {
+    return this.callRpc('admin.saveRules', {
+      year_month: yearMonth,
+      rules: rules,
+      token: token
+    });
+  },
+
+  // 儲存每日休假配額 (Quotas 表)
+  async saveQuotas(yearMonth, quotas, token = 'session_active') {
+    return this.callRpc('admin.saveQuotas', {
+      year_month: yearMonth,
+      quotas: quotas,
+      token: token
+    });
+  },
+
+  // 送出同仁預休劃假 (Leaves 表)
+  async submitPreferences(empId, preferences, token = 'session_active') {
+    return this.callRpc('leave.submitPreferences', {
+      emp_id: empId,
+      preferences: preferences,
       token: token
     });
   },
