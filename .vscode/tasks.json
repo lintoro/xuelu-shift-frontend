@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🚀 推送 Code.gs 到 Google 雲端 (clasp push)",
+      "type": "shell",
+      "command": "npm run gas:push",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🚀 推送並發布最新 Web App 版本 (clasp deploy)",
+      "type": "shell",
+      "command": "npm run gas:deploy",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

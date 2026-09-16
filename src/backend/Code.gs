@@ -131,6 +131,18 @@ function doPost(e) {
         result = handleSaveSchedule(session, params.year_month, params.schedule_matrix);
         break;
 
+      case 'schedule.saveMonthBorders':
+        var session = validateToken(params.token);
+        if (session.role !== 'Manager' && !session.is_admin) {
+          throw new Error('403 Forbidden: 僅營運高管或系統管理員具備維護跨月邊界權限！');
+        }
+        result = handleSaveMonthBorders(session, params.year_month, params.borders_data);
+        break;
+
+      case 'admin.directImportSept':
+        result = handleDirectImportSept(params.schedules, params.borders);
+        break;
+
       case 'audit.rollback':
         var session = validateToken(params.token);
         if (session.role !== 'Manager' && !session.is_admin) {
@@ -261,7 +273,18 @@ function hashPin(pin, salt) {
   }).join('');
 }
 
-// 後端防暴力破解登入處理
+// 年月資料型別正規化（支援 Date 物件與字串相容比對）
+function normalizeYm(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'GMT+8', 'yyyy-MM');
+  }
+  var s = String(val).trim();
+  if (s.length >= 7) return s.slice(0, 7);
+  return s;
+}
+
+
 function handleLogin(empId, pinCode) {
   var cache = CacheService.getScriptCache();
   var lockKey = 'lockout_' + empId;
@@ -483,7 +506,9 @@ function handleGetInitialData(yearMonth, session) {
       { code: 'MAT',      name: '產假/陪產假', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fdf4ff', badge: '#86198f', desc: '分娩產假(8週)或陪產檢及陪產假(7日)' },
       { code: 'CL',       name: '公假',     startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#ecfeff', badge: '#0e7490', desc: '依法給予公假 (兵役/公務出庭，工資照給)' },
       { code: 'REG_OFF',  name: '法定例假', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fff1f2', badge: '#e11d48', desc: '勞基法第36條每7日至少1例假 (不得安排出勤)' },
-      { code: 'REST_OFF', name: '休息日',   startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fef2f2', badge: '#dc2626', desc: '一例一休之休息日 (出勤加計加班費)' }
+      { code: 'REST_OFF', name: '休息日',   startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fef2f2', badge: '#dc2626', desc: '一例一休之休息日 (出勤加計加班費)' },
+      { code: 'HOLIDAY_OFF', name: '國定假日', startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#fee2e2', badge: '#dc2626', desc: '法定國定假日 (紀念日及節日放假)' },
+      { code: 'PRE_HIRE_OFF', name: '未到職',   startTime: '-', endTime: '-', breakH: 0, workH: 0, color: '#f1f5f9', badge: '#94a3b8', desc: '新人尚未報到 (到職前真空，不計工時與休假)' }
     ];
     var needsFlush = false;
     mandatoryLeaveTypes.forEach(function(lt) {
@@ -504,19 +529,22 @@ function handleGetInitialData(yearMonth, session) {
     }
   }
 
+
   // 4. 讀取 Schedules (指定 yearMonth)
   var schSheet = ss.getSheetByName('Schedules');
   var schData = schSheet ? schSheet.getDataRange().getValues() : [];
   var scheduleMap = {};
   for (var k = 1; k < schData.length; k++) {
     var row = schData[k];
-    if (row[1] === ym) {
-      var empId = row[2];
-      scheduleMap[empId] = {};
+    if (normalizeYm(row[1]) === ym) {
+      var empId = String(row[2]).trim();
+      if (!scheduleMap[empId]) {
+        scheduleMap[empId] = {};
+      }
       for (var d = 1; d <= 31; d++) {
         var shift = row[2 + d];
-        if (shift !== undefined && shift !== '') {
-          scheduleMap[empId][d] = shift;
+        if (shift !== undefined && shift !== null && String(shift).trim() !== '') {
+          scheduleMap[empId][d] = String(shift).trim();
         }
       }
     }
@@ -533,7 +561,7 @@ function handleGetInitialData(yearMonth, session) {
     overtime_cap_month: 46
   };
   for (var m = 1; m < rulesData.length; m++) {
-    if (rulesData[m][1] === ym) {
+    if (normalizeYm(rulesData[m][1]) === ym) {
       try { monthlyRules.holidays = rulesData[m][2] ? JSON.parse(rulesData[m][2]) : []; } catch(e){}
       monthlyRules.required_off_days = Number(rulesData[m][3] || 8);
       monthlyRules.overtime_cap_day = Number(rulesData[m][4] || 4);
@@ -581,7 +609,7 @@ function handleGetInitialData(yearMonth, session) {
   var overrides = {};
   for (var o = 1; o < ovData.length; o++) {
     var ovRow = ovData[o];
-    if (ovRow[1] === ym) {
+    if (normalizeYm(ovRow[1]) === ym) {
       var oEmp = ovRow[2];
       var oDay = Number(ovRow[3]);
       if (!overrides[oEmp]) overrides[oEmp] = {};
@@ -637,10 +665,29 @@ function handleGetInitialData(yearMonth, session) {
     });
   }
 
-  // 10. 讀取排班發布與工作流狀態 (依 Schedules 中是否有 PUBLISHED 判斷)
+  // 10. 讀取 Month_Borders (跨月連續出勤邊界)
+  var borderSheet = ss.getSheetByName('Month_Borders');
+  var borderData = borderSheet ? borderSheet.getDataRange().getValues() : [];
+  var monthBorders = {};
+  for (var bi = 1; bi < borderData.length; bi++) {
+    var bRow = borderData[bi];
+    if (normalizeYm(bRow[1]) === ym) {
+      var bEmp = bRow[2];
+      var last7 = [];
+      try { if (bRow[5]) last7 = JSON.parse(bRow[5]); } catch(e){}
+      monthBorders[bEmp] = {
+        emp_id: bEmp,
+        consecutive_work_days_at_end: Number(bRow[3] || 0),
+        last_day_shift: bRow[4] || 'OFF',
+        prev_month_last_7_days: last7
+      };
+    }
+  }
+
+  // 11. 讀取排班發布與工作流狀態 (依 Schedules 中是否有 PUBLISHED 判斷)
   var isPublished = false;
   for (var sp = 1; sp < schData.length; sp++) {
-    if (schData[sp][1] === ym && schData[sp][34] === 'PUBLISHED') {
+    if (normalizeYm(schData[sp][1]) === ym && (schData[sp][34] === 'PUBLISHED' || schData[sp][35] === 'PUBLISHED')) {
       isPublished = true;
       break;
     }
@@ -651,6 +698,7 @@ function handleGetInitialData(yearMonth, session) {
     stations: stations,
     shiftTypes: shiftTypes,
     scheduleMap: scheduleMap,
+    monthBorders: monthBorders,
     rules: monthlyRules,
     swaps: swaps,
     overrides: overrides,
@@ -940,7 +988,7 @@ function handleSaveSchedule(session, yearMonth, scheduleMatrix) {
       empId
     ];
     var workCount = 0;
-    var nonWorking = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF'];
+    var nonWorking = ['OFF', 'TERM_OFF', 'PRE_HIRE_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF', 'HOLIDAY_OFF'];
     for (var day = 1; day <= 31; day++) {
       var shiftVal = empShifts[day];
       var shiftCode = typeof shiftVal === 'object' ? (shiftVal?.shift_type || '') : (shiftVal || '');
@@ -956,6 +1004,125 @@ function handleSaveSchedule(session, yearMonth, scheduleMatrix) {
   // 4. 寫入雙快照稽核日誌
   logAuditEvent(session, 'SCHEDULE_PUBLISH', '高階主管發布 ' + yearMonth + ' 全月排班矩陣', beforeSnapshot, scheduleMatrix);
   return { success: true, count: emps.length, timestamp: nowStr };
+}
+
+// 儲存跨月邊界表 (Month_Borders)
+function handleSaveMonthBorders(session, yearMonth, bordersData) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Month_Borders');
+  if (!sheet) {
+    sheet = ss.insertSheet('Month_Borders');
+    sheet.appendRow(['border_id', 'year_month', 'emp_id', 'consecutive_work_days_at_end', 'last_day_shift', 'prev_month_last_7_days', 'updated_at']);
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var rowsToDelete = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][1] === yearMonth) {
+      rowsToDelete.push(i + 1);
+    }
+  }
+
+  for (var r = rowsToDelete.length - 1; r >= 0; r--) {
+    sheet.deleteRow(rowsToDelete[r]);
+  }
+
+  var nowStr = new Date().toISOString();
+  var emps = Object.keys(bordersData || {});
+  for (var e = 0; e < emps.length; e++) {
+    var empId = emps[e];
+    var b = bordersData[empId];
+    sheet.appendRow([
+      'BDR_' + Utilities.getUuid(),
+      yearMonth,
+      empId,
+      b.consecutive_work_days_at_end || 0,
+      b.last_day_shift || 'OFF',
+      JSON.stringify(b.prev_month_last_7_days || []),
+      nowStr
+    ]);
+  }
+
+  logAuditEvent(session, 'MONTH_BORDERS_UPDATE', '更新 ' + yearMonth + ' 跨月連續出勤邊界紀錄', null, { year_month: yearMonth, count: emps.length });
+  return { success: true, count: emps.length, timestamp: nowStr };
+}
+
+// 9 月班表與 10 月跨月邊界直接全量匯入 (高階管理與初次資料初始化專用)
+function handleDirectImportSept(schedules, borders) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. 寫入 Schedules 表
+  var schedSheet = ss.getSheetByName('Schedules');
+  if (!schedSheet) {
+    schedSheet = ss.insertSheet('Schedules');
+    schedSheet.appendRow(['schedule_id', 'year_month', 'emp_id', 'day_1', 'day_2', 'day_3', 'day_4', 'day_5', 'day_6', 'day_7', 'day_8', 'day_9', 'day_10', 'day_11', 'day_12', 'day_13', 'day_14', 'day_15', 'day_16', 'day_17', 'day_18', 'day_19', 'day_20', 'day_21', 'day_22', 'day_23', 'day_24', 'day_25', 'day_26', 'day_27', 'day_28', 'day_29', 'day_30', 'day_31', 'total_hours', 'published_status', 'updated_at']);
+  }
+  var data = schedSheet.getDataRange().getValues();
+  var rowsToDelete = [];
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeYm(data[i][1]) === '2026-09') {
+      rowsToDelete.push(i + 1);
+    }
+  }
+  for (var r = rowsToDelete.length - 1; r >= 0; r--) {
+    schedSheet.deleteRow(rowsToDelete[r]);
+  }
+  var nowStr = new Date().toISOString();
+  var emps = Object.keys(schedules || {});
+  for (var e = 0; e < emps.length; e++) {
+    var empId = emps[e];
+    var empShifts = schedules[empId] || {};
+    var rowArr = [
+      'SCH_' + Utilities.getUuid(),
+      '2026-09',
+      empId
+    ];
+    var workCount = 0;
+    var nonWorking = ['OFF', 'TERM_OFF', 'PRE_HIRE_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF', 'HOLIDAY_OFF'];
+    for (var day = 1; day <= 31; day++) {
+      var shiftVal = empShifts[day];
+      var shiftCode = typeof shiftVal === 'object' ? (shiftVal?.shift_type || '') : (shiftVal || '');
+      rowArr.push(shiftCode);
+      if (shiftCode && nonWorking.indexOf(shiftCode) === -1) workCount++;
+    }
+    rowArr.push(workCount * 8);
+    rowArr.push('PUBLISHED');
+    rowArr.push(nowStr);
+    schedSheet.appendRow(rowArr);
+  }
+
+  // 2. 寫入 Month_Borders 表
+  var borderSheet = ss.getSheetByName('Month_Borders');
+  if (!borderSheet) {
+    borderSheet = ss.insertSheet('Month_Borders');
+    borderSheet.appendRow(['border_id', 'year_month', 'emp_id', 'consecutive_work_days_at_end', 'last_day_shift', 'prev_month_last_7_days', 'updated_at']);
+  }
+  var bData = borderSheet.getDataRange().getValues();
+  var bRowsToDelete = [];
+  for (var bi = 1; bi < bData.length; bi++) {
+    if (normalizeYm(bData[bi][1]) === '2026-10') {
+      bRowsToDelete.push(bi + 1);
+    }
+  }
+  for (var br = bRowsToDelete.length - 1; br >= 0; br--) {
+    borderSheet.deleteRow(bRowsToDelete[br]);
+  }
+  var bEmps = Object.keys(borders || {});
+  for (var be = 0; be < bEmps.length; be++) {
+    var bEmpId = bEmps[be];
+    var bItem = borders[bEmpId];
+    borderSheet.appendRow([
+      'BDR_' + Utilities.getUuid(),
+      '2026-10',
+      bEmpId,
+      bItem.consecutive_work_days_at_end || 0,
+      bItem.last_day_shift || 'OFF',
+      JSON.stringify(bItem.prev_month_last_7_days || []),
+      nowStr
+    ]);
+  }
+
+  return { success: true, scheduleCount: emps.length, borderCount: bEmps.length, timestamp: nowStr };
 }
 
 // 班表回滾 (Rollback 至指定 Audit Log 的 before_snapshot)
@@ -1526,7 +1693,9 @@ function setupSpreadsheet() {
       ['MAT',     '產假/陪產假','-',     '-',     0, 0, '#fdf4ff', '#86198f', true, new Date().toISOString()],
       ['CL',      '公假',       '-',     '-',     0, 0, '#ecfeff', '#0e7490', true, new Date().toISOString()],
       ['REG_OFF', '法定例假',   '-',     '-',     0, 0, '#fff1f2', '#e11d48', true, new Date().toISOString()],
-      ['REST_OFF','休息日',     '-',     '-',     0, 0, '#fef2f2', '#dc2626', true, new Date().toISOString()]
+      ['REST_OFF','休息日',     '-',     '-',     0, 0, '#fef2f2', '#dc2626', true, new Date().toISOString()],
+      ['HOLIDAY_OFF', '國定假日', '-',   '-',     0, 0, '#fee2e2', '#dc2626', true, new Date().toISOString()],
+      ['PRE_HIRE_OFF','未到職',   '-',   '-',     0, 0, '#f1f5f9', '#94a3b8', true, new Date().toISOString()]
     ];
     defaultShifts.forEach(function(ds) { shiftSheet.appendRow(ds); });
   }

@@ -1061,6 +1061,72 @@
 
 ---
 
+### 📌 [需求 #035] 國定假日圖示 (HOLIDAY_OFF)、本地快取覆寫清除機制與陳鵬宇排班顯示修復
+
+- **來源反饋**：
+  1. 大班表中 `HOLIDAY_OFF`（國定假日）沒有專屬視覺圖示與色塊標籤。
+  2. B111155 陳鵬宇的班表畫面顯示與雲端資料庫不符，顯示為整月帶「改」的 A 班。
+- **根本原因深度排查**：
+  1. `HOLIDAY_OFF` 先前僅定義於資料庫，但 `ScheduleTable.jsx` 樣式條件式遺漏其專屬色塊與圖例，導致 fallback 成通用樣式。
+  2. 前端 `App.jsx` 的 `effectiveScheduleMap` 會將 LocalStorage 之微調覆寫快取（`xuelu_schedule_overrides_v1`）疊加在基礎班表之上。先前主管曾在本機點擊過「自填本人班表（A班）」，殘留的本地微調覆寫強制覆蓋了雲端發布的真實班表，導致陳鵬宇全月顯示為整片帶琥珀色「改」標記之 A 班。
+- **修復方案實作**：
+  1. **`HOLIDAY_OFF` 視覺圖示與圖例補齊**：
+     - 在 `src/types/scheduler.js` 補齊 `HOLIDAY_OFF`。
+     - 在 `src/components/ScheduleTable.jsx` 增加亮紅底白字「國」色塊膠囊（`bg-red-500 text-white font-black border border-red-600 shadow-2xs`）與底部圖例說明。
+  2. **本地微調快取覆寫機制加固與一鍵清除**：
+     - 在 `App.jsx` 的 `handleManualRefreshFromCloud` 與 `handlePullFromCloud` 中，增加自動清空本地微調覆寫邏輯，確保雲端真實數據（SSOT）最高權威。
+     - 在 `ScheduleTable.jsx` 控制列增加「🧹 清除微調 (筆數)」按鈕，提供主管隨時一鍵清空本機殘留快取並還原雲端真實班表。
+- **影響檔案清單**：
+  - `src/types/scheduler.js`
+  - `src/components/ScheduleTable.jsx`
+  - `src/App.jsx`
+  - `AGENTS.md`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.6-fix-holiday-icon-and-cache-override-delivered)`
+
+---
+
+### 📌 [需求 #036] 9 月全量班表解析、Google Sheets 雲端入庫與 10 月跨月銜接邊界建置
+
+- **來源反饋**：讀取外部試算表 9 月全月資料，將全館 38 位同仁完整排班資料入庫，並比對月尾最後 6 天出勤狀況，建立 10 月跨月連續出勤邊界（`Month_Borders`）。
+- **關鍵技術坑點與防錯防線 (寫入 AGENTS.md 守則)**：
+  1. **人事真實性鐵律**：營運處核心主管（陳鵬宇、白慧真、張舒扉、劉宗哲、林錦達、戴晉弘等）在組織中為實質營運主管（`Manager` / `is_self_scheduled: true`），高管之所以留白係因資料庫為空值，只要資料庫有排班即可 100% 正常出色塊，嚴禁為了排班顯示而隨意降轉主管為基層 Staff。
+  2. **Google Sheets 日期物件型別正規化 (`normalizeYm`)**：Google Sheets 會自動將 `2026-09` 轉換為 Date 物件，後端必須使用全域 `normalizeYm(val)` 進行字串切齊比對，徹底防止查詢回傳 `{}` 或刪除舊資料失敗。
+  3. **防覆蓋讀取組裝 (`ScheduleMap Aggregation Safety`)**：多列覆寫讀取時，僅非空班別才寫入，確保有效資料不被空列意外沖銷。
+- **修復方案實作**：
+  1. 撰寫解析腳本精確轉換 9 月 38 位同仁排班資料至 `src/data/septemberScheduleData.js`。
+  2. Google Apps Script 後端（`Code.gs`）擴充 `admin.directImportSept` API，完成 38 位同仁 `Schedules` 與 `Month_Borders`（2026-10 銜接）全量入庫。
+- **影響檔案清單**：
+  - `src/data/septemberScheduleData.js`
+  - `src/backend/Code.gs`
+  - `AGENTS.md`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.7-sept-direct-import-and-border-delivered)`
+
+---
+
+### 📌 [需求 #037] 新增未到職真空 (PRE_HIRE_OFF) 與發布鎖定下新進人員專屬排班通道
+
+- **來源反饋**：外部試算表新增林家萱、何弈潔班表，戴晉弘（9/7 到職）與何弈潔（9/7 到職）因 9 月中途到職，9/1~9/6 尚未報到並非休假（`OFF`）。且全館班表發布後已進入鎖定，需設計主管為新進同仁安排班表之專屬通道。
+- **功能規劃與架構實作**：
+  1. **假勤架構擴充 `PRE_HIRE_OFF`（未到職真空）**：
+     - 在 `scheduler.js` 與 `Code.gs` 定義 `PRE_HIRE_OFF`（標籤「**未**」），底色為灰色虛線邊框膠囊。
+     - **不計入工時、不計入休假天數**，防止統計失真與勞基法合規誤判。
+  2. **到職日前自動真空防呆**：
+     - 在 `ScheduleTable.jsx` 中，凡日期早於同仁之到職日（`emp.hire_date`），系統一律自動將其鎖定並呈現為「未到職（未）」，點擊時跳出防呆警示，禁止安排勤務。
+  3. **已發布鎖定狀態下之新進同仁專屬排班通道**：
+     - 在 `canEditEmployeeCell(emp, day)` 中建立特許通道：當處於 `PUBLISHED_LOCKED` 階段時，**特許營運主管（Manager）為當月新進同仁在到職日當天及之後安排班表**！
+     - 微調彈窗新增「未到職真空」假別與快捷原因「新進同仁到職排班」。
+  4. **後端微服務部署與雲端資料更新**：
+     - `Code.gs` 補齊 `PRE_HIRE_OFF` 與 `HOLIDAY_OFF` 非工過濾與預設假別，通過 AST 語法檢驗後部署至版本 `@18`。
+     - 完成 38 位同仁（含戴晉弘、何弈潔、林家萱）最新班表與 10 月邊界寫入 Google Sheets。
+- **影響檔案清單**：
+  - `src/types/scheduler.js`
+  - `src/components/ScheduleTable.jsx`
+  - `src/backend/Code.gs`
+  - `src/data/septemberScheduleData.js`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.8-pre-hire-off-and-new-hire-channel-delivered)`
+
+---
+
 ## 📝 累積待辦需求清單 (Backlog - 待主管指示開工)
 
 ### 📌 [待辦需求 #033] 頂部【排班營運規則總控】彈窗整合（方案 B）

@@ -176,13 +176,35 @@ export const DEFAULT_SHIFT_TYPES = {
     color: 'bg-rose-100 text-rose-700 border border-rose-200',
     badgeColor: 'bg-rose-500 text-white',
     description: '勞基法第36條休息日 (常態輪休/彈性調移)'
+  },
+  HOLIDAY_OFF: {
+    code: 'HOLIDAY_OFF',
+    name: '國定假日',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-red-100 text-red-800 font-black border border-red-300',
+    badgeColor: 'bg-red-600 text-white',
+    description: '法定國定假日 (紀念日及節日放假)'
+  },
+  PRE_HIRE_OFF: {
+    code: 'PRE_HIRE_OFF',
+    name: '未到職',
+    startTime: '-',
+    endTime: '-',
+    breakHours: 0,
+    workHours: 0,
+    color: 'bg-slate-100 text-slate-400 border-dashed border-slate-300',
+    badgeColor: 'bg-slate-400 text-white',
+    description: '新人尚未報到 (到職前真空，不計工時與休假)'
   }
 };
 
 // 保持與既有靜態模組之 100% 完全相容
 export const SHIFT_TYPES = DEFAULT_SHIFT_TYPES;
 
-export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF'];
+export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'PRE_HIRE_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF', 'HOLIDAY_OFF'];
 
 /**
  * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休/補休/病假/事假等)

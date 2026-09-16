@@ -1,7 +1,7 @@
 // src/components/ScheduleTable.jsx
 import React, { useState } from 'react';
 import { SHIFT_TYPES, isWorkingShift, NON_WORKING_CODES } from '../types/scheduler.js';
-import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight } from 'lucide-react';
+import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight, RotateCcw } from 'lucide-react';
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
 import { formatShiftTime } from '../utils/timeFormatUtils.js';
@@ -92,10 +92,28 @@ export default function ScheduleTable({
     return true;
   });
 
-  // 判定當前登入者是否可以微調該同仁的格子
-  const canEditEmployeeCell = (emp) => {
-    // 狀態 4: 已發布封存，全員嚴格唯讀鎖定
-    if (workflowStage === 'PUBLISHED_LOCKED') return false;
+  // 判定是否為當月新進同仁 (到職日落在當月)
+  const isNewHireInCurrentMonth = (emp) => {
+    if (!emp?.hire_date) return false;
+    const targetYearMonth = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+    return String(emp.hire_date).startsWith(targetYearMonth);
+  };
+
+  // 判定當前登入者是否可以微調該同仁特定日期的格子
+  const canEditEmployeeCell = (emp, day = null) => {
+    // 狀態 4: 已發布封存
+    if (workflowStage === 'PUBLISHED_LOCKED') {
+      // 專屬通道：營運主管可為當月新進同仁在到職日當天及之後安排班表
+      if (isManager && isNewHireInCurrentMonth(emp)) {
+        if (!day) return true; // row 層級允許亮起編輯提示
+        const targetYearMonth = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+        const dayStr = day < 10 ? '0' + day : '' + day;
+        const cellDateStr = `${targetYearMonth}-${dayStr}`;
+        // 僅到職日當天及之後允許主管排定勤務
+        return cellDateStr >= emp.hire_date;
+      }
+      return false; // 非當月新人或非主管，全員嚴格唯讀鎖定
+    }
 
     // Manager 自排同仁：僅 Manager 具備編輯權限（任何未發布階段皆可填寫）
     if (emp.is_self_scheduled) return isManager;
@@ -118,12 +136,23 @@ export default function ScheduleTable({
 
   // 點擊格子開啟微調（防呆規則：已發生日期禁止調動班表，僅供覆核；僅能改動未發生日期）
   const handleCellClick = (emp, day, currentShift) => {
-    if (!canEditEmployeeCell(emp)) return;
-
     const targetYearMonth = rules?.target_year_month || '2026-09';
     const dayStr = day < 10 ? '0' + day : '' + day;
     const cellDateStr = `${targetYearMonth}-${dayStr}`;
     const simDateStr = currentSimulatedDate || '2026-09-15';
+
+    // 新進人員到職日前真空防呆：嚴禁在到職日前排班
+    if (emp.hire_date && cellDateStr < emp.hire_date) {
+      alert(`⚠️【未到職真空 (PRE_HIRE_OFF)】\n同仁【${emp.name}】到職日為 ${emp.hire_date}。\n${month}月${day}日尚未到職報到，屬於到職前真空期（標記「未」），不計工時與休假，不可排定勤務！`);
+      return;
+    }
+
+    if (!canEditEmployeeCell(emp, day)) {
+      if (workflowStage === 'PUBLISHED_LOCKED') {
+        alert('🔒【班表已發布鎖定】\n當前班表已正式發布並固定。全體人員進入唯讀鎖定，後續勤務異動請走【調班審核】或【假勤覆核】流程！');
+      }
+      return;
+    }
 
     if (cellDateStr < simDateStr) {
       alert(`⚠️【歷史排班鎖定】\n${month}月${day}日勤務已經發生，無法直接調動班表！\n若實際出勤工時或班別與原排定不符，請至上方【實勤覆核 (HOURS_OVERRIDE)】進行覆核記錄。`);
@@ -139,7 +168,10 @@ export default function ScheduleTable({
       existingAdj
     });
     setNewShiftCode(initialCode);
-    setAdjustmentReason(existingAdj ? existingAdj.reason : (isManager ? '主管職權調整' : '因應人流動態調度'));
+    const defaultReason = isNewHireInCurrentMonth(emp)
+      ? '新進同仁到職排班'
+      : (isManager ? '主管職權調整' : '因應人流動態調度');
+    setAdjustmentReason(existingAdj ? existingAdj.reason : defaultReason);
   };
 
 
@@ -476,6 +508,26 @@ export default function ScheduleTable({
                 </button>
               )}
 
+              {pendingAdjustments && pendingAdjustments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`確定要清除當前本機暫存的 ${pendingAdjustments.length} 筆微調記錄，還原為雲端資料庫真實班表嗎？`)) {
+                      try {
+                        localStorage.removeItem('xuelu_schedule_adjustments_v1');
+                        localStorage.removeItem('xuelu_schedule_overrides_v1');
+                      } catch (e) {}
+                      window.location.reload();
+                    }
+                  }}
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+                  title="清除本機殘留的微調覆寫，徹底還原雲端試算表真實資料"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                  <span>清除微調 ({pendingAdjustments.length})</span>
+                </button>
+              )}
+
               <button
                 onClick={() => onSaveToCloud && onSaveToCloud()}
                 title="將當前排班結果發布並持久化儲存至 Google 試算表"
@@ -594,16 +646,24 @@ export default function ScheduleTable({
                       const shift = scheduleMap[emp.emp_id]?.[day];
                       const shiftCode = shift?.shift_type;
                       const cellAdj = getCellAdjustment(emp.emp_id, day);
-                      // 若有暫存微調，視覺優先展示微調擬改班別
-                      const effectiveCode = cellAdj ? cellAdj.new_shift : shiftCode;
+                      const targetYearMonth = rules?.target_year_month || '2026-09';
+                      const dayStr = day < 10 ? '0' + day : '' + day;
+                      const cellDateStr = `${targetYearMonth}-${dayStr}`;
+                      const isPreHire = !!emp.hire_date && cellDateStr < emp.hire_date;
+                      // 若到職日前，固定為 PRE_HIRE_OFF；若有暫存微調，視覺優先展示微調擬改班別
+                      const effectiveCode = isPreHire ? 'PRE_HIRE_OFF' : (cellAdj ? cellAdj.new_shift : shiftCode);
                       const shiftDef = effectiveShiftDefs[effectiveCode];
+                      const canEditThisCell = canEditEmployeeCell(emp, day);
 
                       let cellBg = isWeekend ? 'bg-rose-50/20' : '';
                       if (holidayObj) cellBg = 'bg-rose-50/40';
                       let pillStyle = 'text-slate-300';
                       let label = '-';
 
-                      if (isEmpManager && !effectiveCode) {
+                      if (effectiveCode === 'PRE_HIRE_OFF') {
+                        pillStyle = 'bg-slate-100 text-slate-400 font-bold border border-dashed border-slate-300 shadow-2xs';
+                        label = '未';
+                      } else if (isEmpManager && !effectiveCode) {
                         pillStyle = 'text-slate-300 font-light';
                         label = '留白';
                       } else if (effectiveCode === 'REG_OFF') {
@@ -639,6 +699,9 @@ export default function ScheduleTable({
                       } else if (effectiveCode === 'TERM_OFF') {
                         pillStyle = 'bg-slate-200 text-slate-500 font-semibold';
                         label = '空';
+                      } else if (effectiveCode === 'HOLIDAY_OFF') {
+                        pillStyle = 'bg-red-500 text-white font-black border border-red-600 shadow-2xs';
+                        label = '國';
                       } else if (shiftDef) {
                         label = effectiveCode;
                         pillStyle = `${shiftDef.color || 'bg-indigo-100 text-indigo-800'} font-bold border shadow-2xs`;
@@ -664,7 +727,7 @@ export default function ScheduleTable({
                           onClick={() => handleCellClick(emp, day, shift)}
                           className={`p-1 text-center border-r border-slate-100 relative ${cellBg} ${
                             selectedDay === day ? 'bg-indigo-50/50' : ''
-                          } ${canEditThisEmp ? 'cursor-pointer hover:ring-1 hover:ring-indigo-400' : ''}`}
+                          } ${canEditThisCell ? 'cursor-pointer hover:ring-1 hover:ring-indigo-400' : ''}`}
                           title={
                             shift || cellAdj
                               ? `${emp.name} | ${day}日: ${effectiveCode || '留白'} (${stationNameMap[shift?.station_id || emp.primary_station] || '-'}) - ${shiftDef?.name || ''}${holidayTooltip}${adjTooltip}`
@@ -719,6 +782,16 @@ export default function ScheduleTable({
           <div className="flex items-center space-x-1">
             <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-rose-100 text-rose-700 border border-rose-200">休</span>
             <span>一般休假</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-black flex items-center justify-center bg-red-500 text-white shadow-2xs">國</span>
+            <span className="font-semibold text-red-800">國定假日</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-slate-100 text-slate-400 border border-dashed border-slate-300">未</span>
+            <span>未到職</span>
           </div>
 
           <div className="flex items-center space-x-1">
@@ -814,6 +887,7 @@ export default function ScheduleTable({
                     <option value="FL">🪦 喪 喪假 (依親屬等別有薪)</option>
                     <option value="MAT">🍼 產 產假 / 陪產檢及陪產假</option>
                     <option value="CL">🏛️ 公 法定公假 (兵役/出庭)</option>
+                    <option value="PRE_HIRE_OFF">⬜ 未 未到職真空 (新人到職前)</option>
                   </optgroup>
                 </select>
               </div>
@@ -836,6 +910,7 @@ export default function ScheduleTable({
                     className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-medium"
                   >
                     <option value="主管職權調整">🎯 主管職權調整 (預設)</option>
+                    <option value="新進同仁到職排班">🆕 新進同仁到職排班</option>
                     <option value="因應人流動態調度">👥 因應人流動態調度</option>
                     <option value="站點人力平衡支援">⚖️ 站點人力平衡支援</option>
                     <option value="現場臨時營運需求">⚡ 現場臨時營運需求</option>

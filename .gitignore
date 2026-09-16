@@ -12,4 +12,5 @@ scratch/
 .env.*
 *.pem
 *.key
+.clasp.json
 

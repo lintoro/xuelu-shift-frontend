@@ -1322,6 +1322,25 @@ export default function App() {
         });
         setCloudScheduleMap(normalizedMatrix);
         lastSyncedMatrixRef.current = JSON.stringify(normalizedMatrix);
+
+        // 資料真實性保證 (SSOT): 若雲端已存在正式發布排班，自動清空本機殘留覆寫與微調快取
+        if (Object.keys(normalizedMatrix).length > 0) {
+          setScheduleOverrides(prev => {
+            const next = { ...prev };
+            delete next[currentMonth];
+            try {
+              localStorage.setItem('xuelu_schedule_overrides_v1', JSON.stringify(next));
+            } catch (e) {}
+            return next;
+          });
+          setPendingAdjustments(prev => {
+            const remaining = prev.filter(a => a.proposed_by_id === 'EXTERNAL');
+            try {
+              localStorage.setItem('xuelu_schedule_adjustments_v1', JSON.stringify(remaining));
+            } catch (e) {}
+            return remaining;
+          });
+        }
       } else {
         setCloudScheduleMap({});
         lastSyncedMatrixRef.current = JSON.stringify({});
@@ -1406,13 +1425,25 @@ export default function App() {
 
   // 手動從 Google 試算表強制拉取刷新回呼
   const handleManualRefreshFromCloud = useCallback(async () => {
+    // 1. 強制重置當前月份的本機微調暫存與覆寫快取，避免本地自填覆蓋雲端排班
+    setPendingAdjustments([]);
+    setScheduleOverrides(prev => {
+      const next = { ...prev };
+      delete next[currentMonth];
+      try {
+        localStorage.setItem('xuelu_schedule_overrides_v1', JSON.stringify(next));
+        localStorage.removeItem('xuelu_schedule_adjustments_v1');
+      } catch (e) {}
+      return next;
+    });
+
     const success = await handlePullFromCloud();
     if (success) {
-      alert('✅ 已成功從 Google 試算表同步最新資料（人事名冊、權限角色與班表已即時更新）！');
+      alert('✅ 已成功從 Google 試算表同步最新排班與人事主檔！\n已同步重置本機微調暫存，畫面 100% 忠實對齊雲端試算表真實資料。');
     } else {
       alert('⚠️ 同步失敗，請檢查 Google 試算表連線狀態或稍後再試。');
     }
-  }, [handlePullFromCloud]);
+  }, [handlePullFromCloud, currentMonth]);
 
   // 一鍵全量同步本地沙盒狀態至 Google 試算表
   const handlePushToCloud = useCallback(async () => {

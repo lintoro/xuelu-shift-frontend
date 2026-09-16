@@ -1,4 +1,7 @@
 // src/data/mockMasterData.js
+import { BORDER_DATA_2026_10, SEPTEMBER_2026_SCHEDULE_DATA } from './septemberScheduleData.js';
+
+export { SEPTEMBER_2026_SCHEDULE_DATA };
 
 export const STATIONS = [
   {
@@ -576,7 +579,8 @@ export const MOCK_MONTH_BORDERS = {
     'B114055': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
     'B115011': { consecutive_work_days_at_end: 1, last_day_shift: 'A', last_day_end_time: '17:30' },
     'B115012': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' }
-  }
+  },
+  '2026-10': BORDER_DATA_2026_10
 };
 
 /**
