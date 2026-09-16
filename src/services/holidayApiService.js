@@ -24,7 +24,10 @@ export function generateStatutoryHolidaysByYear(year) {
     { date: `${year}-04-04`, name: '兒童節', type: 'NATIONAL' },
     { date: `${year}-04-05`, name: '民族掃墓節(清明)', type: 'NATIONAL' },
     { date: `${year}-05-01`, name: '勞動節', type: 'NATIONAL' },
+    { date: `${year}-09-28`, name: '孔子誕辰紀念日(教師節)', type: 'NATIONAL' },
     { date: `${year}-10-10`, name: '國慶日', type: 'NATIONAL' },
+    { date: `${year}-10-25`, name: '臺灣光復節', type: 'NATIONAL' },
+    { date: `${year}-12-25`, name: '行憲紀念日', type: 'NATIONAL' },
   ];
 
   // 傳統農曆節日 (動態預估對照表 2024-2030)

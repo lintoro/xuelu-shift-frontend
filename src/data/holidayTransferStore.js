@@ -24,7 +24,7 @@ export const ANNUAL_HOLIDAY_PLANS = {
     { month: 9, name: '9 月', statutoryOff: 10, transferOffset: 0, actualOff: 10, note: '中秋常態出勤調移' },
     { month: 10, name: '10 月', statutoryOff: 11, transferOffset: -1, actualOff: 10, note: '國慶大檔專案借假 (少休1天)' },
     { month: 11, name: '11 月', statutoryOff: 8, transferOffset: 2, actualOff: 10, note: '春節還假第二檔 (+2天)' },
-    { month: 12, name: '12 月', statutoryOff: 9, transferOffset: 2, actualOff: 11, note: '暑期與國慶還假 (+2天)' }
+    { month: 12, name: '12 月', statutoryOff: 10, transferOffset: 2, actualOff: 12, note: '行憲紀念日與暑期國慶還假 (+2天)' }
   ],
   '2027': [
     { month: 1, name: '1 月', statutoryOff: 11, transferOffset: 0, actualOff: 11, note: '元旦' },
@@ -67,7 +67,9 @@ export const STATUTORY_HOLIDAYS = [
   { date: '2026-06-19', year: 2026, month: 6, day: 19, name: '端午節' },
   { date: '2026-09-25', year: 2026, month: 9, day: 25, name: '中秋節' },
   { date: '2026-09-28', year: 2026, month: 9, day: 28, name: '孔子誕辰紀念日 (教師節)' },
-  { date: '2026-10-10', year: 2026, month: 10, day: 10, name: '國慶日' }
+  { date: '2026-10-10', year: 2026, month: 10, day: 10, name: '國慶日' },
+  { date: '2026-10-25', year: 2026, month: 10, day: 25, name: '臺灣光復節' },
+  { date: '2026-12-25', year: 2026, month: 12, day: 25, name: '行憲紀念日' }
 ];
 
 import { generateStatutoryHolidaysByYear } from '../services/holidayApiService.js';

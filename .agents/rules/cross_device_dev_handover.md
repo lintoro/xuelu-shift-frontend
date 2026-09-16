@@ -15,6 +15,22 @@ AI 在評估或執行任何修改前，應先檢視本地 Git 與遠端同步狀
   > 「⚠️ **偵測到雲端 GitHub 有更新進度（落後遠端 N 個 Commit）**，可能來自您在另一台電腦上的推送。建議先執行同步拉取，以避免程式碼衝突。請問是否立即為您執行 `git pull origin main`？」
 - 經使用者同意或命令後，執行 `git pull origin main`（若有 package.json 變更則自動補齊 `npm install`）。
 
+### 3. 換機環境與 Antigravity 2.0 設定主動提醒事項 (Cross-Device 2.0 Checklist)
+當使用者表示剛換機或初次在另一台電腦開啟本專案時，**AI 必須主動提醒以下兩大環境事項**：
+1. **Antigravity 2.0 介面與 Telemetry Hook 防呆**：
+   - 專案已全面切換至 **Antigravity 2.0** 介面與設定規範。
+   - 若新電腦執行工具時遇到 Windows 系統 `PreToolUse Hook`（`googlecloudtools.datacloud_telemetry` 找不到模組）的報錯，請在 PowerShell 執行以下指令清空即可永久根治：
+     ```powershell
+     Get-ChildItem -Recurse "$env:USERPROFILE\.gemini\config\plugins\googlecloudtools.datacloud_telemetry" -Filter "*.json" | ForEach-Object { Set-Content $_.FullName "{}" }
+     ```
+2. **Google Apps Script (GAS) 雲端自動化與 Clasp 登入**：
+   - 本專案已配置 `@google/clasp` CLI 支援 AI 自動化部署後端 `Code.gs`。
+   - 若在新電腦需要 AI 直接推播 Apps Script 雲端程式碼，請於終端機執行一次登入授權：
+     ```powershell
+     npx @google/clasp login
+     ```
+   - 若僅進行前端介面開發與排班業務，可直接使用既有雲端 Web App，不強制要求 clasp 登入。
+
 ---
 
 ## 二、收工同步守則 (Handover Out - 當前電腦結束)

@@ -17,8 +17,8 @@ export const STATIONS = [
     station_id: 'ST_SERVICE',
     station_name: '服務台',
     leader_emp_id: 'B112001', // 李俐旻
-    min_staff_weekday: 2,
-    min_staff_weekend: 4,
+    min_staff_weekday: 3,
+    min_staff_weekend: 5,
     requires_solo_staff: true,
     requires_closing_shift: true,
     closing_min_staff: 1,
@@ -576,6 +576,26 @@ export const MOCK_MONTH_BORDERS = {
     'B114055': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
     'B115011': { consecutive_work_days_at_end: 1, last_day_shift: 'A', last_day_end_time: '17:30' },
     'B115012': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' }
+  },
+  '2026-10': {
+    'B112001': { consecutive_work_days_at_end: 3, last_day_shift: 'D', last_day_end_time: '17:30' },
+    'B112002': { consecutive_work_days_at_end: 1, last_day_shift: 'A', last_day_end_time: '17:30' },
+    'B112003': { consecutive_work_days_at_end: 2, last_day_shift: 'C', last_day_end_time: '19:30' },
+    'B112004': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B112005': { consecutive_work_days_at_end: 4, last_day_shift: 'D', last_day_end_time: '17:30' },
+    'B112006': { consecutive_work_days_at_end: 1, last_day_shift: 'A', last_day_end_time: '17:30' },
+    'B112007': { consecutive_work_days_at_end: 2, last_day_shift: 'B', last_day_end_time: '19:00' },
+    'B113106': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B113089': { consecutive_work_days_at_end: 3, last_day_shift: 'D', last_day_end_time: '17:30' },
+    'B115042': { consecutive_work_days_at_end: 2, last_day_shift: 'A', last_day_end_time: '17:30' },
+    'B114081': { consecutive_work_days_at_end: 1, last_day_shift: 'B', last_day_end_time: '19:00' },
+    'B113028': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B111155': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B115082': { consecutive_work_days_at_end: 2, last_day_shift: 'D', last_day_end_time: '17:30' },
+    'B115090': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B114055': { consecutive_work_days_at_end: 3, last_day_shift: 'D', last_day_end_time: '17:30' },
+    'B115011': { consecutive_work_days_at_end: 0, last_day_shift: 'OFF', last_day_end_time: '-' },
+    'B115012': { consecutive_work_days_at_end: 1, last_day_shift: 'D', last_day_end_time: '17:30' }
   }
 };
 

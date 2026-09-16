@@ -631,7 +631,7 @@ export default function App() {
     };
   }, [isResignedActive]);
 
-  // 將劃休志願轉換為排班引擎識別的 leaveRequests
+  // 將正職劃休志願序與 PT 報班意向 (ptAvailability) 轉換為排班引擎識別的 leaveRequests
   const engineLeaveRequests = useMemo(() => {
     const list = [];
     preferences.forEach(pref => {
@@ -644,8 +644,29 @@ export default function App() {
         });
       }
     });
+
+    // 盲點 1 修復：將 PT 同仁不可排班 (UNAVAILABLE) 或固定班未勾選日納入引擎排休 (OFF)
+    const totalDays = currentRules.days_in_month || 30;
+    allEmployees.forEach(emp => {
+      if (emp.role === 'PT') {
+        const avail = ptAvailability[emp.emp_id] || {};
+        const isFixedMode = emp.pt_schedule_mode === 'FIXED';
+        for (let d = 1; d <= totalDays; d++) {
+          const status = avail[d];
+          if (status === 'UNAVAILABLE' || (isFixedMode && status !== 'AVAILABLE')) {
+            list.push({
+              emp_id: emp.emp_id,
+              day: d,
+              leave_type: 'OFF',
+              status: 'APPROVED'
+            });
+          }
+        }
+      }
+    });
+
     return list;
-  }, [preferences]);
+  }, [preferences, ptAvailability, allEmployees, currentRules.days_in_month]);
 
   // 執行基礎種子排班演算法與雲端班表狀態
   const [scheduleVersion, setScheduleVersion] = useState(1);
@@ -716,10 +737,45 @@ export default function App() {
   }, [effectiveScheduleMap, allEmployees, allStations, currentRules]);
 
   const handleRunEngine = useCallback(() => {
-    setCloudScheduleMap(null); // 清除雲端鎖定，重新跑演算法
-    setScheduleVersion(v => v + 1);
-    alert('🚀 啟發式排班引擎運算完成！已自動根據 7休1 與 9大站點人力配額產生合規最佳化班表。若滿意此結果，請點擊「☁️ 儲存至 Google 試算表」！');
-  }, []);
+    // 盲點 4 修復（方案 B）：若操作者為基層站點組長 (Leader)，僅重算其管轄之主屬站點同仁，其餘站點班表保持不動
+    const isLeaderRole = currentUser?.role === 'Leader' && !currentUser?.is_admin;
+    const leaderStationId = currentUser?.primary_station;
+
+    if (isLeaderRole && leaderStationId) {
+      // 取得現有基底班表（優先取用目前生效班表）
+      const currentFullMap = effectiveScheduleMap || baseScheduleResult.scheduleMap || {};
+      
+      // 重新以排班引擎運算全新種子班表
+      const freshResult = generateSeedSchedule({
+        employees: allEmployees,
+        stations: allStations,
+        rules: currentRules,
+        leaveRequests: engineLeaveRequests,
+        monthBorders: MOCK_MONTH_BORDERS,
+        resignationData
+      });
+
+      // 僅提取組長主屬站點同仁的全新班表，其餘站點同仁保留原班表
+      const mergedMap = JSON.parse(JSON.stringify(currentFullMap));
+      const leaderSubordinates = allEmployees.filter(e => e.primary_station === leaderStationId);
+      
+      leaderSubordinates.forEach(emp => {
+        if (freshResult.scheduleMap[emp.emp_id]) {
+          mergedMap[emp.emp_id] = freshResult.scheduleMap[emp.emp_id];
+        }
+      });
+
+      setCloudScheduleMap(mergedMap);
+      setScheduleVersion(v => v + 1);
+      const stationObj = allStations.find(s => s.station_id === leaderStationId);
+      alert(`🚀 【${stationObj?.station_name || leaderStationId}】組長專屬智慧排班完成！已依據最新規則與報班意向僅重排本組 ${leaderSubordinates.length} 位同仁，其餘各站班表完整保留未受干擾。`);
+    } else {
+      // 營運高管 (Manager) 或管理者：全館 9 大站點全量重算
+      setCloudScheduleMap(null); // 清除雲端鎖定，重新跑演算法
+      setScheduleVersion(v => v + 1);
+      alert('🚀 啟發式排班引擎運算完成！已自動根據 7休1 與 9大站點人力配額產生合規最佳化班表。若滿意此結果，請點擊「☁️ 儲存至 Google 試算表」！');
+    }
+  }, [currentUser, effectiveScheduleMap, baseScheduleResult.scheduleMap, allEmployees, allStations, currentRules, engineLeaveRequests, resignationData]);
 
   // 一鍵發布並儲存全月班表至 Google 試算表 (Schedules 頁籤)
   const handleSaveScheduleToCloud = useCallback(async () => {

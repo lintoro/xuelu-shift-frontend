@@ -1,5 +1,14 @@
 // scratch/test_v356_save_stations_persistence.mjs
 import assert from 'node:assert/strict';
+
+// 設定本地沙盒環境，確保單元測試穩定運作且不依賴外網
+global.window = {};
+global.localStorage = {
+  getItem: (k) => (k === 'xuelu_cloud_disabled' ? 'true' : null),
+  setItem: () => {},
+  removeItem: () => {}
+};
+
 import { ApiService } from '../src/services/apiService.js';
 import { STATIONS } from '../src/data/mockMasterData.js';
 
