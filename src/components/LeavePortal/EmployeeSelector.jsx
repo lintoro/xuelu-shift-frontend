@@ -13,54 +13,33 @@ export default function EmployeeSelector({
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        {/* 左側：身分切換下拉選單 */}
+        {/* 左側：登入同仁資訊 (用誰的 ID 登入就是誰，移除模擬切換) */}
         <div className="flex items-center space-x-3">
           <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-base shadow-sm">
             {currentEmp.name[0]}
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs text-slate-500">模擬登入同仁:</span>
-              <select
-                value={currentEmpId}
-                onChange={(e) => onSelectEmp(e.target.value)}
-                className="font-bold text-slate-900 text-sm bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
-              >
-                <optgroup label="站點組長 (Leader)">
-                  {employees.filter(e => e.role === 'Leader').map(e => (
-                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="正職同仁 (Staff)">
-                  {employees.filter(e => e.role === 'Staff').map(e => (
-                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="計時兼職同仁 (PT)">
-                  {employees.filter(e => e.role === 'PT').map(e => (
-                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id}) - PT</option>
-                  ))}
-                </optgroup>
-                <optgroup label="營運高階主管 (Manager)">
-                  {employees.filter(e => e.is_self_scheduled).map(e => (
-                    <option key={e.emp_id} value={e.emp_id}>{e.name} ({e.emp_id}) - 主管</option>
-                  ))}
-                </optgroup>
-              </select>
+              <span className="font-extrabold text-slate-900 text-sm">
+                {currentEmp.name}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                ({currentEmp.emp_id})
+              </span>
             </div>
             <div className="flex items-center space-x-2 mt-1">
-              <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${
+              <span className={`text-[11px] px-2 py-0.5 rounded font-bold ${
                 currentEmp.is_self_scheduled 
-                  ? 'bg-purple-100 text-purple-700' 
+                  ? 'bg-purple-100 text-purple-800' 
                   : currentEmp.role === 'Leader'
-                  ? 'bg-blue-100 text-blue-700'
+                  ? 'bg-blue-100 text-blue-800'
                   : currentEmp.role === 'PT'
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-slate-100 text-slate-800'
               }`}>
-                {currentEmp.is_self_scheduled ? '營運高管 (規則豁免)' : currentEmp.role === 'Leader' ? '站點組長' : currentEmp.role === 'PT' ? '計時同仁' : '正職同仁'}
+                {currentEmp.is_self_scheduled ? 'Manager' : currentEmp.role === 'Leader' ? 'Leader' : currentEmp.role === 'PT' ? 'PT' : 'Staff'}
               </span>
-              <span className="text-xs text-slate-500">主屬站點: {currentEmp.primary_station}</span>
+              <span className="text-xs text-slate-500 font-medium">主屬站點: {currentEmp.primary_station}</span>
             </div>
           </div>
         </div>

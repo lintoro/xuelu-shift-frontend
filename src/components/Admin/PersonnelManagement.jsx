@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Users, UserPlus, Edit3, Shield, KeyRound, Check, X, Award, AlertTriangle, Sparkles, RotateCcw, Archive, UserCheck, HeartPulse, PauseCircle, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 import ConnectionGate from '../Common/ConnectionGate.jsx';
+import { sortEmployees } from '../../utils/employeeSortUtils.js';
 
 // 人員生命週期狀態設定字典
 export const PERSONNEL_STATUS_CONFIG = {
@@ -40,6 +41,22 @@ export const normalizeEmpStatus = (status) => {
   return status;
 };
 
+// 格式化到職日 YYYYMMDD -> YYYY-MM-DD
+export const formatHireDate = (rawDate) => {
+  if (!rawDate) return '';
+  const str = String(rawDate).trim();
+  if (/^\d{8}$/.test(str)) {
+    return `${str.substring(0, 4)}-${str.substring(4, 6)}-${str.substring(6, 8)}`;
+  }
+  if (str.includes('/') || (str.includes('-') && str.length >= 8)) {
+    const parts = str.replace(/\//g, '-').split('-');
+    if (parts.length === 3) {
+      return `${parts[0].padStart(4, '20')}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  return str;
+};
+
 export default function PersonnelManagement({
   employees,
   stations,
@@ -74,6 +91,8 @@ export default function PersonnelManagement({
   const [feedbackMsg, setFeedbackMsg] = useState('');
   // 雲端名冊強制刷新 loading 狀態
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // 同名同姓人員再確認彈窗狀態
+  const [duplicateConfirmModal, setDuplicateConfirmModal] = useState(null);
 
   // 新增同仁表單狀態
   const [newEmpForm, setNewEmpForm] = useState({
@@ -139,9 +158,25 @@ export default function PersonnelManagement({
   };
 
   // 儲存編輯
-  const handleSaveEdit = (e) => {
-    e.preventDefault();
+  const handleSaveEdit = (e, bypassDuplicate = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!editingEmp) return;
+
+    // 同名同姓防呆再確認 (排除本人工號)
+    const trimmedName = (editingEmp.name || '').trim();
+    if (!bypassDuplicate) {
+      const match = employees.find(emp => emp.emp_id !== editingEmp.emp_id && emp.name.trim() === trimmedName);
+      if (match) {
+        setDuplicateConfirmModal({
+          type: 'UPDATE',
+          name: trimmedName,
+          matchedEmp: match,
+          onConfirm: () => handleSaveEdit(null, true)
+        });
+        return;
+      }
+    }
+
     const cleanPrimary = normalizeStationId(editingEmp.primary_station);
     const cleanSupported = Array.from(new Set(
       (editingEmp.supported_stations || [cleanPrimary]).map(st => normalizeStationId(st))
@@ -152,6 +187,8 @@ export default function PersonnelManagement({
     const isManagerRole = editingEmp.role === 'Manager';
     const finalEmp = {
       ...editingEmp,
+      name: trimmedName,
+      hire_date: formatHireDate(editingEmp.hire_date),
       is_self_scheduled: isManagerRole ? true : !!editingEmp.is_self_scheduled,
       primary_station: cleanPrimary,
       supported_stations: cleanSupported,
@@ -164,8 +201,8 @@ export default function PersonnelManagement({
   };
 
   // 送出新增
-  const handleCreateEmp = (e) => {
-    e.preventDefault();
+  const handleCreateEmp = (e, bypassDuplicate = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!newEmpForm.name) {
       setFeedbackMsg('⚠️ 請輸入同仁姓名！');
       setTimeout(() => setFeedbackMsg(''), 3000);
@@ -176,7 +213,30 @@ export default function PersonnelManagement({
       setTimeout(() => setFeedbackMsg(''), 3000);
       return;
     }
-    onAddEmployee(newEmpForm);
+
+    // 同名同姓防呆再確認
+    const trimmedName = (newEmpForm.name || '').trim();
+    if (!bypassDuplicate) {
+      const match = employees.find(emp => emp.name.trim() === trimmedName);
+      if (match) {
+        setDuplicateConfirmModal({
+          type: 'CREATE',
+          name: trimmedName,
+          matchedEmp: match,
+          onConfirm: () => handleCreateEmp(null, true)
+        });
+        return;
+      }
+    }
+
+    const isManagerRole = newEmpForm.role === 'Manager';
+    const toAdd = {
+      ...newEmpForm,
+      name: trimmedName,
+      hire_date: formatHireDate(newEmpForm.hire_date),
+      is_self_scheduled: isManagerRole ? true : !!newEmpForm.is_self_scheduled
+    };
+    onAddEmployee(toAdd);
     setIsAddingNew(false);
     setNewEmpForm({
       emp_id: `B115${Math.floor(100 + Math.random() * 900)}`,
@@ -189,7 +249,7 @@ export default function PersonnelManagement({
       status: 'Active',
       hire_date: ''
     });
-    setFeedbackMsg(`已成功新增同仁 ${newEmpForm.name}，名冊已即時動態直連！`);
+    setFeedbackMsg(`已成功新增同仁 ${toAdd.name}，名冊已即時動態直連！`);
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
@@ -210,9 +270,9 @@ export default function PersonnelManagement({
     setTimeout(() => setFeedbackMsg(''), 4000);
   };
 
-  // 分流：在勤名冊 vs 封存區
-  const activeEmployees = employees.filter(e => normalizeEmpStatus(e.status) === 'Active');
-  const archivedEmployees = employees.filter(e => normalizeEmpStatus(e.status) !== 'Active');
+  // 分流與統一定義排序：在勤名冊 vs 封存區 (部門 ➔ 級職 ➔ 到職日)
+  const activeEmployees = sortEmployees(employees.filter(e => normalizeEmpStatus(e.status) === 'Active'));
+  const archivedEmployees = sortEmployees(employees.filter(e => normalizeEmpStatus(e.status) !== 'Active'));
   const currentList = personnelTab === 'ACTIVE' ? activeEmployees : archivedEmployees;
 
   return (
@@ -410,12 +470,12 @@ export default function PersonnelManagement({
                           : 'bg-slate-100 text-slate-700'
                       }`}>
                         {isManager 
-                          ? '高管 (自主排班)' 
+                          ? 'Manager' 
                           : emp.role === 'Leader' 
-                          ? '站點組長' 
+                          ? 'Leader' 
                           : emp.role === 'PT' 
-                          ? `計時 PT ${emp.pt_schedule_mode === 'FIXED' ? '🔒固定班' : '🌿自由排'}` 
-                          : '正職同仁'}
+                          ? `PT ${emp.pt_schedule_mode === 'FIXED' ? '(Fixed)' : '(Free)'}` 
+                          : 'Staff'}
                       </span>
                     </td>
                     <td className="p-2.5 font-semibold text-slate-700">
@@ -439,7 +499,7 @@ export default function PersonnelManagement({
                         {emp.can_solo ? '✓ 主屬可獨立' : '— 否'}
                       </span>
                     </td>
-                    <td className="p-2.5 text-slate-500 font-mono">{emp.hire_date || '2023-01-01'}</td>
+                    <td className="p-2.5 text-slate-500 font-mono">{formatHireDate(emp.hire_date) || '2023-01-01'}</td>
                     <td className="p-2.5">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusMeta.badgeClass}`} title={statusMeta.desc}>
                         {statusMeta.label}
@@ -531,12 +591,21 @@ export default function PersonnelManagement({
                   <label className="font-bold text-slate-700 block mb-1">業務角色</label>
                   <select
                     value={newEmpForm.role}
-                    onChange={(e) => setNewEmpForm({ ...newEmpForm, role: e.target.value, pt_schedule_mode: e.target.value === 'PT' ? (newEmpForm.pt_schedule_mode || 'FREE') : undefined })}
+                    onChange={(e) => {
+                      const role = e.target.value;
+                      setNewEmpForm({ 
+                        ...newEmpForm, 
+                        role, 
+                        is_self_scheduled: role === 'Manager',
+                        pt_schedule_mode: role === 'PT' ? (newEmpForm.pt_schedule_mode || 'FREE') : undefined 
+                      });
+                    }}
                     className="w-full border border-slate-300 rounded p-2"
                   >
-                    <option value="Staff">正職同仁 (Staff)</option>
-                    <option value="Leader">站點組長 (Leader)</option>
-                    <option value="PT">計時人員 (PT)</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Leader">Leader</option>
+                    <option value="Staff">Staff</option>
+                    <option value="PT">PT</option>
                   </select>
                 </div>
 
@@ -795,10 +864,10 @@ export default function PersonnelManagement({
                   })}
                   className="w-full border border-slate-300 rounded p-2 font-bold text-slate-800 bg-amber-50/50 focus:bg-white"
                 >
-                  <option value="PT">⏱️ 計時人員 (PT 工讀生)</option>
-                  <option value="Staff">👤 正職同仁 (Staff)</option>
-                  <option value="Leader">🛡️ 站點組長 (Leader)</option>
-                  <option value="Manager">👑 營運高管 (Manager)</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Leader">Leader</option>
+                  <option value="Staff">Staff</option>
+                  <option value="PT">PT</option>
                 </select>
               </div>
 
@@ -1018,6 +1087,60 @@ export default function PersonnelManagement({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 同名同姓人員再確認彈窗 */}
+      {duplicateConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 border border-amber-300 animate-scaleUp">
+            <div className="flex items-center space-x-2.5 text-amber-600 mb-3">
+              <AlertTriangle className="w-6 h-6 shrink-0 text-amber-500" />
+              <h3 className="text-sm font-black text-slate-900">
+                同名同姓人員再確認提示
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+              系統目前已存在相同姓名【<strong className="text-slate-900">{duplicateConfirmModal.name}</strong>】之同仁資料：
+            </p>
+            <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs mb-4 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">既有工號:</span>
+                <span className="font-mono font-bold text-slate-900">{duplicateConfirmModal.matchedEmp.emp_id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">主屬站點:</span>
+                <span className="font-bold text-slate-800">{getStationDisplayName(duplicateConfirmModal.matchedEmp.primary_station)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">業務角色:</span>
+                <span className="font-bold text-slate-800">{duplicateConfirmModal.matchedEmp.role}</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-4">
+              請核對此筆是否為不同人之同名同姓同仁？確認無誤後請點擊「確認無誤，確認送出」。
+            </p>
+            <div className="flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setDuplicateConfirmModal(null)}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+              >
+                取消檢查
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cb = duplicateConfirmModal.onConfirm;
+                  setDuplicateConfirmModal(null);
+                  cb();
+                }}
+                className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer"
+              >
+                確認無誤，確認送出
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

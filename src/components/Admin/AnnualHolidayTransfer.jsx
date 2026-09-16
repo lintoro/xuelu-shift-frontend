@@ -7,7 +7,8 @@ import {
   STATUTORY_HOLIDAYS, 
   calculateAnnualBalance,
   getHolidaysInMonth,
-  checkEmployeeHolidayConsent 
+  checkEmployeeHolidayConsent,
+  calculatePtHolidayDoublePay
 } from '../../data/holidayTransferStore.js';
 
 export default function AnnualHolidayTransfer({ 
@@ -20,6 +21,16 @@ export default function AnnualHolidayTransfer({
   const [selectedYear, setSelectedYear] = useState('2026');
   const [plansByYear, setPlansByYear] = useState(ANNUAL_HOLIDAY_PLANS);
   const [testHireDate, setTestHireDate] = useState('2026-05-01'); // 測試新進人員到職日防呆
+
+  // PT 計時同仁獨立試算
+  const ptEmployees = useMemo(() => employees.filter(e => e.role === 'PT'), [employees]);
+  const ptDoublePayList = useMemo(() => {
+    return calculatePtHolidayDoublePay({
+      ptEmployees,
+      yearMonth: currentMonth,
+      scheduleMap
+    });
+  }, [ptEmployees, currentMonth, scheduleMap]);
 
   const currentPlan = useMemo(() => {
     return plansByYear[selectedYear] || plansByYear['2026'];
@@ -353,6 +364,86 @@ export default function AnnualHolidayTransfer({
             {currentMonthHolidays.length > 0 
               ? '本月雖有國定假日，但目前全體同仁於國假當日皆未排班出勤（或全員排休），無須簽認調移出勤同意書。'
               : '本月份為常態門市營運月，無國定假日排定。'}
+          </div>
+        )}
+      </div>
+
+      {/* 獨立卡片：PT 計時人員國定假日 100% 雙薪時數試算專區 */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center space-x-2">
+            <Scale className="w-5 h-5 text-purple-600" />
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  計時人員 (PT) 國定假日出勤 100% 雙薪時數獨立試算
+                </h3>
+                <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                  （僅供參考，不代表最後數字）
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                PT 人員不適用調移免雙薪。凡於法定國定假日（逢六日依調動休假日算）實際出勤者，依勞基法第 39 條獨立核發加倍工資時數。
+              </p>
+            </div>
+          </div>
+
+          <div className="text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            全館 PT 總計：{ptEmployees.length} 位
+          </div>
+        </div>
+
+        {ptDoublePayList.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="py-2 px-3 font-bold">PT 工號 / 姓名</th>
+                  <th className="py-2 px-3 font-bold">主屬站點</th>
+                  <th className="py-2 px-3 font-bold">國假 / 調動出勤日期</th>
+                  <th className="py-2 px-3 font-bold text-right">100% 雙薪時數試算</th>
+                  <th className="py-2 px-3 font-bold text-right">備註</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {ptDoublePayList.map(item => (
+                  <tr key={item.emp_id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-slate-900">{item.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{item.emp_id} (PT)</div>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 font-medium">
+                      {item.primary_station}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {item.dutyDates.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {item.dutyDates.map(d => (
+                            <span key={d.day} className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[11px]">
+                              {currentMonth}-{d.day < 10 ? '0' + d.day : d.day} ({d.hours}hr)
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">國假無出勤</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className={`font-black text-sm ${item.doublePayHours > 0 ? 'text-purple-700 font-mono' : 'text-slate-400'}`}>
+                        {item.doublePayHours} 小時
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-[11px] text-rose-600 font-medium italic">
+                      {item.disclaimer}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+            目前名冊中無 PT 計時人員資料。
           </div>
         )}
       </div>

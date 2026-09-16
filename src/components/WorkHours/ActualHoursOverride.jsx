@@ -18,6 +18,7 @@ import {
   Users
 } from 'lucide-react';
 import { isOffShift } from '../../types/scheduler.js';
+import { sortEmployees } from '../../utils/employeeSortUtils.js';
 
 /**
  * 主管端實勤覆核與工時微調面板 (Hours Override)
@@ -58,12 +59,20 @@ export default function ActualHoursOverride({
     const isManager = currentUser?.role === 'Manager' || !!currentUser?.is_admin;
     const isAdmin = !!currentUser?.is_admin;
 
-    return employees.filter(emp => {
+    return sortEmployees(employees.filter(emp => {
       // 1. 利益迴避原則：嚴格排除操作者本人 (不能自己覆核自己)
       if (emp.emp_id === currentUser.emp_id) return false;
 
-      // 2. 排除自排免審高管 (若當前操作者為 Admin 且對象為 Manager，則開放進行行政合規備查歸檔)
-      if (emp.is_self_scheduled && !(isAdmin && emp.role === 'Manager')) return false;
+      // 2. 高管互審與 Admin 備查：若對象為 Manager，開放其他 Manager 互審，或由 Admin 備查放行
+      if (emp.role === 'Manager') {
+        if (isManager || isAdmin) {
+          // 允許其他 Manager 交叉覆核或 Admin 備查放行
+        } else {
+          return false;
+        }
+      } else if (emp.is_self_scheduled) {
+        return false;
+      }
 
       if (isLeader) {
         // 3. 組長同組限制：僅能覆核同主屬站點同仁，禁止跳組
@@ -76,7 +85,7 @@ export default function ActualHoursOverride({
       }
 
       if (isManager) {
-        // 5. 營運高管統籌覆核 / Admin 備查：可向上覆核各站點組長 (Leader)、全場 Staff / PT，Admin 可備查 Manager
+        // 5. 營運高管統籌覆核 / Admin 備查：可向上覆核各站點組長 (Leader)、全場 Staff / PT，以及其他 Manager 互審
         if (stationFilter !== 'ALL' && emp.primary_station !== stationFilter) {
           return false;
         }
@@ -84,7 +93,7 @@ export default function ActualHoursOverride({
       }
 
       return false;
-    });
+    }));
   }, [employees, currentUser, isLeader, isManager, stationFilter]);
 
   const [selectedDay, setSelectedDay] = useState(10);
@@ -140,6 +149,13 @@ export default function ActualHoursOverride({
   const availableCompTimeHours = empLeaveBalance.compTimeHours || 0;
   const availableAnnualLeaveDays = empLeaveBalance.annualLeaveDays || 0;
   const availableAnnualLeaveHours = availableAnnualLeaveDays * 8;
+
+  // 高管互審與 Admin 備查狀態變數
+  const isTargetManager = currentEmp?.role === 'Manager';
+  const managerReviews = scheduledShift?.manager_reviews || [];
+  const hasReviewedByMe = managerReviews.includes(currentUser?.emp_id);
+  const isSecondManagerReview = isTargetManager && managerReviews.length === 1 && !hasReviewedByMe;
+  const isManagerFullyApproved = isTargetManager && (managerReviews.length >= 2 || scheduledShift?.admin_archived);
 
   // 時間字串轉小數小時 (如 "08:30" -> 8.5)
   const timeToDecimal = (tStr) => {
@@ -285,6 +301,20 @@ export default function ActualHoursOverride({
       return;
     }
 
+    let updatedReviews = [...managerReviews];
+    let isAdminArchived = false;
+
+    if (isTargetManager) {
+      if (currentUser?.is_admin) {
+        isAdminArchived = true;
+        updatedReviews = Array.from(new Set([...updatedReviews, `Admin:${currentUser.emp_id}`]));
+      } else if (isManager) {
+        if (!updatedReviews.includes(currentUser.emp_id)) {
+          updatedReviews.push(currentUser.emp_id);
+        }
+      }
+    }
+
     onOverrideHours({
       empId: currentEmp.emp_id,
       day: selectedDay,
@@ -295,11 +325,19 @@ export default function ActualHoursOverride({
       diffHours: hoursDiff,
       deductionType: hoursDiff < 0 ? deductionType : null,
       isAbsent: isAbsent,
+      manager_reviews: updatedReviews,
+      admin_archived: isAdminArchived || scheduledShift?.admin_archived,
       notes: actualNoteInput || (
         isAbsent 
-          ? (currentUser?.is_admin && currentEmp?.role === 'Manager' ? '[👑行政合規備查歸檔] 最高主管全日未到勤核定' : '全日未到勤核定') 
-          : currentUser?.is_admin && currentEmp?.role === 'Manager'
-          ? `[👑行政合規備查歸檔] 管理員 ${currentUser?.name || 'Admin'} 檢驗出勤合規：${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h, 差額${hoursDiff >= 0 ? '+' : ''}${hoursDiff}h)`
+          ? (isAdminArchived 
+              ? '[👑行政合規備查歸檔] 管理員免審放行未到勤核定' 
+              : isTargetManager 
+              ? `[高管互審 (${updatedReviews.length}/2)] 未到勤核定` 
+              : '全日未到勤核定') 
+          : isAdminArchived
+          ? `[👑行政合規備查歸檔] 管理員 ${currentUser?.name || 'Admin'} 檢驗出勤合規免審直接歸檔：${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h)`
+          : isTargetManager
+          ? `[高管互審 (${updatedReviews.length}/2)] 高管 ${currentUser?.name || currentUser?.emp_id} 覆核：${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h)`
           : `實勤覆核 ${startTime}~${endTime} (休${breakHours}h, 淨${netActualHours}h, 差額${hoursDiff >= 0 ? '+' : ''}${hoursDiff}h)`
       ),
       isLaborViolationOverride: false,
@@ -307,7 +345,7 @@ export default function ActualHoursOverride({
       overrideManager: null
     });
 
-    const isManagerArchiving = currentUser?.is_admin && currentEmp?.role === 'Manager';
+    const isManagerArchiving = (currentUser?.is_admin || isAdminArchived) && isTargetManager;
     const resultNote = isPT
       ? `PT 人員實際到班結算 ${netActualHours} 小時，已累計至本月計薪工時！`
       : hoursDiff > 0
@@ -317,7 +355,9 @@ export default function ActualHoursOverride({
       : `出勤工時完全符合原排 (${netActualHours}h)，工時無差額。`;
 
     if (isManagerArchiving) {
-      setFeedbackMsg(`已完成最高主管 ${currentEmp.name} 於 9/${selectedDay} 之【行政合規備查歸檔】！${resultNote}`);
+      setFeedbackMsg(`已由 Admin 豁免不審核機制，完成高管 ${currentEmp.name} 於 9/${selectedDay} 之【行政合規備查歸檔】！${resultNote}`);
+    } else if (isTargetManager) {
+      setFeedbackMsg(`已完成高管互審 (${updatedReviews.length}/2) 簽核！${updatedReviews.length >= 2 ? '高管實勤已雙審終核歸檔。' : '尚需第 2 位高管複核或由 Admin 備查放行。'}`);
     } else {
       setFeedbackMsg(`已成功覆核 ${currentEmp.name} 於 9/${selectedDay} 日實勤！${resultNote}`);
     }
@@ -935,6 +975,120 @@ export default function ActualHoursOverride({
                   </div>
                 </div>
               </label>
+
+              {/* 選項 5: 婚假 (全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'MARRIAGE_LEAVE' 
+                  ? 'bg-pink-700 text-white border-pink-700 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-pink-300'
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="MARRIAGE_LEAVE"
+                        checked={deductionType === 'MARRIAGE_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'MARRIAGE_LEAVE' ? 'text-white' : 'text-slate-800'}>
+                        法定婚假
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'MARRIAGE_LEAVE' ? 'bg-pink-900 text-pink-100' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      全薪 (依法給薪)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'MARRIAGE_LEAVE' ? 'text-pink-100' : 'text-slate-600'}`}>
+                    核定出勤：0h (全薪不扣款)
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'MARRIAGE_LEAVE' ? 'text-pink-200' : 'text-slate-500'}>
+                    依法核給 8 日全薪
+                  </div>
+                </div>
+              </label>
+
+              {/* 選項 6: 喪假 (全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'FUNERAL_LEAVE' 
+                  ? 'bg-slate-700 text-white border-slate-700 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="FUNERAL_LEAVE"
+                        checked={deductionType === 'FUNERAL_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'FUNERAL_LEAVE' ? 'text-white' : 'text-slate-800'}>
+                        法定喪假
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'FUNERAL_LEAVE' ? 'bg-slate-900 text-slate-100' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      全薪 (依法給薪)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'FUNERAL_LEAVE' ? 'text-slate-200' : 'text-slate-600'}`}>
+                    核定出勤：0h (全薪不扣款)
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'FUNERAL_LEAVE' ? 'text-slate-200' : 'text-slate-500'}>
+                    依等親核給全薪喪假
+                  </div>
+                </div>
+              </label>
+
+              {/* 選項 7: 公假/公傷 (全薪) */}
+              <label className={`p-3 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                deductionType === 'OFFICIAL_LEAVE' 
+                  ? 'bg-teal-700 text-white border-teal-700 shadow-2xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-teal-300'
+              }`}>
+                <div>
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="radio"
+                        name="deductionType"
+                        value="OFFICIAL_LEAVE"
+                        checked={deductionType === 'OFFICIAL_LEAVE'}
+                        onChange={(e) => setDeductionType(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span className={deductionType === 'OFFICIAL_LEAVE' ? 'text-white' : 'text-slate-800'}>
+                        公假/公傷假
+                      </span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      deductionType === 'OFFICIAL_LEAVE' ? 'bg-teal-900 text-teal-100' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      全薪 (依法給薪)
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${deductionType === 'OFFICIAL_LEAVE' ? 'text-teal-100' : 'text-slate-600'}`}>
+                    核定出勤：0h (全薪不扣款)
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-200/50 text-[10px]">
+                  <div className={deductionType === 'OFFICIAL_LEAVE' ? 'text-teal-200' : 'text-slate-500'}>
+                    公務在勤或公傷醫療
+                  </div>
+                </div>
+              </label>
             </div>
 
             {/* 額度不足異常紅底警示卡 */}
@@ -958,6 +1112,37 @@ export default function ActualHoursOverride({
           </div>
         )}
 
+        {/* 高管互審與 Admin 備查放行提示橫幅 */}
+        {isTargetManager && (
+          <div className={`p-3.5 rounded-xl border text-xs mb-4 flex flex-wrap items-center justify-between gap-2 shadow-2xs ${
+            scheduledShift?.admin_archived
+              ? 'bg-purple-50 border-purple-300 text-purple-900'
+              : managerReviews.length >= 2
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : managerReviews.length === 1
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+          }`}>
+            <div className="flex items-center space-x-2">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>
+                {scheduledShift?.admin_archived
+                  ? '👑 此高管實勤已由管理員 Admin 檢驗合規不審核直接歸檔。'
+                  : managerReviews.length >= 2
+                  ? `✅ 此高管實勤已由 2 位高管 (${managerReviews.join(', ')}) 完成雙審歸檔。`
+                  : managerReviews.length === 1
+                  ? `⏳ 已由第 1 位高管 (${managerReviews[0]}) 完成初審，尚需第 2 位高管或由 Admin 備查放行。`
+                  : '👑 高管實勤需由自己以外 2 位 Manager 交叉互審；Admin 亦可一鍵備查直接放行防卡關。'}
+              </span>
+            </div>
+            {currentUser?.is_admin && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 font-black">
+                ★ Admin 豁免通道可用
+              </span>
+            )}
+          </div>
+        )}
+
         {/* 現場備註與加班事由 */}
         <div className="mb-4 text-xs">
           <label className="font-bold text-slate-700 block mb-1">現場微調事由與核定備註</label>
@@ -965,7 +1150,7 @@ export default function ActualHoursOverride({
             type="text"
             value={actualNoteInput}
             onChange={(e) => setActualNoteInput(e.target.value)}
-            placeholder="如：晚間現場突發人潮尖峰，經組長同意延長支援..."
+            placeholder="如：晚間現場突發人潮尖峰，經主管同意延長支援..."
             className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
@@ -995,21 +1180,37 @@ export default function ActualHoursOverride({
             {/* 一般儲存按鈕 (在有法規違規、假勤額度不足或無合法覆核對象時鎖死，Admin 對 Manager 切換為備查歸檔) */}
             <button
               type="submit"
-              disabled={hasLaborLawViolations || isDeductionBalanceInsufficient || !currentEmp || reviewableEmployees.length === 0}
+              disabled={
+                hasLaborLawViolations || 
+                isDeductionBalanceInsufficient || 
+                !currentEmp || 
+                reviewableEmployees.length === 0 ||
+                (isTargetManager && !currentUser?.is_admin && hasReviewedByMe)
+              }
               className={`flex items-center space-x-2 px-5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer active:scale-95 transition-all ${
-                currentUser?.is_admin && currentEmp?.role === 'Manager'
+                currentUser?.is_admin && isTargetManager
                   ? 'bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 shadow-purple-200'
+                  : isTargetManager
+                  ? isSecondManagerReview
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
                   : 'bg-indigo-600 hover:bg-indigo-700'
               }`}
             >
-              {currentUser?.is_admin && currentEmp?.role === 'Manager' ? (
+              {currentUser?.is_admin && isTargetManager ? (
                 <ShieldCheck className="w-4 h-4 text-purple-200" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
               <span>
-                {currentUser?.is_admin && currentEmp?.role === 'Manager'
-                  ? '檢驗合規並備查歸檔 (Admin Archive)'
+                {currentUser?.is_admin && isTargetManager
+                  ? '檢驗合規不審核直接歸檔 (Admin Archive)'
+                  : isTargetManager
+                  ? hasReviewedByMe
+                    ? '您已完成第 1 階審核 (等待其他高管複核)'
+                    : managerReviews.length === 0
+                    ? '【第 1 位高管合規審核】'
+                    : '【第 2 位高管終審完成歸檔】'
                   : '儲存合規實勤覆核'}
               </span>
             </button>

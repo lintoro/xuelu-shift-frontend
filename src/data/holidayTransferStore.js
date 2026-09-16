@@ -52,7 +52,7 @@ export const HOLIDAY_ORIGIN_EVENTS = [
   { event_id: 'H_2026_NATIONAL', name: '國慶連假大檔', origin_date: '2026-10-10', borrowed_month: 10, return_mapping: '補於 12月(+1d)' }
 ];
 
-// 法定國定假日清單 (全年度法定應放紀念日與節日)
+// 法定國定假日清單 (全年度法定應放紀念日與節日，包含小年夜與 9/28 教師節)
 export const STATUTORY_HOLIDAYS = [
   { date: '2026-01-01', year: 2026, month: 1, day: 1, name: '中華民國開國紀念日 (元旦)' },
   { date: '2026-02-15', year: 2026, month: 2, day: 15, name: '農曆小年夜' },
@@ -66,26 +66,85 @@ export const STATUTORY_HOLIDAYS = [
   { date: '2026-05-01', year: 2026, month: 5, day: 1, name: '勞動節' },
   { date: '2026-06-19', year: 2026, month: 6, day: 19, name: '端午節' },
   { date: '2026-09-25', year: 2026, month: 9, day: 25, name: '中秋節' },
+  { date: '2026-09-28', year: 2026, month: 9, day: 28, name: '孔子誕辰紀念日 (教師節)' },
   { date: '2026-10-10', year: 2026, month: 10, day: 10, name: '國慶日' }
 ];
 
+import { generateStatutoryHolidaysByYear } from '../services/holidayApiService.js';
+
+// 動態假日快取註冊庫 (解決每年寫死國定假日問題，自動串接萬年曆與雲端 Holidays 頁籤)
+let dynamicHolidaysRegistry = [...STATUTORY_HOLIDAYS];
+
 /**
- * 取得指定月份之所有國定假日
+ * 動態註冊/擴充國定假日 (由 API 或 Google 試算表 Holidays 頁籤即時載入)
+ * @param {Array} holidayList 
+ */
+export function registerDynamicHolidays(holidayList) {
+  if (!Array.isArray(holidayList) || holidayList.length === 0) return;
+  
+  holidayList.forEach(item => {
+    if (!item.date) return;
+    const year = item.year || parseInt(item.date.split('-')[0], 10);
+    const month = item.month || parseInt(item.date.split('-')[1], 10);
+    const day = item.day || parseInt(item.date.split('-')[2], 10);
+    const name = item.name || '國定假日';
+
+    const existingIndex = dynamicHolidaysRegistry.findIndex(h => h.date === item.date);
+    const newItem = { date: item.date, year, month, day, name };
+
+    if (existingIndex >= 0) {
+      dynamicHolidaysRegistry[existingIndex] = newItem;
+    } else {
+      dynamicHolidaysRegistry.push(newItem);
+    }
+  });
+
+  dynamicHolidaysRegistry.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * 取得指定月份之所有國定假日（支援萬年曆動態生成與試算表同步）
  * @param {string} yearMonth - 格式如 '2026-09'
  * @returns {Array} 國定假日清單
  */
 export function getHolidaysInMonth(yearMonth = '2026-09') {
-  return STATUTORY_HOLIDAYS.filter(h => h.date.startsWith(yearMonth));
+  const [yearStr] = yearMonth.split('-');
+  const year = parseInt(yearStr, 10);
+
+  // 若該年份尚未進入記憶庫，觸發萬年曆引擎動態生成
+  const existingForYear = dynamicHolidaysRegistry.filter(h => h.year === year);
+  if (existingForYear.length === 0) {
+    const generated = generateStatutoryHolidaysByYear(year).map(h => {
+      const [y, m, d] = h.date.split('-').map(Number);
+      return { date: h.date, year: y, month: m, day: d, name: h.name };
+    });
+    registerDynamicHolidays(generated);
+  }
+
+  return dynamicHolidaysRegistry.filter(h => h.date.startsWith(yearMonth));
 }
 
 /**
- * 檢查給定日期是否為國定假日
+ * 檢查給定日期是否為國定假日 (支援動態萬年曆引擎與自訂節日)
  * @param {string|Date} dateStr - 格式如 '2026-09-25'
  * @returns {Object|null}
  */
 export function isStatutoryHoliday(dateStr) {
+  if (!dateStr) return null;
   const ds = typeof dateStr === 'string' ? dateStr.substring(0, 10) : dateStr.toISOString().substring(0, 10);
-  return STATUTORY_HOLIDAYS.find(h => h.date === ds) || null;
+  const [yearStr] = ds.split('-');
+  const year = parseInt(yearStr, 10);
+
+  const foundInRegistry = dynamicHolidaysRegistry.find(h => h.date === ds);
+  if (foundInRegistry) return foundInRegistry;
+
+  const generated = generateStatutoryHolidaysByYear(year).map(h => {
+    const [y, m, d] = h.date.split('-').map(Number);
+    return { date: h.date, year: y, month: m, day: d, name: h.name };
+  });
+  registerDynamicHolidays(generated);
+
+  return dynamicHolidaysRegistry.find(h => h.date === ds) || null;
 }
 
 /**
@@ -160,4 +219,63 @@ export function calculateAnnualBalance(plan) {
     totalActual,
     isBalanced
   };
+}
+
+/**
+ * PT 計時人員國定假日 100% 雙薪時數獨立試算
+ * 規範：PT 不適用國定假日調移免雙薪，凡於法定國定假日（逢六日依調動休假日算）實際出勤者，計算 100% 雙薪時數
+ * 備註：此試算加註「（僅供參考，不代表最後數字）」
+ */
+export function calculatePtHolidayDoublePay({
+  ptEmployees = [],
+  yearMonth = '2026-09',
+  scheduleMap = {},
+  actualHoursMap = {}
+}) {
+  const monthHolidays = getHolidaysInMonth(yearMonth);
+  const holidayDays = new Set(monthHolidays.map(h => h.day));
+
+  // 逢週六日之國假，其調動或補休日亦納入計算
+  const adjustedHolidayDays = new Set([...holidayDays]);
+  monthHolidays.forEach(h => {
+    const [y, m, d] = h.date.split('-').map(Number);
+    const dayOfWeek = new Date(y, m - 1, d).getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      const nextMon = dayOfWeek === 6 ? d + 2 : d + 1;
+      if (nextMon <= 31) {
+        adjustedHolidayDays.add(nextMon);
+      }
+    }
+  });
+
+  return ptEmployees.map(pt => {
+    let doublePayHours = 0;
+    const dutyDates = [];
+
+    for (let d = 1; d <= 31; d++) {
+      if (adjustedHolidayDays.has(d)) {
+        const actualRec = actualHoursMap[pt.emp_id]?.[d];
+        const schedShift = scheduleMap[pt.emp_id]?.[d];
+        const shiftCode = schedShift?.shift_type;
+
+        if (actualRec && Number(actualRec.actual_hours) > 0) {
+          const hrs = Number(actualRec.actual_hours);
+          doublePayHours += hrs;
+          dutyDates.push({ day: d, hours: hrs, source: 'ACTUAL' });
+        } else if (shiftCode && isWorkingShift(shiftCode)) {
+          doublePayHours += 8;
+          dutyDates.push({ day: d, hours: 8, source: 'SCHEDULE' });
+        }
+      }
+    }
+
+    return {
+      emp_id: pt.emp_id,
+      name: pt.name,
+      primary_station: pt.primary_station,
+      doublePayHours,
+      dutyDates,
+      disclaimer: '（僅供參考，不代表最後數字）'
+    };
+  });
 }

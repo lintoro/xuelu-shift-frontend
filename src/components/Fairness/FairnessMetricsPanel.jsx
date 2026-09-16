@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BarChart3, Sparkles, TrendingUp, Award, CheckCircle2, ShieldAlert, Cpu } from 'lucide-react';
 import { isWorkingShift } from '../../types/scheduler.js';
+import { sortEmployees } from '../../utils/employeeSortUtils.js';
 
 export default function FairnessMetricsPanel({
   employees,
@@ -11,31 +12,57 @@ export default function FairnessMetricsPanel({
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [aiDiagnosisReport, setAiDiagnosisReport] = useState(null);
 
-  const regularStaff = employees.filter(e => !e.is_self_scheduled && e.role !== 'PT');
+  // 需求：非在勤人員不用顯示公平性 (當月若非在職中 Active 則自動排除，全域統一排序)
+  const regularStaff = sortEmployees(employees.filter(e => {
+    if (e.is_self_scheduled || e.role === 'PT') return false;
+    const st = e.status || 'Active';
+    return st === 'Active';
+  }));
+
   const totalDays = rules.days_in_month || 30;
 
-  // 計算每位正職的：週末出勤次數、C班打烊次數、跨站支援次數
+  // 計算每位在勤同仁：全班別次數 (A, B, C, D...)、週末出勤、特休(AL)時數、補休(CT)時數、其它請假時數、跨站支援
   const staffFairnessList = regularStaff.map(emp => {
     let weekendWorkCount = 0;
     let weekendOffCount = 0;
-    let cShiftCount = 0;
+    const shiftCounts = {};
+    let alHours = 0;
+    let ctHours = 0;
+    let otherLeaveHours = 0;
     let supportCount = 0;
 
     for (let d = 1; d <= totalDays; d++) {
       const dateObj = new Date(2026, 8, d);
       const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
       const shift = scheduleMap[emp.emp_id]?.[d];
+      const shiftCode = shift?.shift_type;
+
+      if (!shiftCode) continue;
 
       if (isWeekend) {
-        // 改用 isWorkingShift API，涉蓋全量 12+ 種法定假別，不再寫死 OFF/TERM_OFF
-        if (isWorkingShift(shift?.shift_type)) {
+        if (isWorkingShift(shiftCode)) {
           weekendWorkCount++;
         } else {
           weekendOffCount++;
         }
       }
 
-      if (shift?.shift_type === 'C') cShiftCount++;
+      // 全班別統計
+      if (isWorkingShift(shiftCode)) {
+        shiftCounts[shiftCode] = (shiftCounts[shiftCode] || 0) + 1;
+      }
+
+      // 特休 (AL - 8h)
+      if (shiftCode === 'AL') {
+        alHours += 8;
+      } else if (shiftCode === 'CT') {
+        // 補休 (CT - 8h)
+        ctHours += 8;
+      } else if (['PL', 'SL', 'ML', 'FL', 'MAT', 'CL', 'PERSONAL_LEAVE', 'SICK_LEAVE'].includes(shiftCode)) {
+        // 其它假別
+        otherLeaveHours += 8;
+      }
+
       if (shift?.is_support) supportCount++;
     }
 
@@ -44,7 +71,11 @@ export default function FairnessMetricsPanel({
       name: emp.name,
       weekendWorkCount,
       weekendOffCount,
-      cShiftCount,
+      shiftCounts,
+      cShiftCount: shiftCounts['C'] || 0,
+      alHours,
+      ctHours,
+      otherLeaveHours,
       supportCount
     };
   });
@@ -99,25 +130,35 @@ export default function FairnessMetricsPanel({
         </button>
       </div>
 
-      {/* 核心公平性指標卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      {/* 核心公平性指標卡片 (擴充為 4 欄，納入全班別與特補休時數) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <div className="text-[11px] font-bold text-slate-500 mb-1">週末出勤次數離散度 (標準差)</div>
+          <div className="text-[11px] font-bold text-slate-500 mb-1">週末出勤離散度 (標準差)</div>
           <div className="text-2xl font-black text-indigo-600">
             {weekendStdDev.toFixed(2)} <span className="text-xs font-semibold text-slate-500">天</span>
           </div>
           <div className="text-[11px] text-emerald-700 font-semibold mt-1">
-            ✓ 標準差 &lt; 0.5，代表週末休假極度均勻，無排班偏袒
+            ✓ 標準差 &lt; 0.5，代表週末休假極度均勻
           </div>
         </div>
 
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
           <div className="text-[11px] font-bold text-slate-500 mb-1">C 班打烊疲勞度上限</div>
           <div className="text-2xl font-black text-amber-600">
-            {Math.max(...staffFairnessList.map(s => s.cShiftCount))} <span className="text-xs font-semibold text-slate-500">次 / 每人全月</span>
+            {staffFairnessList.length > 0 ? Math.max(...staffFairnessList.map(s => s.cShiftCount)) : 0} <span className="text-xs font-semibold text-slate-500">次 / 每人</span>
           </div>
           <div className="text-[11px] text-slate-600 mt-1">
-            全店假日打烊平均分攤，杜絕單人連續打烊疲勞
+            全店假日打烊平均分攤，杜絕連續打烊
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="text-[11px] font-bold text-slate-500 mb-1">在勤全員特補休時數</div>
+          <div className="text-2xl font-black text-purple-600">
+            {staffFairnessList.reduce((sum, s) => sum + s.alHours + s.ctHours, 0)} <span className="text-xs font-semibold text-slate-500">小時</span>
+          </div>
+          <div className="text-[11px] text-purple-700 font-semibold mt-1">
+            特休 {staffFairnessList.reduce((sum, s) => sum + s.alHours, 0)}h · 補休 {staffFairnessList.reduce((sum, s) => sum + s.ctHours, 0)}h
           </div>
         </div>
 
@@ -153,33 +194,55 @@ export default function FairnessMetricsPanel({
 
       {/* 各同仁公平性指標一覽表 */}
       <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-        <div className="bg-slate-100 p-2.5 font-bold text-slate-700">
-          全體正職同仁勞逸分佈量化清單
+        <div className="bg-slate-100 p-2.5 font-bold text-slate-700 flex items-center justify-between">
+          <span>全體在勤正職同仁勞逸分佈量化清單 (已自動排除離退/非在勤同仁)</span>
+          <span className="text-[11px] text-slate-500 font-normal">共 {staffFairnessList.length} 位在勤人員</span>
         </div>
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-            <tr>
-              <th className="p-2">工號</th>
-              <th className="p-2">姓名</th>
-              <th className="p-2">週末出勤天數 (共8天)</th>
-              <th className="p-2">週末休假天數</th>
-              <th className="p-2">打烊 C 班次數</th>
-              <th className="p-2">跨組支援次數</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {staffFairnessList.map(item => (
-              <tr key={item.emp_id} className="hover:bg-slate-50">
-                <td className="p-2 font-mono font-bold text-slate-800">{item.emp_id}</td>
-                <td className="p-2 font-bold text-slate-900">{item.name}</td>
-                <td className="p-2 font-semibold text-indigo-700">{item.weekendWorkCount} 天</td>
-                <td className="p-2 font-semibold text-emerald-700">{item.weekendOffCount} 天</td>
-                <td className="p-2 font-semibold text-amber-700">{item.cShiftCount} 次</td>
-                <td className="p-2 text-slate-600">{item.supportCount} 次</td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th className="p-2 font-bold">工號</th>
+                <th className="p-2 font-bold">姓名</th>
+                <th className="p-2 font-bold">週末出勤/休假</th>
+                <th className="p-2 font-bold">全班別分佈統計</th>
+                <th className="p-2 font-bold">特休 (AL)</th>
+                <th className="p-2 font-bold">補休 (CT)</th>
+                <th className="p-2 font-bold">其它假別</th>
+                <th className="p-2 font-bold">跨組支援</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {staffFairnessList.map(item => (
+                <tr key={item.emp_id} className="hover:bg-slate-50">
+                  <td className="p-2 font-mono font-bold text-slate-800">{item.emp_id}</td>
+                  <td className="p-2 font-bold text-slate-900">{item.name}</td>
+                  <td className="p-2 font-semibold">
+                    <span className="text-indigo-700">{item.weekendWorkCount}天班</span>
+                    <span className="text-slate-400 mx-1">/</span>
+                    <span className="text-emerald-700">{item.weekendOffCount}天休</span>
+                  </td>
+                  <td className="p-2 text-slate-700">
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(item.shiftCounts).map(([code, count]) => (
+                        <span key={code} className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                          code === 'C' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {code}:{count}
+                        </span>
+                      ))}
+                      {Object.keys(item.shiftCounts).length === 0 && <span className="text-slate-400">-</span>}
+                    </div>
+                  </td>
+                  <td className="p-2 font-semibold text-amber-700 font-mono">{item.alHours > 0 ? `${item.alHours}h` : '-'}</td>
+                  <td className="p-2 font-semibold text-purple-700 font-mono">{item.ctHours > 0 ? `${item.ctHours}h` : '-'}</td>
+                  <td className="p-2 text-slate-600 font-mono">{item.otherLeaveHours > 0 ? `${item.otherLeaveHours}h` : '-'}</td>
+                  <td className="p-2 text-slate-600 font-mono">{item.supportCount > 0 ? `${item.supportCount}次` : '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

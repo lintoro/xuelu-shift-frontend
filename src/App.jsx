@@ -43,6 +43,7 @@ import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
 import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
 import { SCHEDULE_WORKFLOW_STAGES, canAdvanceWorkflowStage } from './engine/schedulingTimelineEngine.js';
+import { sortEmployees } from './utils/employeeSortUtils.js';
 
 export default function App() {
   // 當前登入同仁 (支援 localStorage 本機持久化，F5 重整保留登入狀態)
@@ -95,7 +96,15 @@ export default function App() {
   });
   const [currentMonth, setCurrentMonth] = useState('2026-09');
   const [workHourModel, setWorkHourModel] = useState('REGULAR');
-  const [selectedDay, setSelectedDay] = useState(1);
+  // 預設對齊今天日期之日數 (例如 13 日)
+  const [selectedDay, setSelectedDay] = useState(() => {
+    try {
+      const today = new Date();
+      return today.getDate() || 1;
+    } catch {
+      return 1;
+    }
+  });
   const [isResignedActive, setIsResignedActive] = useState(false);
   const [isMonthlyRulesOpen, setIsMonthlyRulesOpen] = useState(false);
 
@@ -108,14 +117,14 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(e => e);
+          return sortEmployees(parsed);
         }
       }
       // 雲端模式：回空陣列，等候 handlePullFromCloud 自動以試算表為唯一真理源填充
       // 沙盒模式：回靜態示範名冊（方便本地開發預覽）
-      return ApiService.isCloudMode() ? [] : EMPLOYEES;
+      return ApiService.isCloudMode() ? [] : sortEmployees(EMPLOYEES);
     } catch {
-      return ApiService.isCloudMode() ? [] : EMPLOYEES;
+      return ApiService.isCloudMode() ? [] : sortEmployees(EMPLOYEES);
     }
   });
   // 站點組織主檔 (支援 localStorage 本機持久化，F5 重整保留動態指派組長)
@@ -1221,18 +1230,19 @@ export default function App() {
       if (data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
         setAllEmployees(prev => {
           const localMap = Object.fromEntries(prev.map(e => [e.emp_id, e]));
-          const mergedEmployees = data.employees.map(cloudEmp => {
+          const mergedEmployees = sortEmployees(data.employees.map(cloudEmp => {
             const local = localMap[cloudEmp.emp_id];
             if (!local) return cloudEmp;
-            // 雲端資料視為真實來源，只有本地的密碼憑證保留
+            // 雲端資料視為真實來源，保留密碼與 PT 排班模式 (pt_schedule_mode)
+            const ptMode = cloudEmp.pt_schedule_mode || local.pt_schedule_mode || (cloudEmp.role === 'PT' ? 'FLEXIBLE' : undefined);
             return {
               ...cloudEmp,
               pin_hash: local.pin_hash || cloudEmp.pin_hash,
               salt: local.salt || cloudEmp.salt,
               is_self_scheduled: typeof cloudEmp.is_self_scheduled !== 'undefined' ? cloudEmp.is_self_scheduled : local.is_self_scheduled,
-              pt_schedule_mode: cloudEmp.pt_schedule_mode || local.pt_schedule_mode || (cloudEmp.role === 'PT' ? 'FREE' : undefined)
+              pt_schedule_mode: cloudEmp.pt_schedule_mode || local.pt_schedule_mode || (cloudEmp.role === 'PT' ? 'FLEXIBLE' : undefined)
             };
-          });
+          }));
           try {
             localStorage.setItem('xuelu_employees_v2', JSON.stringify(mergedEmployees));
           } catch (e) {}
@@ -1892,6 +1902,11 @@ export default function App() {
                 stations={allStations}
                 validation={validation}
                 selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
+                currentUser={currentUser}
+                scheduleResult={scheduleResult}
+                employees={allEmployees}
+                currentSimulatedDate={currentSimulatedDate}
               />
             )}
 
@@ -2003,9 +2018,11 @@ export default function App() {
             currentEmpId={currentUser.emp_id}
             currentUser={currentUser}
             shiftTypes={shiftTypes}
+            currentSimulatedDate={currentSimulatedDate}
             leaveApplications={leaveApplications}
             onFirstReviewLeave={handleFirstReviewLeave}
             onFinalApproveLeave={handleFinalApproveLeave}
+            workflowStage={scheduleWorkflowStage}
           />
         )}
 

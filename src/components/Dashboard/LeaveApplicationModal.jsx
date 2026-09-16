@@ -19,9 +19,8 @@ export default function LeaveApplicationModal({
   const mySchedule = scheduleMap[currentUser?.emp_id] || {};
   const balance = leaveBalances[currentUser?.emp_id] || { annualLeaveDays: 0, compTimeHours: 0 };
 
-  // 取得當日日期 (基準：如 2026-09-11 則今日為 11)
-  // 核心防呆：只能請「當月未來臨的日子 (Date > Today)」
-  const todayDate = 11; // 基準模擬日 9/11
+  // 取得當日日期 (基準：若 rules.simulated_day 存在則取其 day，否則 new Date().getDate())
+  const todayDate = rules.simulated_day || new Date().getDate();
 
   // 篩選出「未來臨且有排班出勤」的有效日期清單
   const availableFutureWorkDays = useMemo(() => {
@@ -38,20 +37,72 @@ export default function LeaveApplicationModal({
       }
     }
     return list;
-  }, [mySchedule, totalDays, yearMonth, currentUser?.primary_station]);
+  }, [mySchedule, totalDays, yearMonth, currentUser?.primary_station, todayDate]);
 
   const [selectedDay, setSelectedDay] = useState(availableFutureWorkDays[0]?.day || (todayDate + 1));
-  const [selectedLeaveType, setSelectedLeaveType] = useState('AL'); // AL, CT, PERSONAL, SICK
+  const [selectedLeaveType, setSelectedLeaveType] = useState('AL'); // AL, CT, PERSONAL (病假已依規排除事前申請)
   const [reason, setReason] = useState('個人家庭重要事務');
   const [feedback, setFeedback] = useState('');
+
+  // 判定選定日期前後連續特休天數 (用於階梯預告期計算)
+  const consecutiveAlDays = useMemo(() => {
+    if (selectedLeaveType !== 'AL') return 1;
+    let count = 1;
+    // 往前檢查
+    let prevDay = selectedDay - 1;
+    while (prevDay >= 1 && (mySchedule[prevDay]?.shift_type === 'AL')) {
+      count++;
+      prevDay--;
+    }
+    // 往後檢查
+    let nextDay = selectedDay + 1;
+    while (nextDay <= totalDays && (mySchedule[nextDay]?.shift_type === 'AL')) {
+      count++;
+      nextDay++;
+    }
+    return count;
+  }, [selectedLeaveType, selectedDay, mySchedule, totalDays]);
+
+  // 特休階梯預告期規範校驗：
+  // 1 日特休需於 2 天前申請；連續 2 日需於 5 天前；連續 3 日(含)以上需於 7 天前
+  const noticeCheck = useMemo(() => {
+    if (selectedLeaveType !== 'AL') return { isValid: true, message: '' };
+    const diff = selectedDay - todayDate;
+    let requiredDays = 2;
+    if (consecutiveAlDays === 2) requiredDays = 5;
+    else if (consecutiveAlDays >= 3) requiredDays = 7;
+
+    if (diff < requiredDays) {
+      return {
+        isValid: false,
+        message: `⚠️ 特休階梯預告不足：連續 ${consecutiveAlDays} 日特休依法需於 ${requiredDays} 天前提出申請（今日 ${todayDate} 日，距 ${selectedDay} 日僅差 ${diff} 天）！`
+      };
+    }
+    return {
+      isValid: true,
+      message: `符合特休預告期（連續 ${consecutiveAlDays} 天，已於 ${diff} 天前提出，合規門檻為 ${requiredDays} 天前）`
+    };
+  }, [selectedLeaveType, selectedDay, todayDate, consecutiveAlDays]);
 
   // 檢核選定假別的餘額是否足夠
   const balanceCheck = useMemo(() => {
     if (selectedLeaveType === 'AL') {
       const daysLeft = balance.annualLeaveDays || 0;
+      if (daysLeft < 1) {
+        return {
+          isValid: false,
+          message: `特休天數不足（目前剩餘 0 天），無法申請！`
+        };
+      }
+      if (!noticeCheck.isValid) {
+        return {
+          isValid: false,
+          message: noticeCheck.message
+        };
+      }
       return {
-        isValid: daysLeft >= 1,
-        message: daysLeft >= 1 ? `可用特休天數：${daysLeft} 天` : `特休天數不足（目前剩餘 0 天），無法申請！`
+        isValid: true,
+        message: `可用特休天數：${daysLeft} 天 · ${noticeCheck.message}`
       };
     }
     if (selectedLeaveType === 'CT') {
@@ -61,8 +112,8 @@ export default function LeaveApplicationModal({
         message: hoursLeft >= 8 ? `可用補休時數：${hoursLeft} 小時 (折抵全日 8 小時)` : `補休時數不足 8 小時（目前剩餘 ${hoursLeft} 小時），無法申請！`
       };
     }
-    return { isValid: true, message: '依法照實申報' };
-  }, [selectedLeaveType, balance]);
+    return { isValid: true, message: '事假：依出勤時數扣薪申報' };
+  }, [selectedLeaveType, balance, noticeCheck]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -85,7 +136,7 @@ export default function LeaveApplicationModal({
       hours: 8,
       days: 1,
       reason: reason || '個人事前請假申請',
-      status: 'PENDING_LEADER', // 啟動二重核可管線：待組長初審
+      status: 'PENDING_LEADER', // 啟動二重核可管線：待 Leader 初審
       created_at: new Date().toISOString()
     };
 
@@ -105,7 +156,7 @@ export default function LeaveApplicationModal({
             <div>
               <h3 className="text-base font-black text-slate-900">線上請假申請單 (事前請假 · 二重核可制)</h3>
               <p className="text-[11px] text-slate-500">
-                僅限申請當月未來臨之出勤日 · 送出後經組長初審與高管終審
+                僅限申請當月未來臨之出勤日 · 送出後經 Leader 初審與 Manager 終審
               </p>
             </div>
           </div>
@@ -124,13 +175,16 @@ export default function LeaveApplicationModal({
             {/* 核心法規防呆提示卡 */}
             <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start space-x-2.5">
               <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 text-[11px] text-indigo-900">
+              <div className="space-y-1 text-[11px] text-indigo-900">
                 <span className="font-bold">營運考勤規則提醒：</span>
                 <p>
-                  1. 依現場管理規範，事前請假<strong>只能申請今日之後的未來出勤日</strong>（已過去之缺勤事實請洽主管於「實勤覆核」中處理）。
+                  1. <strong>特休階梯預告規則</strong>：1 日特休需於 <strong>2 天前</strong> 提出；連續 2 日需於 <strong>5 天前</strong> 提出；連續 3 日(含)以上需於 <strong>7 天前</strong> 提出。
                 </p>
                 <p>
-                  2. 審核流程採<strong>【二重核可制】</strong>：送出後先由站點組長初審把關人力，再由營運主管 (Manager) 終審核發並自動更新班表與存摺。
+                  2. <strong>病假不支援事前申請</strong>：普通傷病假因具突發就醫性質，一律排除事前預假；請於休養出勤後至【實勤覆核】檢附證明補登。
+                </p>
+                <p>
+                  3. <strong>二重核可管線</strong>：送出後先由站點 Leader 初審人力，再由營運主管 (Manager) 終審核發並自動更新班表與存摺。
                 </p>
               </div>
             </div>
@@ -159,17 +213,16 @@ export default function LeaveApplicationModal({
               )}
             </div>
 
-            {/* 假別選擇 */}
+            {/* 假別選擇 (病假已排除，純事假/特休/補休) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 申請假別 (特休/補休核准後自動扣抵存摺)
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { type: 'AL', name: '特休假 (AL)', sub: `餘額: ${balance.annualLeaveDays || 0} 天`, color: 'purple' },
-                  { type: 'CT', name: '補休假 (CT)', sub: `餘額: ${balance.compTimeHours || 0} 小時`, color: 'amber' },
-                  { type: 'PERSONAL', name: '事假 (扣全薪)', sub: '依出勤扣發', color: 'rose' },
-                  { type: 'SICK', name: '病假 (扣半薪)', sub: '出具就醫收據', color: 'blue' }
+                  { type: 'AL', name: '特休假 (AL)', sub: `餘額: ${balance.annualLeaveDays || 0} 天` },
+                  { type: 'CT', name: '補休假 (CT)', sub: `餘額: ${balance.compTimeHours || 0} 小時` },
+                  { type: 'PERSONAL', name: '事假 (無薪)', sub: '依出勤扣發' }
                 ].map(item => (
                   <button
                     type="button"
@@ -181,7 +234,7 @@ export default function LeaveApplicationModal({
                         : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
                     }`}
                   >
-                    <div className="text-xs">{item.name}</div>
+                    <div className="text-xs font-bold">{item.name}</div>
                     <div className="text-[10px] text-slate-500">{item.sub}</div>
                   </button>
                 ))}
@@ -191,7 +244,7 @@ export default function LeaveApplicationModal({
               <div className={`mt-2 p-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 ${
                 balanceCheck.isValid ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800 border border-rose-200'
               }`}>
-                {balanceCheck.isValid ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />}
+                {balanceCheck.isValid ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
                 <span>{balanceCheck.message}</span>
               </div>
             </div>

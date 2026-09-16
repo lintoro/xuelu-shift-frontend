@@ -337,6 +337,14 @@ function handleGetInitialData(yearMonth, session) {
   var empSheet = ss.getSheetByName('Employees');
   var empData = empSheet ? empSheet.getDataRange().getValues() : [];
   var employees = [];
+
+  // 自動無縫補齊 N1 標題欄位 pt_schedule_mode
+  if (empSheet && empData.length > 0) {
+    var headerRow = empData[0];
+    if (!headerRow[13] || headerRow[13] !== 'pt_schedule_mode') {
+      empSheet.getRange(1, 14).setValue('pt_schedule_mode');
+    }
+  }
   
   var legacyStationMap = {
     'ST_OPS': 'ST_ADMIN',
@@ -374,8 +382,8 @@ function handleGetInitialData(yearMonth, session) {
       can_solo: r[9] === true || r[9] === 'true',
       hire_date: r[10] ? (r[10] instanceof Date ? Utilities.formatDate(r[10], 'GMT+8', 'yyyy-MM-dd') : String(r[10])) : '',
       status: r[12] || r[11] || 'Active',
-      is_self_scheduled: r[2] === 'Manager',
-      pt_schedule_mode: r[13] ? String(r[13]).trim() : (r[2] === 'PT' ? 'FREE' : undefined)
+      pt_schedule_mode: (r[13] === 'FIXED' || r[13] === 'FREE' || r[13] === 'FLEXIBLE') ? (r[13] === 'FREE' ? 'FLEXIBLE' : String(r[13]).trim()) : (r[2] === 'PT' ? 'FLEXIBLE' : undefined),
+      is_self_scheduled: r[2] === 'Manager'
     });
   }
 
@@ -1002,6 +1010,9 @@ function handleSavePersonnel(session, employeeData) {
   var supportedStr = JSON.stringify(employeeData.supported_stations || [employeeData.primary_station]);
   var soloStr = JSON.stringify(employeeData.solo_stations || []);
 
+  var ptMode = employeeData.pt_schedule_mode || (employeeData.role === 'PT' ? 'FLEXIBLE' : '');
+  if (ptMode === 'FREE') ptMode = 'FLEXIBLE';
+
   if (foundRow > 0) {
     // 更新既有同仁
     sheet.getRange(foundRow, 2).setValue(employeeData.name);
@@ -1016,7 +1027,7 @@ function handleSavePersonnel(session, employeeData) {
     sheet.getRange(foundRow, 9).setValue(soloStr);
     sheet.getRange(foundRow, 10).setValue(!!employeeData.can_solo);
     sheet.getRange(foundRow, 13).setValue(employeeData.status || 'Active');
-    sheet.getRange(foundRow, 14).setValue(employeeData.pt_schedule_mode || (employeeData.role === 'PT' ? 'FREE' : ''));
+    sheet.getRange(foundRow, 14).setValue(ptMode);
   } else {
     // 新增同仁：預設密碼 000000
     var defaultSalt = Utilities.getUuid().substring(0, 8);
@@ -1035,7 +1046,7 @@ function handleSavePersonnel(session, employeeData) {
       employeeData.hire_date || '2026-09-01',
       new Date().toISOString(),
       employeeData.status || 'Active',
-      employeeData.pt_schedule_mode || (employeeData.role === 'PT' ? 'FREE' : '')
+      ptMode
     ]);
   }
 
@@ -1278,6 +1289,10 @@ function handleSyncAll(session, payload) {
     var empSheet = ss.getSheetByName('Employees');
     if (empSheet) {
       var data = empSheet.getDataRange().getValues();
+      if (data.length > 0 && (!data[0][13] || data[0][13] !== 'pt_schedule_mode')) {
+        empSheet.getRange(1, 14).setValue('pt_schedule_mode');
+      }
+
       var existingMap = {};
       for (var i = 1; i < data.length; i++) {
         var eid = String(data[i][0]).trim();
@@ -1296,6 +1311,8 @@ function handleSyncAll(session, payload) {
         var hireDate = e.hire_date || '2026-09-01';
         var status = e.status || 'Active';
 
+        var ptMode = e.pt_schedule_mode === 'FREE' ? 'FLEXIBLE' : (e.pt_schedule_mode || (role === 'PT' ? 'FLEXIBLE' : ''));
+
         if (exist) {
           // 若已存在，僅更新基本資料 (不覆寫 pin_hash/salt，避免重置密碼)
           empSheet.getRange(exist.row, 2).setValue(e.name);
@@ -1307,7 +1324,7 @@ function handleSyncAll(session, payload) {
           empSheet.getRange(exist.row, 10).setValue(canSolo);
           // 欄位 13: status, 欄位 14: pt_schedule_mode
           empSheet.getRange(exist.row, 13).setValue(status);
-          empSheet.getRange(exist.row, 14).setValue(e.pt_schedule_mode || 'FREE');
+          empSheet.getRange(exist.row, 14).setValue(ptMode);
         } else {
           // 若不存在，新增員工並配置預設密碼
           var newSalt = Utilities.getUuid().substring(0, 8);
@@ -1326,7 +1343,7 @@ function handleSyncAll(session, payload) {
             hireDate,
             new Date().toISOString(),
             status,
-            e.pt_schedule_mode || 'FREE'
+            ptMode
           ]);
         }
       });
