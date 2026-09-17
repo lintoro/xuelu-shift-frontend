@@ -158,8 +158,10 @@ export default function Header({
               onChange={(e) => onMonthChange(e.target.value)}
               className="bg-transparent font-medium text-slate-700 text-xs focus:outline-none pr-1 cursor-pointer"
             >
-              <option value="2026-09">2026/09 (休10天)</option>
-              <option value="2026-10">2026/10 (休11天)</option>
+              <option value="2026-09">2026/09</option>
+              <option value="2026-10">2026/10</option>
+              <option value="2026-11">2026/11</option>
+              <option value="2026-12">2026/12</option>
             </select>
           </div>
 

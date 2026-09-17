@@ -14,7 +14,7 @@ console.log('=== [測試 1] ApiService.saveStations 介面存在性與 Mock 回�
     return st;
   });
 
-  const res = await ApiService.saveStations(modifiedStations);
+  const res = await ApiService.saveStations(modifiedStations, 'session_active', { urlOverride: '__DISABLED__', allowFallback: true });
   assert.ok(res, 'saveStations 必須回傳結果');
   assert.equal(res.success, true, 'saveStations 必須回傳 success: true');
   assert.equal(res.count, STATIONS.length, '修改筆數必須一致');

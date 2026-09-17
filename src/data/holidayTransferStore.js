@@ -23,8 +23,8 @@ export const ANNUAL_HOLIDAY_PLANS = {
     { month: 8, name: '8 月', statutoryOff: 10, transferOffset: -1, actualOff: 9, note: '暑期大檔專案借假 (少休1天)' },
     { month: 9, name: '9 月', statutoryOff: 10, transferOffset: 0, actualOff: 10, note: '中秋常態出勤調移' },
     { month: 10, name: '10 月', statutoryOff: 11, transferOffset: -1, actualOff: 10, note: '國慶大檔專案借假 (少休1天)' },
-    { month: 11, name: '11 月', statutoryOff: 8, transferOffset: 2, actualOff: 10, note: '春節還假第二檔 (+2天)' },
-    { month: 12, name: '12 月', statutoryOff: 9, transferOffset: 2, actualOff: 11, note: '暑期與國慶還假 (+2天)' }
+    { month: 11, name: '11 月', statutoryOff: 9, transferOffset: 2, actualOff: 11, note: '春節還假第二檔 (+2天)' },
+    { month: 12, name: '12 月', statutoryOff: 8, transferOffset: 2, actualOff: 10, note: '暑期與國慶還假 (+2天)' }
   ],
   '2027': [
     { month: 1, name: '1 月', statutoryOff: 11, transferOffset: 0, actualOff: 11, note: '元旦' },
@@ -160,4 +160,29 @@ export function calculateAnnualBalance(plan) {
     totalActual,
     isBalanced
   };
+}
+
+/**
+ * 依據年月動態取得該月份的調移後應排休假總天數 (若查無調移計畫則以曆法週六日計算)
+ * @param {string} yearMonth - 格式如 '2026-11'
+ * @returns {number} 該月應休天數
+ */
+export function getMonthActualOffDays(yearMonth) {
+  if (!yearMonth) return 10;
+  const [yearStr, monthStr] = String(yearMonth).split('-');
+  const monthNum = Number(monthStr);
+  const plan = ANNUAL_HOLIDAY_PLANS[yearStr];
+  if (plan) {
+    const item = plan.find(m => m.month === monthNum);
+    if (item && item.actualOff) return Number(item.actualOff);
+  }
+  // 曆法 fallback: 計算該月週六與週日總天數
+  const year = Number(yearStr);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  let weekends = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, monthNum - 1, d).getDay();
+    if (dow === 0 || dow === 6) weekends++;
+  }
+  return weekends || 10;
 }

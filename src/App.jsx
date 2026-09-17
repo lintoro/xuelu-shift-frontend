@@ -43,6 +43,7 @@ import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
 import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
 import { SCHEDULE_WORKFLOW_STAGES, canAdvanceWorkflowStage } from './engine/schedulingTimelineEngine.js';
+import { getMonthActualOffDays } from './data/holidayTransferStore.js';
 
 export default function App() {
   // 當前登入同仁 (支援 localStorage 本機持久化，F5 重整保留登入狀態)
@@ -302,13 +303,21 @@ export default function App() {
     }
   }, [currentMonth]);
 
-  // 規則組合
-  const currentRules = useMemo(() => ({
-    ...DEFAULT_MONTHLY_RULES,
-    ...(monthlyCustomRules[currentMonth] || {}),
-    target_year_month: currentMonth,
-    work_hour_model: workHourModel
-  }), [currentMonth, workHourModel, monthlyCustomRules]);
+  // 規則組合 (依月份動態計算當月天數與法定應休天數，徹底擺脫寫死 10 天)
+  const currentRules = useMemo(() => {
+    const [y, m] = currentMonth.split('-').map(Number);
+    const dynamicDaysInMonth = new Date(y, m, 0).getDate();
+    const dynamicRequiredOff = getMonthActualOffDays(currentMonth);
+
+    return {
+      ...DEFAULT_MONTHLY_RULES,
+      days_in_month: dynamicDaysInMonth,
+      required_off_days: dynamicRequiredOff,
+      ...(monthlyCustomRules[currentMonth] || {}),
+      target_year_month: currentMonth,
+      work_hour_model: workHourModel
+    };
+  }, [currentMonth, workHourModel, monthlyCustomRules]);
 
   // 排班微調紀錄狀態 (Schedule Adjustments)
   const [pendingAdjustments, setPendingAdjustments] = useState(() => {

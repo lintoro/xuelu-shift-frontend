@@ -1,5 +1,5 @@
 // src/components/Admin/MonthlyRulesModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings2, X, Save, ShieldAlert, Calendar, Check, Sliders, Lock, Users, Award, UserCheck } from 'lucide-react';
 
 export default function MonthlyRulesModal({
@@ -23,6 +23,21 @@ export default function MonthlyRulesModal({
     default_closing_time_weekday: rules?.default_closing_time_weekday || '18:00',
     default_closing_time_weekend: rules?.default_closing_time_weekend || '19:00'
   });
+
+  // 當傳入之 rules 或月份變動時，即時對齊最新的法定應休總天數與表單數值
+  useEffect(() => {
+    if (rules) {
+      setFormData(prev => ({
+        ...prev,
+        max_preferred_days: rules.max_preferred_days !== undefined ? rules.max_preferred_days : 4,
+        max_weekend_days: rules.max_weekend_days !== undefined ? rules.max_weekend_days : 1,
+        required_off_days: rules.required_off_days !== undefined ? rules.required_off_days : 10,
+        default_daily_quota: rules.default_daily_quota !== undefined ? rules.default_daily_quota : 2,
+        default_closing_time_weekday: rules.default_closing_time_weekday || '18:00',
+        default_closing_time_weekend: rules.default_closing_time_weekend || '19:00'
+      }));
+    }
+  }, [rules, currentMonth, isOpen]);
 
   // Tab 2: 9 大站點平日/假日最低人數與當月組長
   const [stationList, setStationList] = useState(() => {
@@ -291,39 +306,28 @@ export default function MonthlyRulesModal({
                   </div>
                 </div>
 
-                {/* 4. 方洲算理：營業時間與閉店班動態調度 */}
+                {/* 4. 方洲算理：平日營業時間與閉店班動態調度 */}
                 <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
                   <div className="flex items-center space-x-1.5 font-bold text-amber-950 mb-1.5">
-                    <span>🏛️ 方洲算理：每日營業時間與閉店班排程</span>
+                    <span>🏛️ 方洲算理：平日營業時間與閉店班排程</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="text-[10px] text-amber-800 font-bold block mb-0.5">平日閉店時間</label>
-                      <select
-                        value={formData.default_closing_time_weekday || '18:00'}
-                        onChange={(e) => setFormData({ ...formData, default_closing_time_weekday: e.target.value })}
-                        className="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950"
-                      >
-                        <option value="18:00">18:00 (剛性不排 C 班)</option>
-                        <option value="19:00">19:00 (延時營業)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-amber-800 font-bold block mb-0.5">假日閉店時間</label>
-                      <select
-                        value={formData.default_closing_time_weekend || '19:00'}
-                        onChange={(e) => setFormData({ ...formData, default_closing_time_weekend: e.target.value })}
-                        className="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs font-bold text-amber-950"
-                      >
-                        <option value="19:00">19:00 (核心站點排 C 班)</option>
-                        <option value="18:00">18:00 (提早打烊不排 C 班)</option>
-                        <option value="20:00">20:00 (大節慶延時)</option>
-                      </select>
-                    </div>
+                  <div className="mb-2">
+                    <label className="text-[10px] text-amber-800 font-bold block mb-1">
+                      平日閉店時間 (暑假 7~8 月可延時營業)
+                    </label>
+                    <select
+                      value={formData.default_closing_time_weekday || '18:00'}
+                      onChange={(e) => setFormData({ ...formData, default_closing_time_weekday: e.target.value })}
+                      className="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                    >
+                      <option value="18:00">18:00 (常態 18:00 閉店 · 平日不排晚班 C 班)</option>
+                      <option value="19:00">19:00 (暑假/專案延時至 19:00 · 平日指派 C 班清帳)</option>
+                    </select>
                   </div>
-                  <p className="text-[10px] text-amber-700 leading-tight">
-                    • 平日 18:00 閉店時剛性不排晚班 C 班；假日 19:00 閉店時，服務台/收銀/清潔組將指派 C 班鎖門清帳，純體驗展區不排 C 班。
-                  </p>
+                  <div className="space-y-1 text-[10px] text-amber-800 leading-tight">
+                    <p>• <strong>平日</strong>：18:00 閉店時剛性不排晚班 C 班；若遇暑假（7~8月）延至 19:00 閉店，服務台/收銀組將指派 C 班清帳。</p>
+                    <p>• <strong>假日</strong>：固定營業至 19:00 排定 C 班；現場若遇超時出勤由閉店同仁申報加班處理，不影響預排班表。</p>
+                  </div>
                 </div>
               </>
             ) : (

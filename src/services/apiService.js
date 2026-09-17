@@ -370,11 +370,11 @@ export const ApiService = {
   },
 
   // 批量儲存站點主檔（包含平假日最低人數與當月組長動態選派）
-  async saveStations(stations, token = 'session_active') {
+  async saveStations(stations, token = 'session_active', options = {}) {
     return this.callRpc('admin.saveStations', {
       stations: stations,
       token: token
-    });
+    }, options);
   },
 
   // 儲存全月排班限定與考勤規則 (Rules 表)
