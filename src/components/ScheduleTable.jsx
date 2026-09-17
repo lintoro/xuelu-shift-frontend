@@ -5,6 +5,8 @@ import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, Ale
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
 import { formatShiftTime } from '../utils/timeFormatUtils.js';
+import { STATION_STYLE_MAP } from './StationStatusOverview.jsx';
+import { sortEmployees } from '../utils/employeeSortUtils.js';
 
 export default function ScheduleTable({
   scheduleResult,
@@ -34,16 +36,23 @@ export default function ScheduleTable({
 }) {
   const statusInfo = getTimelineStatus(currentSimulatedDate || '2026-09-10');
   const simDay = statusInfo.day;
-  const isManager = currentUser?.role === 'Manager';
-  const isLeader = currentUser?.role === 'Leader';
+  const isManager = currentUser?.role === 'Manager' || currentUser?.is_admin;
+  const isLeader = currentUser?.role === 'Leader' && !isManager;
   const myLeaderStation = isLeader 
     ? (stations.find(s => s.leader_emp_id === currentUser?.emp_id) || 
        stations.find(s => s.station_id === currentUser?.primary_station)) 
     : null;
 
   const [filterRole, setFilterRole] = useState('ALL'); // ALL, Leader, Staff, PT, Manager
-  // 組長預設聚焦本組站點，非組長預設 ALL
+  // 組長鎖定本組站點，高管可自由篩選
   const [filterStation, setFilterStation] = useState(myLeaderStation ? myLeaderStation.station_id : 'ALL');
+
+  // 若切換使用者為組長，自動鎖定本組站點
+  React.useEffect(() => {
+    if (isLeader && myLeaderStation) {
+      setFilterStation(myLeaderStation.station_id);
+    }
+  }, [isLeader, myLeaderStation]);
 
   // 微調編輯彈窗狀態
   const [editingCell, setEditingCell] = useState(null); // { emp, day, currentShift }
@@ -73,8 +82,8 @@ export default function ScheduleTable({
     dayHeaders.push({ day: d, isWeekend, weekDayStr, holidayObj, fullDate });
   }
 
-  // 雙重篩選人員（在勤狀態 + 角色 + 站點/組別）
-  const filteredEmployees = employees.filter(emp => {
+  // 雙重篩選與全域統一排序人員 (部門 ➔ 級職 ➔ 到職日)
+  const filteredEmployees = sortEmployees(employees.filter(emp => {
     // 排除離退、留停、長期病假等非在勤同仁，排班大表僅呈現 Active 在勤同仁
     const status = emp.status || 'Active';
     if (status !== 'Active') return false;
@@ -90,7 +99,7 @@ export default function ScheduleTable({
       if (emp.primary_station !== filterStation) return false;
     }
     return true;
-  });
+  }));
 
   // 判定是否為當月新進同仁 (到職日落在當月)
   const isNewHireInCurrentMonth = (emp) => {
@@ -256,14 +265,14 @@ export default function ScheduleTable({
             'bg-emerald-600 text-white'
           }`}>
             {workflowStage === 'PREFERENCE_FILL' ? '階段 1: 員工/PT劃班預休中' :
-             workflowStage === 'LEADER_SCHEDULING' ? '階段 2: 站點組長智能排班中' :
-             workflowStage === 'MANAGER_FINAL_REVIEW' ? '階段 3: 營運高管總審中' :
+             workflowStage === 'LEADER_SCHEDULING' ? '階段 2: Leader 智能排班中' :
+             workflowStage === 'MANAGER_FINAL_REVIEW' ? '階段 3: Manager 總審中' :
              '階段 4: 正式發布固定 (唯讀)'}
           </span>
           <span className="text-slate-300 text-[11px] hidden sm:inline">
             {workflowStage === 'PREFERENCE_FILL' && '（同仁填寫預休與報班中）'}
-            {workflowStage === 'LEADER_SCHEDULING' && '（同仁劃休已截稿，組長微調中）'}
-            {workflowStage === 'MANAGER_FINAL_REVIEW' && '（組長排班已送審，高管總審中）'}
+            {workflowStage === 'LEADER_SCHEDULING' && '（同仁劃休已截稿，Leader 微調中）'}
+            {workflowStage === 'MANAGER_FINAL_REVIEW' && '（Leader 排班已送審，Manager 總審中）'}
             {workflowStage === 'PUBLISHED_LOCKED' && '（大表已固定發布，異動請走調班後審）'}
           </span>
         </div>
@@ -275,7 +284,7 @@ export default function ScheduleTable({
             <button
               type="button"
               onClick={() => {
-                if (window.confirm('確定本組班表已確認無誤，要正式「一鍵送交高管審核」嗎？\n送審後本組班表將進入鎖定唯讀狀態。')) {
+                if (window.confirm('確定本組班表已確認無誤，要正式「一鍵送交 Manager 審核」嗎？\n送審後本組班表將進入鎖定唯讀狀態。')) {
                   if (onSubmitAdjustmentsToManager) onSubmitAdjustmentsToManager(myLeaderStation?.station_id);
                   if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
                 }
@@ -283,7 +292,7 @@ export default function ScheduleTable({
               className="flex items-center space-x-1.5 px-3 py-1 rounded bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>本組確認無誤 · 送高管審核</span>
+              <span>本組確認無誤 · 送 Manager 審核</span>
             </button>
           )}
 
@@ -292,13 +301,13 @@ export default function ScheduleTable({
             <button
               type="button"
               onClick={() => {
-                if (window.confirm('確定要截止同仁劃休，推進至【階段 2: 組長排班中】嗎？\n推進後一般同仁將無法再新增或修改劃休。')) {
+                if (window.confirm('確定要截止同仁劃休，推進至【階段 2: Leader 排班中】嗎？\n推進後一般同仁將無法再新增或修改劃休。')) {
                   if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('LEADER_SCHEDULING');
                 }
               }}
               className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
             >
-              截止同仁劃休 ➔ 啟動組長排班
+              截止同仁劃休 ➔ 啟動 Leader 排班
             </button>
           )}
 
@@ -307,13 +316,13 @@ export default function ScheduleTable({
             <button
               type="button"
               onClick={() => {
-                if (window.confirm('確定要進入【階段 3: 高管總審】嗎？\n進入後各站組長將停止微調權限，由高管統一覆核與補位。')) {
+                if (window.confirm('確定要進入【階段 3: Manager 總審】嗎？\n進入後各站 Leader 將停止微調權限，由 Manager 統一覆核與補位。')) {
                   if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
                 }
               }}
               className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
             >
-              結束組長排班 ➔ 進入高管總審
+              結束 Leader 排班 ➔ 進入 Manager 總審
             </button>
           )}
 
@@ -362,7 +371,7 @@ export default function ScheduleTable({
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-2 text-amber-900 font-bold">
             <AlertCircle className="w-4 h-4 text-amber-600 animate-bounce" />
-            <span>🔔 收到站點組長上呈之班表微調申請 (共 {pendingForManager.length} 筆待覆核)：</span>
+            <span>🔔 收到 Leader 上呈之班表微調申請 (共 {pendingForManager.length} 筆待覆核)：</span>
           </div>
           <button
             type="button"
@@ -370,7 +379,7 @@ export default function ScheduleTable({
             className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>審核組長微調清單 ({pendingForManager.length})</span>
+            <span>審核 Leader 微調清單 ({pendingForManager.length})</span>
           </button>
         </div>
       )}
@@ -387,7 +396,7 @@ export default function ScheduleTable({
       <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
         {/* 左側：身分過濾與站點/組別過濾 */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* 角色過濾 */}
+          {/* 角色過濾 (去職稱化) */}
           <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-1 text-xs shadow-2xs">
             <Filter className="w-3.5 h-3.5 text-slate-400 ml-1" />
             <select
@@ -396,28 +405,34 @@ export default function ScheduleTable({
               className="bg-transparent text-slate-700 font-bold focus:outline-none cursor-pointer pr-1"
             >
               <option value="ALL">全部身分 ({employees.length}人)</option>
-              <option value="Leader">🛡️ 站點組長</option>
-              <option value="Staff">👤 正職同仁</option>
-              <option value="PT">⏱️ 計時人員 (PT)</option>
-              <option value="Manager">👑 營運高管</option>
+              <option value="Leader">🛡️ Leader</option>
+              <option value="Staff">👤 Staff</option>
+              <option value="PT">⏱️ PT</option>
+              <option value="Manager">👑 Manager</option>
             </select>
           </div>
 
-          {/* 站點/組別過濾 (組長預設聚焦本組) */}
+          {/* 站點/組別過濾 (組長鎖定本組，高管拉選) */}
           <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-1 text-xs shadow-2xs">
             <span className="text-[11px] font-bold text-indigo-600 ml-1">組別:</span>
-            <select
-              value={filterStation}
-              onChange={(e) => setFilterStation(e.target.value)}
-              className="bg-transparent text-slate-700 font-bold focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="ALL">全館 9 大營業站點</option>
-              {stations.map(st => (
-                <option key={st.station_id} value={st.station_id}>
-                  {st.station_name} {myLeaderStation?.station_id === st.station_id ? '★ 本組' : ''}
-                </option>
-              ))}
-            </select>
+            {isLeader && myLeaderStation ? (
+              <div className="flex items-center space-x-1 px-2 py-0.5 font-bold text-indigo-700 bg-indigo-50 rounded text-xs">
+                <span>🔒 本組鎖定: {myLeaderStation.station_name}</span>
+              </div>
+            ) : (
+              <select
+                value={filterStation}
+                onChange={(e) => setFilterStation(e.target.value)}
+                className="bg-transparent text-slate-700 font-bold focus:outline-none cursor-pointer pr-1"
+              >
+                <option value="ALL">全館 9 大營業站點</option>
+                {stations.map(st => (
+                  <option key={st.station_id} value={st.station_id}>
+                    {st.station_name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <span className="text-xs text-slate-500 font-medium">
@@ -622,22 +637,30 @@ export default function ScheduleTable({
                     {/* 同仁名稱與標籤欄 */}
                     <td className="p-2.5 border-r border-slate-200 sticky left-0 z-10 bg-white shadow-[2px_0_4px_-2px_rgba(0,0,0,0.05)]">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900 truncate max-w-[90px]">{emp.name}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                        <span className="font-bold text-slate-900 truncate max-w-[85px]">{emp.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                           isEmpManager 
-                            ? 'bg-purple-100 text-purple-700' 
+                            ? 'bg-purple-100 text-purple-800' 
                             : emp.role === 'Leader'
-                            ? 'bg-blue-100 text-blue-700'
+                            ? 'bg-blue-100 text-blue-800'
                             : emp.role === 'PT'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-800'
                         }`}>
-                          {isEmpManager ? '高管' : emp.role === 'Leader' ? '組長' : emp.role === 'PT' ? 'PT' : '正職'}
+                          {isEmpManager ? 'Manager' : emp.role === 'Leader' ? 'Leader' : emp.role === 'PT' ? 'PT' : 'Staff'}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-                        {stationNameMap[emp.primary_station] || emp.primary_station}
-                        {emp.can_solo && ' · Solo'}
+                      <div className="flex items-center space-x-1 mt-1 truncate">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black border truncate ${
+                          STATION_STYLE_MAP[emp.primary_station]?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>
+                          {stationNameMap[emp.primary_station] || emp.primary_station}
+                        </span>
+                        {emp.can_solo && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 shrink-0">
+                            Solo
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -821,7 +844,7 @@ export default function ScheduleTable({
         </div>
 
         <div className="text-slate-400">
-          ★ 組長可微調本組同仁格子並一鍵上呈；經理可點選全館覆核定稿
+          ★ Leader 可微調本組同仁格子並一鍵上呈；Manager 可點選全館覆核定稿
         </div>
       </div>
 

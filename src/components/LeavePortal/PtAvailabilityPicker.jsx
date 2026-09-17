@@ -12,19 +12,28 @@ export default function PtAvailabilityPicker({
   const isWorkflowLocked = workflowStage && workflowStage !== 'PREFERENCE_FILL';
   const totalDays = rules.days_in_month || 30;
   const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
-  const maxDays = employee.max_monthly_days || 10;
+  const isFixedMode = employee.pt_schedule_mode === 'FIXED';
 
-  // 當前 PT 的報班狀態 (預設若未登記過，全月預設為「可排班 AVAILABLE」，同仁僅需點擊不能上的日期)
+  // 當前 PT 的報班狀態：
+  // 若為固定班 (isFixedMode)：初次載入全白版 (預設未勾選，點選即標記為可上班)
+  // 若為自由排班：預設全月可排班 (AVAILABLE)，點選標記為不可排班
   const myAvail = React.useMemo(() => {
     const raw = availability[employee.emp_id];
     if (raw && Object.keys(raw).length > 0) return raw;
-    // 初次載入預設全月可排班 (1 ~ totalDays)
-    const initialFull = {};
-    for (let d = 1; d <= totalDays; d++) {
-      initialFull[d] = 'AVAILABLE';
+    const initial = {};
+    if (isFixedMode) {
+      // 固定班工讀生：全白版留白 (UNCHECKED)
+      for (let d = 1; d <= totalDays; d++) {
+        initial[d] = 'UNCHECKED';
+      }
+    } else {
+      // 自由排班：預設全月可排班
+      for (let d = 1; d <= totalDays; d++) {
+        initial[d] = 'AVAILABLE';
+      }
     }
-    return initialFull;
-  }, [availability, employee.emp_id, totalDays]);
+    return initial;
+  }, [availability, employee.emp_id, totalDays, isFixedMode]);
 
   // 計算已報「可上班」與「不可排班」天數
   const availableDaysCount = Object.values(myAvail).filter(v => v === 'AVAILABLE').length;
@@ -32,6 +41,7 @@ export default function PtAvailabilityPicker({
 
   const [confirmDialog, setConfirmDialog] = useState(null); // 尖峰管制日柔性確認彈窗
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [isAlertListOpen, setIsAlertListOpen] = useState(false); // 尖峰管制與不可排班清單 (預設收合)
 
   // 產生整月日曆格
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
@@ -46,7 +56,7 @@ export default function PtAvailabilityPicker({
     const dayOfWeek = dateObj.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const quotaInfo = dailyQuotas[d] || { quota: 2, isRestricted: false };
-    const currentStatus = myAvail[d] || 'AVAILABLE';
+    const currentStatus = myAvail[d] || (isFixedMode ? 'UNCHECKED' : 'AVAILABLE');
 
     calendarDays.push({
       isEmpty: false,
@@ -60,28 +70,34 @@ export default function PtAvailabilityPicker({
     });
   }
 
-  // 點擊切換狀態：預設為 AVAILABLE，點擊切換為 UNAVAILABLE，再點擊切回 AVAILABLE
+  // 點擊切換狀態
   const handleToggleStatus = (day, cell) => {
     if (isWorkflowLocked) {
-      alert('排班進程已進入組長/高管審查階段，PT 報班劃選已截止鎖定！');
+      alert('排班進程已進入 Leader/Manager 審查階段，PT 報班劃選已截止鎖定！');
       return;
     }
-    const current = myAvail[day] || 'AVAILABLE';
 
-    if (current === 'AVAILABLE') {
-      // 可排班 ➔ 切換為 不可排班
-      if (cell.isRestricted) {
-        setConfirmDialog({
-          day,
-          tag: cell.tag || '大檔活動日',
-          action: () => updateStatus(day, 'UNAVAILABLE')
-        });
-      } else {
-        updateStatus(day, 'UNAVAILABLE');
-      }
+    if (isFixedMode) {
+      // 固定班模式：白版 (UNCHECKED) ⇄ 可上班 (AVAILABLE)
+      const current = myAvail[day];
+      const nextStatus = current === 'AVAILABLE' ? 'UNCHECKED' : 'AVAILABLE';
+      updateStatus(day, nextStatus);
     } else {
-      // 不可排班 ➔ 切回 可排班
-      updateStatus(day, 'AVAILABLE');
+      // 自由排班模式：可排班 (AVAILABLE) ⇄ 不可排 (UNAVAILABLE)
+      const current = myAvail[day] || 'AVAILABLE';
+      if (current === 'AVAILABLE') {
+        if (cell.isRestricted) {
+          setConfirmDialog({
+            day,
+            tag: cell.tag || '大檔活動日',
+            action: () => updateStatus(day, 'UNAVAILABLE')
+          });
+        } else {
+          updateStatus(day, 'UNAVAILABLE');
+        }
+      } else {
+        updateStatus(day, 'AVAILABLE');
+      }
     }
   };
 
@@ -91,18 +107,25 @@ export default function PtAvailabilityPicker({
     setConfirmDialog(null);
   };
 
-  // 一鍵重設全月為可排班
-  const handleResetAllAvailable = () => {
+  // 一鍵重設全月狀態
+  const handleResetAll = (status) => {
     const updated = {};
     for (let d = 1; d <= totalDays; d++) {
-      updated[d] = 'AVAILABLE';
+      updated[d] = status;
     }
     onSaveAvailability(employee.emp_id, updated);
-    setFeedbackMsg('已將全月重設為「✨ 全天可排班」！');
+    setFeedbackMsg(
+      status === 'UNCHECKED' 
+        ? '已重設全月為「空白版」！請點選可上班日' 
+        : '已將全月重設為「✨ 全天可排班」！'
+    );
     setTimeout(() => setFeedbackMsg(''), 3000);
   };
 
-  const isFixedMode = employee.pt_schedule_mode === 'FIXED';
+  // 彙整不可排班與尖峰管制之清單
+  const alertIssueItems = calendarDays.filter(c => !c.isEmpty && (
+    c.currentStatus === 'UNAVAILABLE' || (c.isRestricted && c.currentStatus !== 'AVAILABLE')
+  ));
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
@@ -144,28 +167,65 @@ export default function PtAvailabilityPicker({
         </div>
       </div>
 
-      {/* 快捷操作與圖例 (已移除舊版一鍵六日，新增重設全月可排) */}
+      {/* 快捷操作與圖例 */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
         <div className="flex items-center space-x-3">
           <span className="font-bold text-slate-700">狀態點選：</span>
-          <span className="flex items-center space-x-1 text-emerald-700 font-bold">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            <span>✨ 可排班 (預設)</span>
-          </span>
-          <span className="text-slate-400">⇄</span>
-          <span className="flex items-center space-x-1 text-rose-700 font-bold">
-            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>🚫 不可排班 (點擊切換)</span>
-          </span>
+          {isFixedMode ? (
+            <>
+              <span className="flex items-center space-x-1 text-slate-600 font-bold">
+                <span className="w-3.5 h-3.5 rounded border border-slate-300 bg-white inline-block" />
+                <span>⬜ 留白 (未選)</span>
+              </span>
+              <span className="text-slate-400">➔</span>
+              <span className="flex items-center space-x-1 text-emerald-700 font-bold">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                <span>🟩 點選上班日</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center space-x-1 text-emerald-700 font-bold">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                <span>✨ 可排班 (預設)</span>
+              </span>
+              <span className="text-slate-400">⇄</span>
+              <span className="flex items-center space-x-1 text-rose-700 font-bold">
+                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>🚫 不可排班 (點擊切換)</span>
+              </span>
+            </>
+          )}
         </div>
 
-        <button
-          onClick={handleResetAllAvailable}
-          className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
-          title="將全月所有日期重設為可排班"
-        >
-          🔄 一鍵重設全月為可排班
-        </button>
+        <div className="flex items-center space-x-2">
+          {isFixedMode ? (
+            <>
+              <button
+                onClick={() => handleResetAll('UNCHECKED')}
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
+                title="清空全月劃選，重設為空白版"
+              >
+                🔄 重設為全空白版
+              </button>
+              <button
+                onClick={() => handleResetAll('AVAILABLE')}
+                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded text-emerald-800 font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
+                title="全月皆標記為可上班"
+              >
+                ✨ 全選可上班
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => handleResetAll('AVAILABLE')}
+              className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-slate-700 font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
+              title="將全月所有日期重設為可排班"
+            >
+              🔄 一鍵重設全月為可排班
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 回饋訊息 */}
@@ -177,7 +237,7 @@ export default function PtAvailabilityPicker({
       )}
 
       {/* 日曆網格 */}
-      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs mb-4">
         <div className="grid grid-cols-7 bg-slate-100 text-slate-600 text-center text-xs font-bold py-2 border-b border-slate-200">
           <div className="text-rose-600">週日</div>
           <div>週一</div>
@@ -196,6 +256,7 @@ export default function PtAvailabilityPicker({
 
             const isAvailable = cell.currentStatus === 'AVAILABLE';
             const isUnavailable = cell.currentStatus === 'UNAVAILABLE';
+            const isUnchecked = cell.currentStatus === 'UNCHECKED';
 
             return (
               <div
@@ -203,9 +264,11 @@ export default function PtAvailabilityPicker({
                 onClick={() => handleToggleStatus(cell.day, cell)}
                 className={`min-h-[84px] p-2 transition-all cursor-pointer select-none flex flex-col justify-between ${
                   isAvailable
-                    ? 'bg-emerald-50/70 hover:bg-emerald-50 ring-1 ring-emerald-300'
+                    ? 'bg-emerald-50/80 hover:bg-emerald-100 ring-1 ring-emerald-400 shadow-2xs'
                     : isUnavailable
                     ? 'bg-rose-50/70 hover:bg-rose-50 ring-1 ring-rose-300'
+                    : isUnchecked
+                    ? 'bg-white hover:bg-slate-50'
                     : cell.isRestricted
                     ? 'bg-amber-50/30 hover:bg-amber-50/60'
                     : cell.isWeekend
@@ -238,7 +301,7 @@ export default function PtAvailabilityPicker({
                       <span>不可排</span>
                     </div>
                   ) : (
-                    <span className="text-[10px] text-slate-300">未填報</span>
+                    <span className="text-[10px] text-slate-400 font-medium">留白未排</span>
                   )}
                 </div>
 
@@ -249,6 +312,64 @@ export default function PtAvailabilityPicker({
             );
           })}
         </div>
+      </div>
+
+      {/* 尖峰管制與不可排班異常清單 (預設收合，點選才展開) */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+        <button
+          type="button"
+          onClick={() => setIsAlertListOpen(!isAlertListOpen)}
+          className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 cursor-pointer transition-colors"
+        >
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-amber-600" />
+            <span>尖峰管制與不可排班明細檢視 ({alertIssueItems.length} 筆項目)</span>
+            <span className="text-[10px] font-normal text-slate-500">
+              {isAlertListOpen ? '（點擊收合）' : '（預設收合 · 點擊展開明細）'}
+            </span>
+          </div>
+          <span className="text-slate-400 text-xs font-bold">
+            {isAlertListOpen ? '▲ 收合' : '▼ 展開'}
+          </span>
+        </button>
+
+        {isAlertListOpen && (
+          <div className="p-3 bg-white border-t border-slate-200 space-y-2 max-h-56 overflow-y-auto text-xs animate-fadeIn">
+            {alertIssueItems.length === 0 ? (
+              <div className="text-center text-slate-400 py-2">
+                全月無任何不可排班或尖峰管制衝突項目。
+              </div>
+            ) : (
+              alertIssueItems.map(item => (
+                <div
+                  key={item.day}
+                  className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200"
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-slate-800">{month}月{item.day}日</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 font-semibold">
+                      {item.isWeekend ? '週末' : '平日'}
+                    </span>
+                    {item.isRestricted && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">
+                        ⚡ {item.tag || '尖峰管制日'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-[11px] font-bold ${
+                      item.currentStatus === 'UNAVAILABLE' 
+                        ? 'text-rose-600' 
+                        : 'text-slate-500'
+                    }`}>
+                      {item.currentStatus === 'UNAVAILABLE' ? '標記不可排班' : '未勾選排班'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* 尖峰管制日柔性確認對話框 */}

@@ -20,6 +20,7 @@ import {
 import { precheckSwapCompliance } from '../../data/swapStore.js';
 import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
+import { sortEmployees } from '../../utils/employeeSortUtils.js';
 
 export default function ShiftSwapPortal({
   employees,
@@ -35,19 +36,35 @@ export default function ShiftSwapPortal({
   onFinalApproveLeave,
   currentEmpId,
   currentUser,
-  shiftTypes = SHIFT_TYPES
+  shiftTypes = SHIFT_TYPES,
+  workflowStage = 'PREFERENCE_FILL',
+  currentSimulatedDate = 14
 }) {
   const currentEmp = currentUser || employees.find(e => e.emp_id === currentEmpId) || employees[0];
   const stationMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
   const targetYearMonth = rules?.target_year_month || '2026-09';
   const monthNum = parseInt(targetYearMonth.split('-')[1], 10);
 
-  // 審核權限判定：組長初審 (Leader/Manager/Admin)、高管終審 (Manager/Admin)；一般 Staff / PT 僅有填報權，無審核核准權
-  const isManager = currentEmp?.role === 'Manager';
+  // 取得當前模擬日/今日 (預設排除過去歷史日期)
+  const todayDay = useMemo(() => {
+    if (typeof currentSimulatedDate === 'number') return currentSimulatedDate;
+    if (typeof currentSimulatedDate === 'string' && currentSimulatedDate.includes('-')) {
+      const parts = currentSimulatedDate.split('-');
+      return parseInt(parts[2], 10) || 14;
+    }
+    return 14;
+  }, [currentSimulatedDate]);
+
+  // 審核權限判定：Leader 初審 (Leader/Manager/Admin)、Manager 終審 (Manager/Admin)
+  const isManager = currentEmp?.role === 'Manager' || currentEmp?.is_admin;
   const isAdmin = !!currentEmp?.is_admin;
-  const isLeader = currentEmp?.role === 'Leader';
+  const isLeader = currentEmp?.role === 'Leader' && !isManager;
   const canFirstReview = isLeader || isManager || isAdmin;
   const canFinalApprove = isManager || isAdmin;
+
+  const isLocked = workflowStage === 'PUBLISHED_LOCKED';
+  // 排班發布封存後 (PUBLISHED_LOCKED) 調班門戶預設收合
+  const [isFormExpanded, setIsFormExpanded] = useState(!isLocked);
 
   // 核決進度中心分頁：SWAPS (調班) 或 LEAVES (事前請假)
   const [reviewTab, setReviewTab] = useState('SWAPS');
@@ -55,39 +72,40 @@ export default function ShiftSwapPortal({
   // 申請模式：SWAP (雙人對調) 或 SELF_RESCHEDULE (個人自調挪休)
   const [swapType, setSwapType] = useState('SWAP');
 
-
   // 表單狀態
   const [targetEmpId, setTargetEmpId] = useState(
     employees.find(e => e.emp_id !== currentEmp.emp_id && !e.is_self_scheduled)?.emp_id || ''
   );
-  const [applicantDay, setApplicantDay] = useState(10);
-  const [targetDay, setTargetDay] = useState(14);
+  const [applicantDay, setApplicantDay] = useState(todayDay);
+  const [targetDay, setTargetDay] = useState(todayDay + 1 <= 30 ? todayDay + 1 : todayDay);
   const [targetShiftCode, setTargetShiftCode] = useState('B'); // 個人挪休轉上班之班別
   const [reason, setReason] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
-  // 取得申請人當月上班日與休假日清單
+  // 取得申請人當月上班日與休假日清單 (歷史日期鎖定防呆：嚴格排除過去已經發生的日期)
   const myWorkDays = useMemo(() => {
     const days = [];
     for (let d = 1; d <= 30; d++) {
+      if (d < todayDay) continue; // 鎖定防呆：原出勤日不能是過去已發生的日期
       const s = scheduleMap[currentEmp?.emp_id]?.[d];
       if (s && s.shift_type && isWorkingShift(s.shift_type)) {
         days.push({ day: d, shift: s.shift_type, stationId: s.station_id });
       }
     }
     return days;
-  }, [scheduleMap, currentEmp?.emp_id]);
+  }, [scheduleMap, currentEmp?.emp_id, todayDay]);
 
   const myOffDays = useMemo(() => {
     const days = [];
     for (let d = 1; d <= 30; d++) {
+      if (d < todayDay) continue; // 鎖定防呆：原休假日不能是過去已發生的日期
       const s = scheduleMap[currentEmp?.emp_id]?.[d];
       if (!s || isOffShift(s.shift_type)) {
         days.push(d);
       }
     }
     return days;
-  }, [scheduleMap, currentEmp?.emp_id]);
+  }, [scheduleMap, currentEmp?.emp_id, todayDay]);
 
   // 取得當前班別
   const applicantCurrentShift = scheduleMap[currentEmp.emp_id]?.[applicantDay];
@@ -244,24 +262,54 @@ export default function ShiftSwapPortal({
             </p>
           </div>
 
-          <div className="text-xs bg-slate-100 px-3 py-1 rounded-lg text-slate-600 font-medium">
-            申請人: <span className="font-bold text-slate-900">{currentEmp.name}</span> ({currentEmp.emp_id})
+          <div className="flex items-center space-x-2">
+            <div className="text-xs bg-slate-100 px-3 py-1 rounded-lg text-slate-600 font-medium">
+              申請人: <span className="font-bold text-slate-900">{currentEmp.name}</span> ({currentEmp.emp_id})
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFormExpanded(!isFormExpanded)}
+              className="px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center space-x-1 cursor-pointer transition-all shadow-2xs"
+            >
+              {isLocked && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+              <span>{isFormExpanded ? '▲ 收合申請表' : '▼ 展開線上申請表'}</span>
+            </button>
           </div>
         </div>
 
-        {/* 模式切換按鈕 */}
-        <div className="flex space-x-2 mb-4">
-          <button
-            type="button"
-            onClick={() => setSwapType('SWAP')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              swapType === 'SWAP'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            雙人班表對調 (Swap with Colleague)
-          </button>
+        {!isFormExpanded ? (
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center space-x-2">
+              {isLocked ? <Lock className="w-4 h-4 text-emerald-600 shrink-0" /> : <Clock className="w-4 h-4 text-slate-500 shrink-0" />}
+              <span>
+                {isLocked 
+                  ? '🔒 本月班表已固定發布封存。申請表預設已收合，如需事後微調或換班，請點擊右側按鈕展開申請。' 
+                  : '線上調班申請表目前處於收合狀態，點擊右側按鈕即可展開填寫。'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFormExpanded(true)}
+              className="text-indigo-600 hover:underline font-bold text-xs cursor-pointer shrink-0"
+            >
+              展開填寫申請 ➔
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* 模式切換按鈕 */}
+            <div className="flex space-x-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setSwapType('SWAP')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  swapType === 'SWAP'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                雙人班表對調 (Swap with Colleague)
+              </button>
           <button
             type="button"
             onClick={() => {
@@ -332,7 +380,7 @@ export default function ShiftSwapPortal({
                       onChange={(e) => setTargetEmpId(e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold cursor-pointer"
                     >
-                      {employees.filter(e => e.emp_id !== currentEmp.emp_id && !e.is_self_scheduled).map(e => (
+                      {sortEmployees(employees.filter(e => e.emp_id !== currentEmp.emp_id && !e.is_self_scheduled)).map(e => (
                         <option key={e.emp_id} value={e.emp_id}>{e.name} ({stationMap[e.primary_station] || e.primary_station})</option>
                       ))}
                     </select>
@@ -577,7 +625,9 @@ export default function ShiftSwapPortal({
             </button>
           </div>
         </form>
-      </div>
+      </>
+    )}
+  </div>
 
       {/* 區塊 2: 二階核決清單 (調班/挪休 vs 同仁事前請假) */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">

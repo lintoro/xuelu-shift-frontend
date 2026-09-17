@@ -180,3 +180,17 @@ Antigravity 即會自動分析衝突標記（`<<<<<<< HEAD`），保留雙方的
   - `config/skills/`（全域技能）
 - 如有特殊全域技能，可直接將該資料夾透過隨身碟或雲端硬碟拷貝至新電腦的 `C:\Users\<新使用者名稱>\.gemini\` 下即可。
 （註：本專案本身使用的規則已內建於 `.agents/rules/`，即使不複製全域資料夾也能正常運作）。
+
+### Q5：升級至 Antigravity 2.0 介面，若新電腦執行工具遇到 PreToolUse Hook 錯誤？
+若在新電腦上 AI 執行讀檔或終端指令時，遇到 `jsonhook__googlecloudtools.datacloud_telemetry_PreToolUse_0_0 failed: Cannot find module` 錯誤，是 Windows 下外掛路徑引號問題。
+**解法**：在 PowerShell 貼上以下指令清空設定檔，即可永久根治：
+```powershell
+Get-ChildItem -Recurse "$env:USERPROFILE\.gemini\config\plugins\googlecloudtools.datacloud_telemetry" -Filter "*.json" | ForEach-Object { Set-Content $_.FullName "{}" }
+```
+
+### Q6：換機後若需要 AI 自動部署 Apps Script，如何設定 Clasp？
+在新電腦開啟終端機執行：
+```powershell
+npx @google/clasp login
+```
+瀏覽器會自動彈出 Google 帳號授權頁面，點選允許即可。

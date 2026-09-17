@@ -59,13 +59,6 @@ export function exportEmployeeToIcs({
     lines.push(`LOCATION:${stationName}`);
     lines.push('STATUS:CONFIRMED');
 
-    // 提早 1 小時提醒 (VALARM)
-    lines.push('BEGIN:VALARM');
-    lines.push('TRIGGER:-PT60M');
-    lines.push('ACTION:DISPLAY');
-    lines.push(`DESCRIPTION:提醒：1小時後值勤【${shiftInfo.name}】(${shiftInfo.startTime}) 於 ${stationName}`);
-    lines.push('END:VALARM');
-
     lines.push('END:VEVENT');
   });
 

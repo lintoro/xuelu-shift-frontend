@@ -93,7 +93,7 @@ export default function MyDashboard({
                 )}
               </div>
               <p className="text-xs text-indigo-100 mt-1">
-                業務角色: <span className="font-bold">{currentUser.role === 'Manager' ? '營運高管' : currentUser.role === 'Leader' ? '站點組長' : currentUser.role === 'PT' ? '計時同仁' : '正職同仁'}</span>
+                業務角色: <span className="font-bold">{currentUser.role || 'Staff'}</span>
                 {' · '}主屬站點: <span className="font-bold">{stationMap[currentUser.primary_station] || currentUser.primary_station}</span>
                 {currentUser.can_solo && ' (具備獨立顧站 solo 資格)'}
               </p>
@@ -347,62 +347,92 @@ export default function MyDashboard({
         )}
       </div>
 
-      {/* 我的當月值勤日曆清單 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-          <div className="flex items-center space-x-2">
-            <Calendar className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-sm font-bold text-slate-900">我在此月份 ({yearMonth}) 的出勤班別</h3>
-          </div>
-          <span className="text-xs text-slate-400">出勤前 1 小時手機日曆自動提醒</span>
-        </div>
+      {/* 我的當月值勤日曆清單 (標準 7 欄月曆網格，標註星期) */}
+      {(() => {
+        const [calYear, calMonth] = yearMonth.split('-').map(Number);
+        const firstDayObj = new Date(calYear, calMonth - 1, 1);
+        const startDayOfWeek = (firstDayObj.getDay() + 6) % 7; // 週一為 0, 週日為 6
+        const weekDayHeaders = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
-          {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
-            const shift = mySchedule[day];
-            // 全量假別判定：使用 isOffShift API，涵蓋 OFF/TERM_OFF/AL/CT/SL/PL/ML/FL/MAT/CL/REG_OFF/REST_OFF
-            const isOff = !shift || isOffShift(shift.shift_type);
-            // 動態讀取班別定義，不再寫死 SHIFT_TYPES
-            const shiftInfo = effectiveShiftTypes[shift?.shift_type] || SHIFT_TYPES[shift?.shift_type];
-            const dateObj = new Date(2026, 8, day);
-            const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-
-            return (
-              <div
-                key={day}
-                className={`p-2.5 rounded-xl border text-center flex flex-col justify-between min-h-[75px] ${
-                  isOff 
-                    ? 'bg-rose-50/50 border-rose-200 text-rose-700' 
-                    : shiftInfo 
-                    ? `${shiftInfo.color} border shadow-2xs` 
-                    : 'bg-slate-50 border-slate-200 text-slate-400'
-                }`}
-              >
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className={isWeekend ? 'text-rose-600' : 'text-slate-600'}>{day}日</span>
-                  <span className="text-[9px] opacity-75">{isOff ? '休' : shift?.shift_type}</span>
-                </div>
-
-                <div className="my-1 font-black text-xs">
-                  {isOff ? '例休' : shiftInfo?.name || shift?.shift_type}
-                </div>
-
-                <div className="text-[9px] truncate opacity-90">
-                  {isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}
-                </div>
-
-                {shift?.is_labor_violation_override && (
-                  <div className="mt-1">
-                    <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[8px] block shadow-2xs">
-                      ⚠️ 特准實勤 {shift.actual_hours}h
-                    </span>
-                  </div>
-                )}
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <Calendar className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">我在此月份 ({yearMonth}) 的出勤班表月曆</h3>
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <span className="text-xs text-slate-400 font-medium">依《勞基法》排定出勤與法定例休</span>
+            </div>
+
+            {/* 星期標頭列 (週一至週日) */}
+            <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold">
+              {weekDayHeaders.map((wk, idx) => {
+                const isWkEnd = idx === 5 || idx === 6;
+                return (
+                  <div
+                    key={wk}
+                    className={`py-1.5 rounded-lg ${isWkEnd ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}
+                  >
+                    {wk}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 月曆網格 */}
+            <div className="grid grid-cols-7 gap-2">
+              {/* 月初空白格 */}
+              {Array.from({ length: startDayOfWeek }).map((_, i) => (
+                <div key={`empty-${i}`} className="min-h-[80px] bg-slate-50/50 rounded-xl border border-dashed border-slate-200/60" />
+              ))}
+
+              {/* 每日出勤格 */}
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
+                const shift = mySchedule[day];
+                const isOff = !shift || isOffShift(shift.shift_type);
+                const shiftInfo = effectiveShiftTypes[shift?.shift_type] || SHIFT_TYPES[shift?.shift_type];
+                const dateObj = new Date(calYear, calMonth - 1, day);
+                const dayOfWeek = dateObj.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                return (
+                  <div
+                    key={day}
+                    className={`p-2.5 rounded-xl border text-center flex flex-col justify-between min-h-[80px] transition-all hover:shadow-xs ${
+                      isOff 
+                        ? 'bg-rose-50/50 border-rose-200 text-rose-700' 
+                        : shiftInfo 
+                        ? `${shiftInfo.color} border shadow-2xs` 
+                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className={isWeekend ? 'text-rose-600' : 'text-slate-600'}>{day} 日</span>
+                      <span className="text-[9px] opacity-75">{isOff ? '休' : shift?.shift_type}</span>
+                    </div>
+
+                    <div className="my-1 font-black text-xs">
+                      {isOff ? '例休' : shiftInfo?.name || shift?.shift_type}
+                    </div>
+
+                    <div className="text-[9px] truncate opacity-90 font-medium">
+                      {isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}
+                    </div>
+
+                    {shift?.is_labor_violation_override && (
+                      <div className="mt-1">
+                        <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[8px] block shadow-2xs">
+                          ⚠️ 特准實勤 {shift.actual_hours}h
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 我的調班申請單追蹤 */}
       {mySwaps.length > 0 && (

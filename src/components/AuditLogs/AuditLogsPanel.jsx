@@ -8,6 +8,20 @@ export default function AuditLogsPanel({
   const [selectedLog, setSelectedLog] = useState(null);
   const [confirmRollbackLogId, setConfirmRollbackLogId] = useState(null);
 
+  // 回滾紀錄保留規則：最近 10 筆與最近 3 天之紀錄（取兩者較多者）
+  const displayLogs = React.useMemo(() => {
+    if (!auditLogs || auditLogs.length === 0) return [];
+    const now = Date.now();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    const logsInLast3Days = auditLogs.filter(log => {
+      const logTime = new Date(log.timestamp).getTime();
+      return (now - logTime) <= threeDaysMs;
+    });
+
+    const keepCount = Math.max(10, logsInLast3Days.length);
+    return auditLogs.slice(0, keepCount);
+  }, [auditLogs]);
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-8">
       {/* 標題與回滾安全說明 */}
@@ -20,19 +34,19 @@ export default function AuditLogsPanel({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            每一次班表異動強制留存前後高保真 JSON 完整快照 · 支援主管一鍵秒級回滾
+            每一次班表異動強制留存前後高保真 JSON 完整快照 · 支援主管一鍵秒級回滾（保留最近 10 筆或最近 3 天取較多者）
           </p>
         </div>
 
         <div className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-1 rounded-lg font-semibold flex items-center space-x-1.5">
           <ShieldCheck className="w-4 h-4 text-indigo-600" />
-          <span>不可抹滅稽核日誌: 共 {auditLogs.length} 筆</span>
+          <span>不可抹滅稽核日誌: 展示 {displayLogs.length} 筆 / 全量 {auditLogs.length} 筆</span>
         </div>
       </div>
 
       {/* 稽核日誌列表 */}
       <div className="space-y-3 mb-6">
-        {auditLogs.map((log, index) => {
+        {displayLogs.map((log, index) => {
           const isLatest = index === 0;
           const isRollback = log.action_type === 'ROLLBACK';
           const isSwap = log.action_type === 'SHIFT_SWAP';

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, Users, LayoutGrid, Eye, ArrowLeftRight, Clock, FileCheck2, BarChart3, History, Cloud, User, LogOut, CheckCircle2, RotateCw, KeyRound, Scale, Sliders, ShieldCheck, Zap, HeartHandshake, ShieldAlert, Database } from 'lucide-react';
+import { ANNUAL_HOLIDAY_PLANS } from '../data/holidayTransferStore.js';
 
 export default function Header({
   currentUser,
@@ -41,6 +42,55 @@ export default function Header({
     { id: 'FAIRNESS', label: '公平性與AI', icon: BarChart3, show: isManager || isAdmin },
     { id: 'AUDIT_LOGS', label: '稽核回滾', icon: History, show: isManager || isAdmin }
   ];
+
+  // 動態生成當前月與下個月選項（以 new Date() 為基準動態產生，不寫死）
+  const monthOptions = React.useMemo(() => {
+    const now = new Date();
+    const y0 = now.getFullYear();
+    const m0 = now.getMonth() + 1;
+    const m0Str = `${y0}-${String(m0).padStart(2, '0')}`;
+
+    const nextDate = new Date(y0, m0, 1);
+    const y1 = nextDate.getFullYear();
+    const m1 = nextDate.getMonth() + 1;
+    const m1Str = `${y1}-${String(m1).padStart(2, '0')}`;
+
+    const candidates = [m0Str, m1Str];
+
+    if (currentMonth && !candidates.includes(currentMonth)) {
+      candidates.push(currentMonth);
+    }
+    ['2026-09', '2026-10'].forEach(m => {
+      if (!candidates.includes(m)) candidates.push(m);
+    });
+
+    candidates.sort();
+
+    return candidates.map(mStr => {
+      const [yr, mon] = mStr.split('-').map(Number);
+      
+      // SSOT 一致性：優先讀取全年度國假調移計畫中的實排休假天數 (actualOff)
+      const yearPlan = ANNUAL_HOLIDAY_PLANS[String(yr)] || [];
+      const monthPlan = yearPlan.find(p => Number(p.month) === Number(mon));
+      
+      let offDays = monthPlan ? monthPlan.actualOff : null;
+
+      if (offDays === null || offDays === undefined) {
+        const daysInMonth = new Date(yr, mon, 0).getDate();
+        let weekendCount = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayOfWeek = new Date(yr, mon - 1, d).getDay();
+          if (dayOfWeek === 0 || dayOfWeek === 6) weekendCount++;
+        }
+        offDays = weekendCount;
+      }
+
+      return {
+        value: mStr,
+        label: `${yr}/${String(mon).padStart(2, '0')}`
+      };
+    });
+  }, [currentMonth]);
 
   const visibleTabs = allTabs.filter(t => t.show);
 
@@ -150,18 +200,19 @@ export default function Header({
             </button>
           )}
 
-          {/* 月份選擇器 (全員可見) */}
+          {/* 月份選擇器 (全員可見，動態生成當月與下月) */}
           <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200 text-xs">
             <Calendar className="w-3.5 h-3.5 ml-1.5 mr-1 text-slate-500" />
             <select
               value={currentMonth}
               onChange={(e) => onMonthChange(e.target.value)}
-              className="bg-transparent font-medium text-slate-700 text-xs focus:outline-none pr-1 cursor-pointer"
+              className="bg-transparent font-bold text-slate-700 text-xs focus:outline-none pr-1 cursor-pointer"
             >
-              <option value="2026-09">2026/09</option>
-              <option value="2026-10">2026/10</option>
-              <option value="2026-11">2026/11</option>
-              <option value="2026-12">2026/12</option>
+              {monthOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -202,7 +253,7 @@ export default function Header({
                   <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
                     isManager ? 'bg-purple-100 text-purple-700' : isLeader ? 'bg-blue-100 text-blue-700' : isPT ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
                   }`}>
-                    {isManager ? '營運高管' : isLeader ? '站點組長' : isPT ? '計時PT' : '正職'}
+                    {isManager ? 'Manager' : isLeader ? 'Leader' : isPT ? 'PT' : 'Staff'}
                   </span>
                   {isAdmin && (
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400 text-amber-950 font-black shadow-2xs">

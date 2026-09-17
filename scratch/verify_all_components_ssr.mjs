@@ -250,14 +250,15 @@ runScenario('彈窗 7-5: GasConnectionModal Google Sheets 雲端連線彈窗', (
   }));
 });
 
+try {
+  if (fs.existsSync(bundleFile)) {
+    fs.unlinkSync(bundleFile);
+  }
+} catch (e) {}
+
 console.log(`\n=== 驗證結果總結: ${passedTests}/${totalTests} 通過，${failedTests} 個失敗 ===`);
 if (failedTests > 0) {
   process.exit(1);
 } else {
   console.log('🎉 所有 21 大情境（包含 6 大初始/身分情境 ＋ 11 大主功能頁 ＋ 5 大彈窗）均通過 SSR 渲染檢驗，0 錯誤！');
-}
-if (failedTests > 0) {
-  process.exit(1);
-} else {
-  console.log('🎉 所有情境均通過 SSR 渲染檢驗，0 錯誤！');
 }

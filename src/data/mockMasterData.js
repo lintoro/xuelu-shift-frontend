@@ -20,8 +20,8 @@ export const STATIONS = [
     station_id: 'ST_SERVICE',
     station_name: '服務台',
     leader_emp_id: 'B112001', // 李俐旻
-    min_staff_weekday: 2,
-    min_staff_weekend: 4,
+    min_staff_weekday: 3,
+    min_staff_weekend: 5,
     requires_solo_staff: true,
     requires_closing_shift: true,
     closing_min_staff: 1,
