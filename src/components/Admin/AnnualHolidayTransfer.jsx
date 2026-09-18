@@ -79,11 +79,14 @@ export default function AnnualHolidayTransfer({
     const dutyList = [];
 
     employees.forEach(emp => {
+      const isEmpManager = !!emp.is_self_scheduled || emp.role === 'Manager';
       const consentInfo = checkEmployeeHolidayConsent({
         empId: emp.emp_id,
         yearMonth: currentMonth,
         scheduleMap,
-        consentsMap: holidayConsents
+        consentsMap: holidayConsents,
+        isPt: emp.role === 'PT',
+        isManager: isEmpManager
       });
 
       if (consentInfo.required) {

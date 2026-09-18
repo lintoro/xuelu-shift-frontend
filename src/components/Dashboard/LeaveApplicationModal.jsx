@@ -43,6 +43,7 @@ export default function LeaveApplicationModal({
   const [selectedLeaveType, setSelectedLeaveType] = useState('AL'); // AL, CT, PERSONAL (病假已依規排除事前申請)
   const [reason, setReason] = useState('個人家庭重要事務');
   const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 判定選定日期前後連續特休天數 (用於階梯預告期計算)
   const consecutiveAlDays = useMemo(() => {
@@ -117,6 +118,7 @@ export default function LeaveApplicationModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!balanceCheck.isValid) return;
 
     if (availableFutureWorkDays.length === 0) {
@@ -124,6 +126,7 @@ export default function LeaveApplicationModal({
       return;
     }
 
+    setIsSubmitting(true);
     const targetDayInfo = availableFutureWorkDays.find(d => d.day === Number(selectedDay));
     const newApp = {
       app_id: `LA_${Date.now()}_${currentUser.emp_id}`,
@@ -141,6 +144,9 @@ export default function LeaveApplicationModal({
     };
 
     onSubmitLeaveApplication(newApp);
+    setIsSubmitting(false);
+
+    alert(`✅ 請假申請單已成功送出！\n\n【申請單號】：${newApp.app_id}\n【請假同仁】：${currentUser.name}\n【請假日期】：${newApp.date}\n【請假假別】：${newApp.leave_type === 'AL' ? '特休' : newApp.leave_type === 'CT' ? '補休' : '事假'}\n【目前進程】：已正式呈報站點組長進行第一階初審，初審通過後由經理終審生效！`);
     onClose();
   };
 
@@ -301,15 +307,15 @@ export default function LeaveApplicationModal({
             </button>
             <button
               type="submit"
-              disabled={!balanceCheck.isValid || availableFutureWorkDays.length === 0}
+              disabled={!balanceCheck.isValid || availableFutureWorkDays.length === 0 || isSubmitting}
               className={`flex items-center space-x-1.5 px-5 py-2 rounded-lg text-white font-bold text-xs shadow-xs transition-all ${
-                balanceCheck.isValid && availableFutureWorkDays.length > 0
+                balanceCheck.isValid && availableFutureWorkDays.length > 0 && !isSubmitting
                   ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer active:scale-95'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
               <Send className="w-3.5 h-3.5" />
-              <span>送出二重核可請假單</span>
+              <span>{isSubmitting ? '送出申請中...' : '送出二重核可請假單'}</span>
             </button>
           </div>
         </form>

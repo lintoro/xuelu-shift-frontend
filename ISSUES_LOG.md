@@ -1177,3 +1177,353 @@
      - 分頁 1：`👥 在勤同仁名冊 (在職中)`（主要工作區，只顯示 Active 同仁）。
      - 分頁 2：`📁 離退與非在勤封存區`（收錄離職、留停、長病假人員，支援隨時切回 `Active` 一鍵復職）。
   3. 排班引擎與大表僅納入在勤同仁，排班更聚焦、表格更清爽。
+
+### 📌 [待辦需求 #039] 全系統 14 大假別代碼全面正規化 (Normalization SSOT) 與排班大表/公平性面板圖示膠囊補齊
+
+- **來源反饋**：主管於「公平性與AI」及「排班大表」驗收時指出：
+  - 白曉函（B115019）與柯又溱（B113083）有請喪假（FL），但「公平性與AI」面板中直接印出英文代碼 `FUNERAL_LEAVE:2` 與 `FUNERAL_LEAVE:1`，未以中文標籤呈現，且排班大表未正確帶出色塊膠囊與圖示。
+  - 主管指示：**「同樣的假的問題，請全部核對目前還沒測出來遇到的，是否有一樣的問題及還沒設定如何表示，都要一併處理記錄起來先」**。
+- **全系統 14 大法定假勤與班別完整盤點標準表 (Master Leave Matrix)**：
+
+  | 假別代碼 (Standard Code) | 中文名稱 | 膠囊標籤 | 樣式配色 (Color Scheme) | 英文全稱與常見別名 (Aliases to Normalize) |
+  | :--- | :--- | :---: | :--- | :--- |
+  | **OFF** | 常態休假 | **休** | `bg-rose-100 text-rose-700 border-rose-200` | `OFF`, `休`, `常態休` |
+  | **REG_OFF** | 法定例假 | **例** | `bg-rose-600 text-white font-black border-rose-700` | `REG_OFF`, `例`, `例假`, `法定例假`, `REGULAR_OFF` |
+  | **REST_OFF** | 休息日輪休 | **休** | `bg-rose-100 text-rose-700 border-rose-200` | `REST_OFF`, `休`, `休息日`, `REST_DAY` |
+  | **HOLIDAY_OFF** | 國定假日 | **國** | `bg-red-500 text-white font-black border-red-600` | `HOLIDAY_OFF`, `國`, `國假`, `國定假日`, `NATIONAL_HOLIDAY` |
+  | **AL** | 特別休假 | **特** | `bg-amber-100 text-amber-800 border-amber-300` | `AL`, `特`, `特休`, `特別休假`, `ANNUAL_LEAVE` |
+  | **CT** | 補休 | **補** | `bg-purple-100 text-purple-800 border-purple-300` | `CT`, `補`, `補休`, `COMP_TIME`, `COMPENSATION_TIME` |
+  | **SL** | 普通傷病假 | **病** | `bg-orange-100 text-orange-800 border-orange-300` | `SL`, `病`, `病假`, `傷病假`, `SICK_LEAVE` |
+  | **PL** | 事假 | **事** | `bg-slate-200 text-slate-800 border-slate-300` | `PL`, `事`, `事假`, `PERSONAL_LEAVE` |
+  | **ML** | 婚假 | **婚** | `bg-pink-100 text-pink-700 border-pink-300` | `ML`, `婚`, `婚假`, `MARRIAGE_LEAVE` |
+  | **FL** | 喪假 | **喪** | `bg-stone-200 text-stone-800 border-stone-300` | `FL`, `喪`, `喪假`, `FUNERAL_LEAVE` |
+  | **MAT** | 產假/陪產假 | **產** | `bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300` | `MAT`, `產`, `產假`, `陪產假`, `MATERNITY_LEAVE`, `PATERNITY_LEAVE` |
+  | **CL** | 公假 | **公** | `bg-cyan-100 text-cyan-800 border-cyan-300` | `CL`, `公`, `公假`, `CIVIL_LEAVE`, `OFFICIAL_LEAVE`, `PUBLIC_LEAVE` |
+  | **PRE_HIRE_OFF** | 未到職真空 | **未** | `bg-slate-100 text-slate-400 border-dashed border-slate-300` | `PRE_HIRE_OFF`, `未`, `未到職`, `PRE_HIRE` |
+  | **TERM_OFF** | 離退銷假真空 | **空** | `bg-slate-200 text-slate-500` | `TERM_OFF`, `空`, `離退`, `TERMINATION_OFF` |
+
+- **根本原因深度排查**：
+  1. **別名未納入非出勤判定清單**：`NON_WORKING_CODES` 原僅列出 2 碼簡稱，當資料庫存在 `FUNERAL_LEAVE`、`ANNUAL_LEAVE`、`SICK_LEAVE` 等全稱時，`isWorkingShift()` 誤判為出勤，導致公平性面板將請假當成出勤統計。
+  2. **大表與面板缺乏全域代碼正規化閘門**：前端各模組在解構班表代碼時未調用統一的正規化字典，造成遇到非標準簡寫時無法套用中文色塊膠囊。
+- **預計修復方案**：
+  1. **在 `src/types/scheduler.js` 建立核心 `normalizeShiftCode(code)` 工具函式**：建立完整雙向映射表，將所有別名與中文自動統一正規化為官方標準代碼。
+  2. **重構 `isWorkingShift` 與 `isOffShift`**：底層一律先經 `normalizeShiftCode` 再進行非工判定，杜絕任何假別被誤計為上班。
+  3. **排班大表 (`ScheduleTable.jsx`) 與公平性面板 (`FairnessMetricsPanel.jsx`) 全量導入**：
+     - 喪假一律呈現石灰色「**喪**」字膠囊。
+     - 公平性面板全班別分佈只統計真實出勤班別（A/B/C/D 等），所有法定請假（AL/CT/SL/PL/ML/FL/MAT/CL）精確歸類於特休、補休與其它假別欄位。
+  4. **實勤覆核 (`ActualHoursOverride.jsx`) 假別選項對齊**：統一採用標準代碼 `FL`（喪假）。
+- **影響檔案清單**：
+  - `src/types/scheduler.js`
+  - `src/components/Fairness/FairnessMetricsPanel.jsx`
+  - `src/components/ScheduleTable.jsx`
+  - `src/components/WorkHours/ActualHoursOverride.jsx`
+  - `src/data/septemberScheduleData.js`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-leave-normalization-ssot-delivered)`
+
+---
+
+### 📌 [需求 #040] 國定假日調移簽認看板排除高階主管「自主填寫空白」之錯誤物件碼與名冊過濾
+
+- **來源反饋**：主管於「國定假日調移（AnnualHolidayTransfer.jsx）」面板驗收時指出：
+  - 白慧真、張舒扉、劉宗哲、林錦達等營運高階主管（Manager / `is_self_scheduled: true`），在 2026/10 月國慶日出現錯誤字串：`[({work_hours=0.0, station_id=null, is_support=false, shift_type=null, note=高階主管自主填寫})班]`。
+  - 主管指示：**「因為高管自主填寫目前空白，所以出現錯誤碼，請移除不要顯示，等高管自行排訂再秀」**。
+- **根本原因深度排查**：
+  1. **高管自主填寫初值為 Object 或佔位字串**：
+     - 排班引擎為高管產生之初值包含 `{ shift_type: null, note: '高階主管自主填寫' }`，或試算表存入之物件字串化文字。
+  2. **`checkEmployeeHolidayConsent` 未排除高管空白狀態**：
+     - 當 `shift` 為上述字串時，`isWorkingShift()` 誤將其視為非空出勤，將整段文字當作 `shiftCode` 塞入 `h.shiftCode`，並在畫面上渲染出 `[({work_hours=0.0...})班]`。
+     - 高管本屬自主填寫，在尚未排定確定有效出勤班別（如 A/B/C/D）之前，本就不應列入國定假日出勤調移簽署名冊。
+- **預計修復方案**：
+  1. **強化 `checkEmployeeHolidayConsent`（`holidayTransferStore.js`）**：
+     - 增加過濾條件：凡高階主管（`emp.is_self_scheduled` 或 `emp.role === 'Manager'`），若當日班別為 `null`、留白、或未排定真實有效出勤班別，**一律不列入國定假日出勤調移名冊**！
+     - 僅當主管「已自行排定出勤班別（A/B/C/D）」時，才納入調移簽認名冊。
+  2. **物件解析防呆與字串清理**：
+     - 若 `shift` 包含 `高階主管自主填寫` 或非標準格式字串，一律正規化為 `null`（空白），杜絕任何物件屬性文字外洩於前端介面。
+- **影響檔案清單**：
+  - `src/data/holidayTransferStore.js`
+  - `src/components/Admin/AnnualHolidayTransfer.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-holiday-consent-manager-blank-excluded)`
+
+---
+
+### 📌 [需求 #041] 主管自主排班快速通道「選項 3：清空本人班表」修復為真實空值（留白）而非全填 OFF
+
+- **來源反饋**：主管於排班大表使用「自填本人班表」功能時指出：
+  - 選項 3 雖然說明為「清空本人班表 (重設為留白)」，結果執行後卻全部填入 `OFF` 變成整月全排休。
+  - 主管指示：**「請改成正確的清成空值」**。
+- **根本原因深度排查**：
+  - `ScheduleTable.jsx` 中 `fillChoice === '3'` 的處理邏輯錯誤寫成了 `assignedCode = 'OFF'`，導致透過微調管線將整月覆寫為 `OFF`（休假）。
+  - 主管自主填寫之空白初值應為 `null` 或空字串（前端大表判定 `isEmpManager && !effectiveCode` 時呈現「**留白**」），而非 `OFF`（休）。
+- **預計修復方案**：
+  1. **修正選項 3 賦值**：
+     - 將 `ScheduleTable.jsx` 中 `fillChoice === '3'` 的賦值由 `'OFF'` 改為 `null`。
+  2. **覆寫層清理與狀態重置**：
+     - 當選擇清空本人班表時，發送 `new_shift: null`，`App.jsx` 的 `handleSaveAdjustment` 直接 `delete empMap[adj.day]` 徹底抹除當日覆寫，讓大表完美還原為高管初始之「留白」狀態。
+- **影響檔案清單**：
+  - `src/components/ScheduleTable.jsx`
+  - `src/App.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-manager-self-schedule-null-blank-delivered)`
+
+---
+
+### 📌 [需求 #042] 個人工作台（MyDashboard）14 大假別精準渲染（喪假 FL 正確呈現）與休假日移除 0h 顯示
+
+- **來源反饋**：主管於個人工作台（MyDashboard）查驗時指出：
+  1. 白曉函（B115019，9/16, 9/22）與柯又溱（B113083，9/13）有請喪假（FL），但工作台 9 月班表並沒有出現「喪」，反而顯示為「休息日」。
+  2. 休假日下方站點會顯示 `0h`，同仁希望不顯示。
+- **根本原因深度排查**：
+  1. **工作台未導入代碼正規化**：`MyDashboard.jsx` 原直接以 `['AL', ...].includes(shiftType)` 判定請假，未經 `normalizeShiftCode()`，導致資料庫或歷史資料之 `FUNERAL_LEAVE` 無法命中 `FL`，退回預設值顯示為「休 / 休息日」。
+  2. **缺少專屬 14 大假別視覺分支**：工作台對請假僅取首字 `shiftInfo?.name?.slice(0, 1)`，若 localStorage 舊快取無 `FL` 定義則退回「假」且樣式為黃色，未呈現標準石灰「喪」膠囊。
+  3. **硬編碼 0h**：原程式在月曆格底部寫入 `{isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}`，只要判定為休假即固定輸出字串 `'0h'`。
+- **具體修復方案**：
+  1. **導入全系統代碼正規化（`normalizeShiftCode`）**：
+     - 在 `MyDashboard.jsx` 引入 `normalizeShiftCode`，無論資料庫傳入 `FL`、`FUNERAL_LEAVE` 或是 `喪`，一律正規化為標準代碼 `FL`。
+     - 在頂端個人統計迴圈（`myWorkDays`, `myOffDays`, `myTotalHours`）同步正規化，確保喪假不誤計入出勤工時。
+  2. **對齊 14 大法定假別精緻色塊與角標**：
+     - `FL`（喪假）：角標「**喪**」、標題「**喪假**」、配色 `bg-stone-100 border-stone-300 text-stone-800 font-bold`、角標色彩 `bg-stone-600 text-white font-black`。
+- **來源反饋**：讀取外部試算表 9 月全月資料，將全館 38 位同仁完整排班資料入庫，並比對月尾最後 6 天出勤狀況，建立 10 月跨月連續出勤邊界（`Month_Borders`）。
+- **關鍵技術坑點與防錯防線 (寫入 AGENTS.md 守則)**：
+  1. **人事真實性鐵律**：營運處核心主管（陳鵬宇、白慧真、張舒扉、劉宗哲、林錦達、戴晉弘等）在組織中為實質營運主管（`Manager` / `is_self_scheduled: true`），高管之所以留白係因資料庫為空值，只要資料庫有排班即可 100% 正常出色塊，嚴禁為了排班顯示而隨意降轉主管為基層 Staff。
+  2. **Google Sheets 日期物件型別正規化 (`normalizeYm`)**：Google Sheets 會自動將 `2026-09` 轉換為 Date 物件，後端必須使用全域 `normalizeYm(val)` 進行字串切齊比對，徹底防止查詢回傳 `{}` 或刪除舊資料失敗。
+  3. **防覆蓋讀取組裝 (`ScheduleMap Aggregation Safety`)**：多列覆寫讀取時，僅非空班別才寫入，確保有效資料不被空列意外沖銷。
+- **修復方案實作**：
+  1. 撰寫解析腳本精確轉換 9 月 38 位同仁排班資料至 `src/data/septemberScheduleData.js`。
+  2. Google Apps Script 後端（`Code.gs`）擴充 `admin.directImportSept` API，完成 38 位同仁 `Schedules` 與 `Month_Borders`（2026-10 銜接）全量入庫。
+- **影響檔案清單**：
+  - `src/data/septemberScheduleData.js`
+  - `src/backend/Code.gs`
+  - `AGENTS.md`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.7-sept-direct-import-and-border-delivered)`
+
+---
+
+### 📌 [需求 #037] 新增未到職真空 (PRE_HIRE_OFF) 與發布鎖定下新進人員專屬排班通道
+
+- **來源反饋**：外部試算表新增林家萱、何弈潔班表，戴晉弘（9/7 到職）與何弈潔（9/7 到職）因 9 月中途到職，9/1~9/6 尚未報到並非休假（`OFF`）。且全館班表發布後已進入鎖定，需設計主管為新進同仁安排班表之專屬通道。
+- **功能規劃與架構實作**：
+  1. **假勤架構擴充 `PRE_HIRE_OFF`（未到職真空）**：
+     - 在 `scheduler.js` 與 `Code.gs` 定義 `PRE_HIRE_OFF`（標籤「**未**」），底色為灰色虛線邊框膠囊。
+     - **不計入工時、不計入休假天數**，防止統計失真與勞基法合規誤判。
+  2. **到職日前自動真空防呆**：
+     - 在 `ScheduleTable.jsx` 中，凡日期早於同仁之到職日（`emp.hire_date`），系統一律自動將其鎖定並呈現為「未到職（未）」，點擊時跳出防呆警示，禁止安排勤務。
+  3. **已發布鎖定狀態下之新進同仁專屬排班通道**：
+     - 在 `canEditEmployeeCell(emp, day)` 中建立特許通道：當處於 `PUBLISHED_LOCKED` 階段時，**特許營運主管（Manager）為當月新進同仁在到職日當天及之後安排班表**！
+     - 微調彈窗新增「未到職真空」假別與快捷原因「新進同仁到職排班」。
+  4. **後端微服務部署與雲端資料更新**：
+     - `Code.gs` 補齊 `PRE_HIRE_OFF` 與 `HOLIDAY_OFF` 非工過濾與預設假別，通過 AST 語法檢驗後部署至版本 `@18`。
+     - 完成 38 位同仁（含戴晉弘、何弈潔、林家萱）最新班表與 10 月邊界寫入 Google Sheets。
+- **影響檔案清單**：
+  - `src/types/scheduler.js`
+  - `src/components/ScheduleTable.jsx`
+  - `src/backend/Code.gs`
+  - `src/data/septemberScheduleData.js`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.8-pre-hire-off-and-new-hire-channel-delivered)`
+
+---
+
+### 📌 [需求 #038] 頂部月份選單格式精簡、2026/11 休假總算動態化與方洲算理簡化
+
+- **來源反饋**：
+  1. 上方下拉選單 `2026/10(休11天)` 改格式，僅留 `2026/10` 即可，休幾日不用顯示。
+  2. 全館劃休配額與法規下，全月休假總算 `2026/11` 應為 11 天而非 10 天，排查是否寫死。
+  3. 方洲算理只留「平日閉店時間」下拉選單，因假日營業至 19:00 超時由閉店班人員直接報加班即可，不用排班系統控制；平日延長時間以當月份為期限制。
+- **根本原因深度排查**：
+  1. `Header.jsx` 的 `<option>` 標籤中固定寫死了 `(休10天)`、`(休11天)` 字串。
+  2. `DEFAULT_MONTHLY_RULES.required_off_days` 全域寫死為 `10`（9月的數值），切換月份時若無自訂規則一律回退至寫死的 10 天。且 `holidayTransferStore.js` 中 11 月法定應休誤記為 8 天（漏算 1 天週日，實為 9 天例休），導致加上春節還假 2 天後被誤算為 10 天。
+  3. `MonthlyRulesModal.jsx` 同時呈現平日與假日兩個閉店選單，但假日閉店固定且超時走現場加班，排班系統無須重複控制。
+- **修復方案實作**：
+  1. **頂部選單格式精簡**：
+     - `Header.jsx` 選單移除 `(休XX天)`，格式統一精簡為純 `YYYY/MM`（`2026/09`、`2026/10`、`2026/11`、`2026/12`）。
+  2. **11 月休假總算精確修正與動態月份對齊機制**：
+     - `holidayTransferStore.js` 修正 11 月資料為 `statutoryOff: 9, transferOffset: 2, actualOff: 11`，實排應休正式對齊 **11 天**；校正 12 月天數，全年度法定 120 天 = 實排 120 天，調移淨額 0d 保持 100% 完全平帳。
+     - 建立 `getMonthActualOffDays(yearMonth)` 函式，`App.jsx` 的 `currentRules` 改由年月動態計算當月天數與法定應休天數，徹底消除寫死 10 天問題。
+     - `MonthlyRulesModal.jsx` 增加 `useEffect` 同步，當切換至 `2026/11` 時，全月法定應休總天數即時精準帶出 **11 天**。
+  3. **方洲算理簡化與期限制落地**：
+     - 移除「假日閉店時間」下拉選單。
+     - 保留單一「平日閉店時間」下拉選單（18:00 常態 / 19:00 暑期延時），以當月份為獨立設定範圍（存於 `monthlyCustomRules[currentMonth]`），暑期 7/8 月設定僅在該月生效，9 月開學後自動回歸常態 18:00，天然具備期限制且完全不干擾排班引擎核心演算法。
+- **影響檔案清單**：
+  - `src/components/Header.jsx`
+  - `src/data/holidayTransferStore.js`
+  - `src/App.jsx`
+  - `src/components/Admin/MonthlyRulesModal.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.5.9-header-clean-and-nov-off-days-fix-delivered)`
+
+---
+
+## 📝 累積待辦需求清單 (Backlog - 待主管指示開工)
+
+### 📌 [待辦需求 #033] 頂部【排班營運規則總控】彈窗整合（方案 B）
+- **功能規劃**：
+  1. 將頂部紫色按鈕 `【劃休限制設定】` 升級為 `【排班營運規則設定】` 雙頁籤 Modal：
+     - 分頁 1：全館劃休配額與法定天數設定（現有功能）。
+     - 分頁 2：9 大組別「平日最少出勤人數」、「假日最少出勤人數」與「當月排班組長」一站式設定。
+  2. 將「各組組長選派」從人事管理面板抽出，整合至此處。
+  3. 平假日最少人數直接連動自動排班引擎（`schedulerEngine.js` 目標人數）與合規三級燈號（`complianceValidator.js`）。
+
+### 📌 [待辦需求 #034] 人事管理「離退與非在勤封存專區」＋「留停/長病狀態擴充與一鍵復職」
+- **功能規劃**：
+  1. 擴充同仁 `status` 生命週期屬性：
+     - `Active`（在職中 · 主要工作區）
+     - `Suspended`（留職停薪 · 暫停排班）
+     - `MedicalLeave`（長期病假休養 · 暫停排班）
+     - `Resigned`（離退職 · 歷史銷假真空）
+  2. 人事管理介面設計分頁切換：
+     - 分頁 1：`👥 在勤同仁名冊 (在職中)`（主要工作區，只顯示 Active 同仁）。
+     - 分頁 2：`📁 離退與非在勤封存區`（收錄離職、留停、長病假人員，支援隨時切回 `Active` 一鍵復職）。
+  3. 排班引擎與大表僅納入在勤同仁，排班更聚焦、表格更清爽。
+
+### 📌 [待辦需求 #039] 全系統 14 大假別代碼全面正規化 (Normalization SSOT) 與排班大表/公平性面板圖示膠囊補齊
+
+- **來源反饋**：主管於「公平性與AI」及「排班大表」驗收時指出：
+  - 白曉函（B115019）與柯又溱（B113083）有請喪假（FL），但「公平性與AI」面板中直接印出英文代碼 `FUNERAL_LEAVE:2` 與 `FUNERAL_LEAVE:1`，未以中文標籤呈現，且排班大表未正確帶出色塊膠囊與圖示。
+  - 主管指示：**「同樣的假的問題，請全部核對目前還沒測出來遇到的，是否有一樣的問題及還沒設定如何表示，都要一併處理記錄起來先」**。
+- **全系統 14 大法定假勤與班別完整盤點標準表 (Master Leave Matrix)**：
+
+  | 假別代碼 (Standard Code) | 中文名稱 | 膠囊標籤 | 樣式配色 (Color Scheme) | 英文全稱與常見別名 (Aliases to Normalize) |
+  | :--- | :--- | :---: | :--- | :--- |
+  | **OFF** | 常態休假 | **休** | `bg-rose-100 text-rose-700 border-rose-200` | `OFF`, `休`, `常態休` |
+  | **REG_OFF** | 法定例假 | **例** | `bg-rose-600 text-white font-black border-rose-700` | `REG_OFF`, `例`, `例假`, `法定例假`, `REGULAR_OFF` |
+  | **REST_OFF** | 休息日輪休 | **休** | `bg-rose-100 text-rose-700 border-rose-200` | `REST_OFF`, `休`, `休息日`, `REST_DAY` |
+  | **HOLIDAY_OFF** | 國定假日 | **國** | `bg-red-500 text-white font-black border-red-600` | `HOLIDAY_OFF`, `國`, `國假`, `國定假日`, `NATIONAL_HOLIDAY` |
+  | **AL** | 特別休假 | **特** | `bg-amber-100 text-amber-800 border-amber-300` | `AL`, `特`, `特休`, `特別休假`, `ANNUAL_LEAVE` |
+  | **CT** | 補休 | **補** | `bg-purple-100 text-purple-800 border-purple-300` | `CT`, `補`, `補休`, `COMP_TIME`, `COMPENSATION_TIME` |
+  | **SL** | 普通傷病假 | **病** | `bg-orange-100 text-orange-800 border-orange-300` | `SL`, `病`, `病假`, `傷病假`, `SICK_LEAVE` |
+  | **PL** | 事假 | **事** | `bg-slate-200 text-slate-800 border-slate-300` | `PL`, `事`, `事假`, `PERSONAL_LEAVE` |
+  | **ML** | 婚假 | **婚** | `bg-pink-100 text-pink-700 border-pink-300` | `ML`, `婚`, `婚假`, `MARRIAGE_LEAVE` |
+  | **FL** | 喪假 | **喪** | `bg-stone-200 text-stone-800 border-stone-300` | `FL`, `喪`, `喪假`, `FUNERAL_LEAVE` |
+  | **MAT** | 產假/陪產假 | **產** | `bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300` | `MAT`, `產`, `產假`, `陪產假`, `MATERNITY_LEAVE`, `PATERNITY_LEAVE` |
+  | **CL** | 公假 | **公** | `bg-cyan-100 text-cyan-800 border-cyan-300` | `CL`, `公`, `公假`, `CIVIL_LEAVE`, `OFFICIAL_LEAVE`, `PUBLIC_LEAVE` |
+  | **PRE_HIRE_OFF** | 未到職真空 | **未** | `bg-slate-100 text-slate-400 border-dashed border-slate-300` | `PRE_HIRE_OFF`, `未`, `未到職`, `PRE_HIRE` |
+  | **TERM_OFF** | 離退銷假真空 | **空** | `bg-slate-200 text-slate-500` | `TERM_OFF`, `空`, `離退`, `TERMINATION_OFF` |
+
+- **根本原因深度排查**：
+  1. **別名未納入非出勤判定清單**：`NON_WORKING_CODES` 原僅列出 2 碼簡稱，當資料庫存在 `FUNERAL_LEAVE`、`ANNUAL_LEAVE`、`SICK_LEAVE` 等全稱時，`isWorkingShift()` 誤判為出勤，導致公平性面板將請假當成出勤統計。
+  2. **大表與面板缺乏全域代碼正規化閘門**：前端各模組在解構班表代碼時未調用統一的正規化字典，造成遇到非標準簡寫時無法套用中文色塊膠囊。
+- **預計修復方案**：
+  1. **在 `src/types/scheduler.js` 建立核心 `normalizeShiftCode(code)` 工具函式**：建立完整雙向映射表，將所有別名與中文自動統一正規化為官方標準代碼。
+  2. **重構 `isWorkingShift` 與 `isOffShift`**：底層一律先經 `normalizeShiftCode` 再進行非工判定，杜絕任何假別被誤計為上班。
+  3. **排班大表 (`ScheduleTable.jsx`) 與公平性面板 (`FairnessMetricsPanel.jsx`) 全量導入**：
+     - 喪假一律呈現石灰色「**喪**」字膠囊。
+     - 公平性面板全班別分佈只統計真實出勤班別（A/B/C/D 等），所有法定請假（AL/CT/SL/PL/ML/FL/MAT/CL）精確歸類於特休、補休與其它假別欄位。
+  4. **實勤覆核 (`ActualHoursOverride.jsx`) 假別選項對齊**：統一採用標準代碼 `FL`（喪假）。
+- **影響檔案清單**：
+  - `src/types/scheduler.js`
+  - `src/components/Fairness/FairnessMetricsPanel.jsx`
+  - `src/components/ScheduleTable.jsx`
+  - `src/components/WorkHours/ActualHoursOverride.jsx`
+  - `src/data/septemberScheduleData.js`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-leave-normalization-ssot-delivered)`
+
+---
+
+### 📌 [需求 #040] 國定假日調移簽認看板排除高階主管「自主填寫空白」之錯誤物件碼與名冊過濾
+
+- **來源反饋**：主管於「國定假日調移（AnnualHolidayTransfer.jsx）」面板驗收時指出：
+  - 白慧真、張舒扉、劉宗哲、林錦達等營運高階主管（Manager / `is_self_scheduled: true`），在 2026/10 月國慶日出現錯誤字串：`[({work_hours=0.0, station_id=null, is_support=false, shift_type=null, note=高階主管自主填寫})班]`。
+  - 主管指示：**「因為高管自主填寫目前空白，所以出現錯誤碼，請移除不要顯示，等高管自行排訂再秀」**。
+- **根本原因深度排查**：
+  1. **高管自主填寫初值為 Object 或佔位字串**：
+     - 排班引擎為高管產生之初值包含 `{ shift_type: null, note: '高階主管自主填寫' }`，或試算表存入之物件字串化文字。
+  2. **`checkEmployeeHolidayConsent` 未排除高管空白狀態**：
+     - 當 `shift` 為上述字串時，`isWorkingShift()` 誤將其視為非空出勤，將整段文字當作 `shiftCode` 塞入 `h.shiftCode`，並在畫面上渲染出 `[({work_hours=0.0...})班]`。
+     - 高管本屬自主填寫，在尚未排定確定有效出勤班別（如 A/B/C/D）之前，本就不應列入國定假日出勤調移簽署名冊。
+- **預計修復方案**：
+  1. **強化 `checkEmployeeHolidayConsent`（`holidayTransferStore.js`）**：
+     - 增加過濾條件：凡高階主管（`emp.is_self_scheduled` 或 `emp.role === 'Manager'`），若當日班別為 `null`、留白、或未排定真實有效出勤班別，**一律不列入國定假日出勤調移名冊**！
+     - 僅當主管「已自行排定出勤班別（A/B/C/D）」時，才納入調移簽認名冊。
+  2. **物件解析防呆與字串清理**：
+     - 若 `shift` 包含 `高階主管自主填寫` 或非標準格式字串，一律正規化為 `null`（空白），杜絕任何物件屬性文字外洩於前端介面。
+- **影響檔案清單**：
+  - `src/data/holidayTransferStore.js`
+  - `src/components/Admin/AnnualHolidayTransfer.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-holiday-consent-manager-blank-excluded)`
+
+---
+
+### 📌 [需求 #041] 主管自主排班快速通道「選項 3：清空本人班表」修復為真實空值（留白）而非全填 OFF
+
+- **來源反饋**：主管於排班大表使用「自填本人班表」功能時指出：
+  - 選項 3 雖然說明為「清空本人班表 (重設為留白)」，結果執行後卻全部填入 `OFF` 變成整月全排休。
+  - 主管指示：**「請改成正確的清成空值」**。
+- **根本原因深度排查**：
+  - `ScheduleTable.jsx` 中 `fillChoice === '3'` 的處理邏輯錯誤寫成了 `assignedCode = 'OFF'`，導致透過微調管線將整月覆寫為 `OFF`（休假）。
+  - 主管自主填寫之空白初值應為 `null` 或空字串（前端大表判定 `isEmpManager && !effectiveCode` 時呈現「**留白**」），而非 `OFF`（休）。
+- **預計修復方案**：
+  1. **修正選項 3 賦值**：
+     - 將 `ScheduleTable.jsx` 中 `fillChoice === '3'` 的賦值由 `'OFF'` 改為 `null`。
+  2. **覆寫層清理與狀態重置**：
+     - 當選擇清空本人班表時，發送 `new_shift: null`，`App.jsx` 的 `handleSaveAdjustment` 直接 `delete empMap[adj.day]` 徹底抹除當日覆寫，讓大表完美還原為高管初始之「留白」狀態。
+- **影響檔案清單**：
+  - `src/components/ScheduleTable.jsx`
+  - `src/App.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-manager-self-schedule-null-blank-delivered)`
+
+---
+
+### 📌 [需求 #042] 個人工作台（MyDashboard）14 大假別精準渲染（喪假 FL 正確呈現）與休假日移除 0h 顯示
+
+- **來源反饋**：主管於個人工作台（MyDashboard）查驗時指出：
+  1. 白曉函（B115019，9/16, 9/22）與柯又溱（B113083，9/13）有請喪假（FL），但工作台 9 月班表並沒有出現「喪」，反而顯示為「休息日」。
+  2. 休假日下方站點會顯示 `0h`，同仁希望不顯示。
+- **根本原因深度排查**：
+  1. **工作台未導入代碼正規化**：`MyDashboard.jsx` 原直接以 `['AL', ...].includes(shiftType)` 判定請假，未經 `normalizeShiftCode()`，導致資料庫或歷史資料之 `FUNERAL_LEAVE` 無法命中 `FL`，退回預設值顯示為「休 / 休息日」。
+  2. **缺少專屬 14 大假別視覺分支**：工作台對請假僅取首字 `shiftInfo?.name?.slice(0, 1)`，若 localStorage 舊快取無 `FL` 定義則退回「假」且樣式為黃色，未呈現標準石灰「喪」膠囊。
+  3. **硬編碼 0h**：原程式在月曆格底部寫入 `{isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}`，只要判定為休假即固定輸出字串 `'0h'`。
+- **具體修復方案**：
+  1. **導入全系統代碼正規化（`normalizeShiftCode`）**：
+     - 在 `MyDashboard.jsx` 引入 `normalizeShiftCode`，無論資料庫傳入 `FL`、`FUNERAL_LEAVE` 或是 `喪`，一律正規化為標準代碼 `FL`。
+     - 在頂端個人統計迴圈（`myWorkDays`, `myOffDays`, `myTotalHours`）同步正規化，確保喪假不誤計入出勤工時。
+  2. **對齊 14 大法定假別精緻色塊與角標**：
+     - `FL`（喪假）：角標「**喪**」、標題「**喪假**」、配色 `bg-stone-100 border-stone-300 text-stone-800 font-bold`、角標色彩 `bg-stone-600 text-white font-black`。
+     - 完整覆蓋 `AL`（特）、`CT`（補）、`SL`（病）、`PL`（事）、`ML`（婚）、`MAT`（產）、`CL`（公）。
+  3. **徹底移除休假日 `0h` 顯示**：
+     - 將底部資訊調整為 `{isOff ? '' : (stationMap[shift?.station_id] || shift?.station_id || '')}`。
+     - 所有非出勤日（例、休、國、各類請假、未到職）下方徹底留白，乾淨清爽，僅出勤班別顯示值勤站點名稱。
+- **影響檔案清單**：
+  - `src/components/Dashboard/MyDashboard.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-dashboard-leave-fl-and-hide-0h-delivered)`
+
+---
+
+### 📌 [需求 #043] 線上調班台灣時區校準、防重複送單與送出確認、基層隱藏二階核決中心、組長權限嚴格分立、衝突透視面版肅清假資料與動態月份
+
+- **來源反饋**：主管於查驗線上調班門戶與衝突透視面板時指示：
+  1. 廖秀如申請調班時間顯示不對（`2026-09-18 17:13`，落後 8 小時），非台灣時區（應為 `2026-09-19 01:13`）。
+  2. 申請送出缺乏「申請已完成」顯著成功提示，且未檔重複申請，導致同仁連按兩次產生兩筆相同待審單。
+  3. 基層同仁不應該看到「二階核決簽核進度中心」模塊，必須徹底拿掉。
+  4. 廖秀如（清潔組）申請直接送到陳鵬宇（高管），流程應先由組長初審，確認清潔組組長職責與分權。
+  5. 衝突透視面板（Conflict Inspector）切至 10 月仍寫死 9 月與 30 天，且存在預寫假資料（李俐旻/柯又溱家庭聚餐），必須徹底消除，100% 回歸 Google Sheets 資料庫為準（SSOT）。
+- **根本原因深度排查**：
+  1. **時區落差**：原系統使用 `new Date().toISOString()`（UTC+0），取 substring(0, 16) 輸出落後台灣 8 小時。
+  2. **防連擊與重複阻擋缺失**：送出按鈕未綁定 `isSubmitting` 鎖定，且未對申請中未結案之調班單（同發起人、相同調班日期）進行剛性攔截；送出後未彈出確認 Alert。
+  3. **二階核決組件未對基層員工隱藏**：`ShiftSwapPortal.jsx` 中區塊 2 未進行角色過濾，基層同仁（Staff / PT）亦能看到簽核中心。
+  4. **組長初審權限越界**：原邏輯以 `canFirstReview = isLeader || isManager || isAdmin` 判斷，導致陳鵬宇等高管在初審階段越權，且清潔組因未設組長而未明確標記。
+  5. **假資料與寫死月份**：`leaveStore.js` 存有寫死之 `INITIAL_PREFERENCES`（李俐旻、柯又溱假衝突）與 `INITIAL_DAILY_QUOTAS`；`mockMasterData.js` 站點設定寫死組長工號；`LeaveConflictInspector.jsx` 標題、調和說明、天數直接硬編碼為 9 月與 30 天。
+- **具體修復方案**：
+  1. **建立專屬台灣時區格式化工具**：
+     - 新增 `src/utils/timeFormatUtils.js`，實作 `formatTaiwanDateTime()`，強制使用 `Asia/Taipei`（GMT+8）輸出標準 `YYYY-MM-DD HH:mm`。
+     - 全面套用至調班單申請時間、初審/終審簽核時間與請假申請時間。
+  2. **送單鎖定、防重複阻擋與成功確認彈窗**：
+     - 在 `ShiftSwapPortal.jsx` 與 `LeaveApplicationModal.jsx` 引入 `isSubmitting` 狀態，送出中按鈕立即 Disable 並提示「送出處理中...」。
+     - 實作「未結案重複送件剛性阻擋」：同仁若已有相同日期區間且狀態為 `PENDING_FIRST`、`PENDING_FINAL` 之調班單，系統即刻中斷並彈窗警示。
+     - 成功送出後彈出顯著成功對話盒（確認調班/請假單號），並自動清空且收合表單。
+     - 在 `App.jsx` 的 `handleFirstReview` 與 `handleFinalApprove` 補上核准/駁回之顯著彈窗確認。
+  3. **基層員工視角徹底純淨化**：
+     - 區塊 2「二階核決簽核進度中心」以 `{canFirstReview && (...)}` 條件渲染，基層同仁（Staff / PT）**100% 不渲染該模塊**。
+  4. **二階核決精準分權管線**：
+     - 只有同仁所屬站點之指定組長（`applicantStation.leader_emp_id === currentEmp.emp_id`）才具備初審權限。
+     - 若站點未指定組長，系統明確標註「【未設組長・由高管兼審】」，營運高管始可代理初審。
+     - 初審通過後流轉至高管終審，完成兩階段核決閉環。
+  5. **衝突透視面板全動態化與假資料徹底肅清**：
+     - `leaveStore.js` 之 `INITIAL_PREFERENCES` 清空為 `[]`、`INITIAL_DAILY_QUOTAS` 清空為 `{}`。
+     - `mockMasterData.js` 所有站點 `leader_emp_id` 初值全部歸為 `null`，嚴禁硬編碼。
+     - `LeaveConflictInspector.jsx` 之標題、月份代碼、天數、調和指引全面動態綁定 `rules.target_year_month`，切換至 10 月即自動對齊 10 月（31天）。
+- **影響檔案清單**：
+  - `src/utils/timeFormatUtils.js`
+  - `src/data/leaveStore.js`
+  - `src/data/mockMasterData.js`
+  - `src/components/LeavePortal/LeaveConflictInspector.jsx`
+  - `src/components/ShiftSwap/ShiftSwapPortal.jsx`
+  - `src/components/Dashboard/LeaveApplicationModal.jsx`
+  - `src/App.jsx`
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-swap-tw-tz-duplicate-guard-clean-conflict-delivered)`

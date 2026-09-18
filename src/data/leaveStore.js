@@ -27,32 +27,11 @@ export const INITIAL_LEAVE_BALANCES = {
   'B111014': { annualLeaveDays: 15, compTimeHours: 40 }  // 林慶忠
 };
 
-// 每日配額覆蓋（Daily_Quotas，預設每日常態 2 人，管制日 0 人）
-export const INITIAL_DAILY_QUOTAS = {
-  // 9/15 為全館大檔盤點日，全面禁休 (Quota = 0)
-  15: { quota: 0, tag: '全館盤點日', isRestricted: true },
-  // 9/25 為中秋連假前夕大檔，名額縮減為 1 人
-  25: { quota: 1, tag: '中秋連假尖峰', isRestricted: false }
-};
+// 每日配額覆蓋（Daily_Quotas，由雲端 Rules 或主管於介面設定，預設為空，不硬編碼特定月份假資料）
+export const INITIAL_DAILY_QUOTAS = {};
 
-// 初始劃休與報班意向範例
-export const INITIAL_PREFERENCES = [
-  // 李俐旻 (組長): 9/5 (六, 第1志願), 9/6 (日, 第2志願)
-  { emp_id: 'B112001', day: 5, priority: 1, leave_type: '自選例休', note: '家庭聚餐' },
-  { emp_id: 'B112001', day: 6, priority: 2, leave_type: '自選例休', note: '備選' },
-
-  // 張舒扉 (正職): 9/12 (六, 第1志願), 9/13 (日, 第2志願)
-  { emp_id: 'B113089', day: 12, priority: 1, leave_type: '自選例休', note: '個人行程' },
-  { emp_id: 'B113089', day: 13, priority: 2, leave_type: '自選例休', note: '個人行程' },
-
-  // 劉宗哲 (正職): 9/19 (六, 第1志願), 9/20 (日, 第2志願)
-  { emp_id: 'B114081', day: 19, priority: 1, leave_type: '特休', note: '返鄉' },
-  { emp_id: 'B114081', day: 20, priority: 2, leave_type: '自選例休', note: '備選' },
-
-  // 刻意製造衝突範例：柯又溱 (組長) 也在 9/5 劃第 1 志願，產生 9/5 衝突
-  { emp_id: 'B112004', day: 5, priority: 1, leave_type: '自選例休', note: '重要私事' },
-  { emp_id: 'B112004', day: 14, priority: 1, leave_type: '補休', comp_hours: 8, note: '補休請假' }
-];
+// 初始劃休志願序（回歸 100% 資料庫真實數據，預設為純淨空陣列，杜絕假同仁假行程污染）
+export const INITIAL_PREFERENCES = [];
 
 // PT 計時同仁出勤意向
 export const INITIAL_PT_AVAILABILITY = {

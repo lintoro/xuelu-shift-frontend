@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { Eye, Check, X, AlertTriangle, ShieldCheck, Scale, ArrowRight } from 'lucide-react';
 
 export default function LeaveConflictInspector({
-  preferences,
-  dailyQuotas,
-  employees,
-  rules,
+  preferences = [],
+  dailyQuotas = {},
+  employees = [],
+  rules = {},
   onApproveReject
 }) {
-  const totalDays = rules.days_in_month || 30;
-  const [selectedDay, setSelectedDay] = useState(5); // 預設聚焦 9/5 (週末衝突示範日)
-  const [onlyShowConflicts, setOnlyShowConflicts] = useState(true);
+  const targetYearMonth = rules.target_year_month || '2026-09';
+  const monthNum = parseInt(targetYearMonth.split('-')[1], 10) || 9;
+  const [y, m] = targetYearMonth.split('-').map(Number);
+  const totalDays = rules.days_in_month || new Date(y, m, 0).getDate() || 30;
 
   const empMap = Object.fromEntries(employees.map(e => [e.emp_id, e]));
 
@@ -18,7 +19,7 @@ export default function LeaveConflictInspector({
   const dailySummary = [];
   for (let d = 1; d <= totalDays; d++) {
     const quota = dailyQuotas[d]?.quota ?? (rules.default_daily_quota || 2);
-    const dayPrefs = preferences.filter(p => p.day === d);
+    const dayPrefs = (preferences || []).filter(p => p.day === d);
     const p1Count = dayPrefs.filter(p => p.priority === 1).length;
     const isConflict = dayPrefs.length > quota || p1Count > quota;
 
@@ -33,7 +34,28 @@ export default function LeaveConflictInspector({
   }
 
   const conflictDays = dailySummary.filter(s => s.isConflict);
-  const activeDayData = dailySummary.find(s => s.day === selectedDay) || dailySummary[0];
+  const [selectedDay, setSelectedDay] = useState(() => (conflictDays.length > 0 ? conflictDays[0].day : 1));
+  const [onlyShowConflicts, setOnlyShowConflicts] = useState(conflictDays.length > 0);
+
+  // 當月份切換時，動態同步更新預設日期
+  React.useEffect(() => {
+    if (conflictDays.length > 0) {
+      setSelectedDay(conflictDays[0].day);
+      setOnlyShowConflicts(true);
+    } else {
+      setSelectedDay(1);
+      setOnlyShowConflicts(false);
+    }
+  }, [targetYearMonth]);
+
+  const activeDayData = dailySummary.find(s => s.day === selectedDay) || dailySummary[0] || {
+    day: 1,
+    quota: 2,
+    totalApplicants: 0,
+    p1Count: 0,
+    isConflict: false,
+    dayPrefs: []
+  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
@@ -43,7 +65,7 @@ export default function LeaveConflictInspector({
           <div className="flex items-center space-x-2">
             <Eye className="w-5 h-5 text-indigo-600" />
             <h2 className="text-base font-bold text-slate-900">
-              主管端劃休衝突透視面板 (Conflict Inspector)
+              主管端劃休衝突透視面板 (Conflict Inspector) · {targetYearMonth}
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -67,7 +89,7 @@ export default function LeaveConflictInspector({
               !onlyShowConflicts ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
             }`}
           >
-            全部日期 (30天)
+            全部日期 ({totalDays}天)
           </button>
         </div>
       </div>
@@ -86,7 +108,7 @@ export default function LeaveConflictInspector({
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
             }`}
           >
-            <span>9/{item.day}</span>
+            <span>{monthNum}/{item.day}</span>
             {item.isConflict && (
               <span className={`px-1 py-0.2 rounded text-[10px] font-extrabold ${
                 selectedDay === item.day ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-800'
@@ -103,7 +125,7 @@ export default function LeaveConflictInspector({
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200">
           <div className="flex items-center space-x-2">
             <span className="text-sm font-extrabold text-slate-900">
-              9 月 {activeDayData.day} 日劃休透視明細
+              {monthNum} 月 {activeDayData.day} 日劃休透視明細
             </span>
             <span className="text-xs text-slate-500">
               (單日休假配額: <span className="font-bold text-slate-800">{activeDayData.quota} 人</span>，已申請: <span className="font-bold text-indigo-700">{activeDayData.totalApplicants} 人</span>)
@@ -194,7 +216,7 @@ export default function LeaveConflictInspector({
               <span>系統公平性調和建議 (Automated Mediation Suggestion):</span>
             </div>
             <p className="text-indigo-800 leading-relaxed">
-              9/{activeDayData.day} 配額為 {activeDayData.quota} 人，但有 {activeDayData.p1Count} 位同仁均列為第 1 優先志願。
+              {monthNum}/{activeDayData.day} 配額為 {activeDayData.quota} 人，但有 {activeDayData.p1Count} 位同仁均列為第 1 優先志願。
               演算法依據【上月週末出勤平衡度】評估，建議優先核定週末休假次數較少之同仁，其餘同仁建議柔性協調至備選第 2 志願日期，主管享有最終手動覆寫確認權限。
             </p>
           </div>

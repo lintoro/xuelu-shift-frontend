@@ -21,6 +21,7 @@ import { precheckSwapCompliance } from '../../data/swapStore.js';
 import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
 import { canEmployeeSoloAtStation } from '../../data/mockMasterData.js';
 import { sortEmployees } from '../../utils/employeeSortUtils.js';
+import { formatTaiwanDateTime } from '../../utils/timeFormatUtils.js';
 
 export default function ShiftSwapPortal({
   employees,
@@ -65,6 +66,7 @@ export default function ShiftSwapPortal({
   const isLocked = workflowStage === 'PUBLISHED_LOCKED';
   // 排班發布封存後 (PUBLISHED_LOCKED) 調班門戶預設收合
   const [isFormExpanded, setIsFormExpanded] = useState(!isLocked);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 核決進度中心分頁：SWAPS (調班) 或 LEAVES (事前請假)
   const [reviewTab, setReviewTab] = useState('SWAPS');
@@ -130,11 +132,33 @@ export default function ShiftSwapPortal({
   // 送出申請
   const handleSubmitRequest = (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!precheckResult.isSafe) {
       setFeedbackMsg('換班/自調預檢未通過，系統已依勞基法與站點門檻啟動剛性阻擋！');
       setTimeout(() => setFeedbackMsg(''), 4000);
       return;
     }
+
+    // 重複申請剛性攔截防呆 (Duplicate Blocker)
+    const existingPending = (swapRequests || []).find(req => {
+      const isPending = req.status === 'PENDING_FIRST_REVIEW' || req.status === 'PENDING_FINAL_REVIEW' || req.status === 'PENDING_ADMIN_VERIFY';
+      if (!isPending) return false;
+      if (req.applicant_id !== currentEmp.emp_id) return false;
+
+      if (swapType === 'SELF_RESCHEDULE') {
+        return req.type === 'SELF_RESCHEDULE' && (req.applicant_day === applicantDay || req.target_day === targetDay);
+      } else {
+        return req.type === 'SWAP' && (req.applicant_day === applicantDay || req.target_day === targetDay);
+      }
+    });
+
+    if (existingPending) {
+      alert(`⚠️ 重複申請阻擋：您已有相同日期（${existingPending.applicant_day}日 ⇄ ${existingPending.target_day}日）之調班/挪休申請單正在審核中（單號：${existingPending.swap_id}）！\n\n系統已啟動防呆阻擋，請耐心等候主管審核，切勿重複送件。`);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     const isManagerApplicant = currentEmp.role === 'Manager';
     const initStatus = isManagerApplicant ? 'PENDING_ADMIN_VERIFY' : 'PENDING_FIRST_REVIEW';
@@ -181,12 +205,16 @@ export default function ShiftSwapPortal({
 
       onAddSwapRequest(newSwap);
       setReason('');
-      if (isManagerApplicant) {
-        setFeedbackMsg(`已成功發起【最高主管自主申報】自調挪休，已送交系統管理員 (Admin) 進行行政合規備查歸檔！`);
-      } else {
-        setFeedbackMsg(`已成功發起【個人自調挪休】申請（9/${applicantDay} 改休 ⇄ 9/${targetDay} 改上班），已送交組長初審！`);
-      }
-      setTimeout(() => setFeedbackMsg(''), 5000);
+      setIsSubmitting(false);
+      setIsFormExpanded(false); // 送出後自動收合表單，避免誤連按
+
+      const successNotice = isManagerApplicant 
+        ? `✅【最高主管自主申報】自調挪休已成功立案！\n\n申請單號：${newSwap.swap_id}\n調移內容：${monthNum}/${applicantDay} 改休 ⇄ ${monthNum}/${targetDay} 改上班 (${targetShiftCode}班)\n進度：已送交系統管理員 (Admin) 進行行政合規備查歸檔。`
+        : `✅【個人自調挪休】申請已成功送出！\n\n申請單號：${newSwap.swap_id}\n調移內容：${monthNum}/${applicantDay} 改休 ⇄ ${monthNum}/${targetDay} 改上班 (${targetShiftCode}班)\n進度：已正式呈交【${stationMap[currentEmp.primary_station] || '站點'}組長】進行第一階初審。\n\n您可隨時至「我的工作台」追蹤最新簽核進度！`;
+      
+      alert(successNotice);
+      setFeedbackMsg(isManagerApplicant ? '最高主管自主申報完成' : '已成功送出自調挪休申請單');
+      setTimeout(() => setFeedbackMsg(''), 4000);
       return;
     }
 
@@ -236,13 +264,17 @@ export default function ShiftSwapPortal({
 
     onAddSwapRequest(newSwap);
     setReason('');
-    const specialNote = isSpecial ? '【⚠️ 跨組/非獨立特例調班】' : '';
-    if (isManagerApplicant) {
-      setFeedbackMsg(`已成功發起【最高主管自主申報】${specialNote}雙人對調，已送交系統管理員 (Admin) 進行行政合規備查歸檔！`);
-    } else {
-      setFeedbackMsg(`已成功發起${specialNote}與 ${targetEmp?.name} 的雙人對調申請，已進入第一階初審管線！`);
-    }
-    setTimeout(() => setFeedbackMsg(''), 5000);
+    setIsSubmitting(false);
+    setIsFormExpanded(false); // 送出後自動收合表單
+
+    const specialNote = isSpecial ? '【⚠️ 跨組特例調班】' : '';
+    const successNotice = isManagerApplicant
+      ? `✅【最高主管自主申報】${specialNote}雙人對調已成功立案！\n\n申請單號：${newSwap.swap_id}\n對象同仁：${targetEmp?.name}\n進度：已送交系統管理員 (Admin) 進行行政合規備查歸檔。`
+      : `✅${specialNote}與 ${targetEmp?.name} 的雙人對調申請已成功送出！\n\n申請單號：${newSwap.swap_id}\n進度：已送交站點組長進行第一階初審。\n\n您可隨時至「我的工作台」追蹤最新簽核進度！`;
+
+    alert(successNotice);
+    setFeedbackMsg(isManagerApplicant ? '最高主管對調申報完成' : '已成功發起雙人對調申請');
+    setTimeout(() => setFeedbackMsg(''), 4000);
   };
 
   return (
@@ -601,9 +633,9 @@ export default function ShiftSwapPortal({
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!precheckResult.isSafe}
+              disabled={!precheckResult.isSafe || isSubmitting}
               className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg font-bold text-xs shadow-sm transition-all ${
-                precheckResult.isSafe
+                precheckResult.isSafe && !isSubmitting
                   ? precheckResult.hasSpecialWarning
                     ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white cursor-pointer active:scale-95'
                     : swapType === 'SELF_RESCHEDULE'
@@ -614,7 +646,9 @@ export default function ShiftSwapPortal({
             >
               <Send className="w-3.5 h-3.5" />
               <span>
-                {!precheckResult.isSafe 
+                {isSubmitting
+                  ? '處理送出中...'
+                  : !precheckResult.isSafe 
                   ? '法規違規已鎖定' 
                   : precheckResult.hasSpecialWarning 
                   ? '送出特例調班二階審核申請' 
@@ -629,7 +663,8 @@ export default function ShiftSwapPortal({
     )}
   </div>
 
-      {/* 區塊 2: 二階核決清單 (調班/挪休 vs 同仁事前請假) */}
+      {/* 區塊 2: 二階核決清單 (調班/挪休 vs 同仁事前請假) - 僅具備審核權限之組長/高管/Admin 可見，基層員工 (Staff/PT) 徹底隱藏 */}
+      {canFirstReview && (
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
           <div className="flex items-center space-x-2">
@@ -755,29 +790,46 @@ export default function ShiftSwapPortal({
                     {/* 審核操作按鈕 */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                       <div className="text-slate-500 text-[11px]">
-                        {req.created_at ? `發起時間：${req.created_at.replace('T', ' ').substring(0, 16)}` : ''}
+                        {req.created_at ? `發起時間：${formatTaiwanDateTime(req.created_at)}` : ''}
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {/* 初審按鈕 (Leader/Manager) */}
-                        {isPendingFirst && canFirstReview && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => onFirstReview && onFirstReview(req.swap_id, 'REJECTED', '組長退回')}
-                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
-                            >
-                              駁回
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onFirstReview && onFirstReview(req.swap_id, 'APPROVED', '組長初審通過')}
-                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs"
-                            >
-                              初審核准 (呈核高管)
-                            </button>
-                          </>
-                        )}
+                        {/* 初審按鈕 (限定該站點組長初審；若未設組長則由高管兼審) */}
+                        {isPendingFirst && canFirstReview && (() => {
+                          const applicantEmp = employees.find(e => e.emp_id === req.applicant_id);
+                          const applicantStation = stations.find(s => s.station_id === applicantEmp?.primary_station);
+                          const stationLeaderId = applicantStation?.leader_emp_id || applicantStation?.leader_id;
+                          const isTargetStationLeader = isLeader && stationLeaderId === currentEmp.emp_id;
+                          const isUnassignedStation = !stationLeaderId; // 未設組長，由高管兼審
+                          const canApproveFirst = isTargetStationLeader || (isManager && isUnassignedStation) || isAdmin;
+
+                          if (!canApproveFirst) {
+                            return (
+                              <span className="text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 font-medium">
+                                待【{stationMap[applicantEmp?.primary_station] || '站點'}組長】初審
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onFirstReview && onFirstReview(req.swap_id, 'REJECTED', '組長退回')}
+                                className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold cursor-pointer"
+                              >
+                                駁回
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onFirstReview && onFirstReview(req.swap_id, 'APPROVED', '組長初審通過')}
+                                className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs cursor-pointer"
+                              >
+                                初審核准 (呈核高管)
+                              </button>
+                            </>
+                          );
+                        })()}
 
                         {/* 終審按鈕 (Manager) */}
                         {isPendingFinal && canFinalApprove && (
@@ -881,29 +933,46 @@ export default function ShiftSwapPortal({
                     {/* 請假審核操作按鈕 */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                       <div className="text-slate-500 text-[11px]">
-                        申請時間：{app.created_at || '今日'}
+                        申請時間：{app.created_at ? formatTaiwanDateTime(app.created_at) : '今日'}
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {/* 第一階：組長初審 */}
-                        {isPendingLeader && canFirstReview && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'REJECTED', '組長站點人力緊縮駁回')}
-                              className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold cursor-pointer"
-                            >
-                              初審退回
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'APPROVED', '站點人力可協調，同意上呈')}
-                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs cursor-pointer active:scale-95"
-                            >
-                              組長初審核准 (呈核高管)
-                            </button>
-                          </>
-                        )}
+                        {/* 第一階：組長初審 (限定該站點組長初審；若未設組長則由高管兼審) */}
+                        {isPendingLeader && canFirstReview && (() => {
+                          const applicantEmp = employees.find(e => e.emp_id === app.emp_id);
+                          const applicantStation = stations.find(s => s.station_id === (app.station_id || applicantEmp?.primary_station));
+                          const stationLeaderId = applicantStation?.leader_emp_id || applicantStation?.leader_id;
+                          const isTargetStationLeader = isLeader && stationLeaderId === currentEmp.emp_id;
+                          const isUnassignedStation = !stationLeaderId;
+                          const canApproveFirst = isTargetStationLeader || (isManager && isUnassignedStation) || isAdmin;
+
+                          if (!canApproveFirst) {
+                            return (
+                              <span className="text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1 rounded border border-blue-200 font-medium">
+                                待【{stationMap[app.station_id || applicantEmp?.primary_station] || '站點'}組長】初審
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'REJECTED', '組長站點人力緊縮駁回')}
+                                className="px-2.5 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold cursor-pointer"
+                              >
+                                初審退回
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onFirstReviewLeave && onFirstReviewLeave(app.app_id, 'APPROVED', '站點人力可協調，同意上呈')}
+                                className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-2xs cursor-pointer active:scale-95"
+                              >
+                                組長初審核准 (呈核高管)
+                              </button>
+                            </>
+                          );
+                        })()}
 
                         {/* 第二階：經理終審 */}
                         {isPendingManager && canFinalApprove && (
@@ -933,6 +1002,7 @@ export default function ShiftSwapPortal({
           )
         )}
       </div>
+      )}
     </div>
   );
 }

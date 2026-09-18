@@ -1,6 +1,6 @@
 // src/components/ScheduleTable.jsx
 import React, { useState } from 'react';
-import { SHIFT_TYPES, isWorkingShift, NON_WORKING_CODES } from '../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, isOffShift, normalizeShiftCode, NON_WORKING_CODES } from '../types/scheduler.js';
 import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight, RotateCcw } from 'lucide-react';
 import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
 import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
@@ -491,7 +491,7 @@ export default function ScheduleTable({
                       } else if (fillChoice === '2') {
                         assignedCode = 'A';
                       } else if (fillChoice === '3') {
-                        assignedCode = 'OFF';
+                        assignedCode = null;
                       }
 
                       if (onSaveAdjustment) {
@@ -503,7 +503,7 @@ export default function ScheduleTable({
                           day: d,
                           original_shift: 'OFF',
                           new_shift: assignedCode,
-                          reason: '主管自主輸入排定個人班表',
+                          reason: fillChoice === '3' ? '主管清空個人班表 (重設為留白)' : '主管自主輸入排定個人班表',
                           proposed_by_id: currentUser?.emp_id || 'MGR',
                           proposed_by_name: currentUser?.name || '主管',
                           proposed_role: 'Manager',
@@ -512,7 +512,7 @@ export default function ScheduleTable({
                         });
                       }
                     }
-                    setFeedbackMsg(`已成功完成主管【${managerEmp.name}】全月班表自主排定！`);
+                    setFeedbackMsg(fillChoice === '3' ? `已成功清空主管【${managerEmp.name}】全月班表，重設為初始留白狀態！` : `已成功完成主管【${managerEmp.name}】全月班表自主排定！`);
                     setTimeout(() => setFeedbackMsg(''), 3000);
                   }}
                   className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
@@ -674,7 +674,8 @@ export default function ScheduleTable({
                       const cellDateStr = `${targetYearMonth}-${dayStr}`;
                       const isPreHire = !!emp.hire_date && cellDateStr < emp.hire_date;
                       // 若到職日前，固定為 PRE_HIRE_OFF；若有暫存微調，視覺優先展示微調擬改班別
-                      const effectiveCode = isPreHire ? 'PRE_HIRE_OFF' : (cellAdj ? cellAdj.new_shift : shiftCode);
+                      const rawEffective = isPreHire ? 'PRE_HIRE_OFF' : (cellAdj ? cellAdj.new_shift : shiftCode);
+                      const effectiveCode = normalizeShiftCode(rawEffective);
                       const shiftDef = effectiveShiftDefs[effectiveCode];
                       const canEditThisCell = canEditEmployeeCell(emp, day);
 

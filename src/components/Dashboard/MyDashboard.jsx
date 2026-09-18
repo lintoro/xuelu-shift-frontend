@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle, FileText, Check } from 'lucide-react';
-import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
+import { SHIFT_TYPES, isWorkingShift, isOffShift, normalizeShiftCode } from '../../types/scheduler.js';
 import { checkEmployeeHolidayConsent, calculatePtHolidayDoublePay, isStatutoryHoliday } from '../../data/holidayTransferStore.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 import LeaveApplicationModal from './LeaveApplicationModal.jsx';
@@ -45,13 +45,15 @@ export default function MyDashboard({
   const myShiftsList = [];
   for (let d = 1; d <= totalDays; d++) {
     const shift = mySchedule[d];
-    if (isWorkingShift(shift?.shift_type)) {
+    const rawType = shift?.shift_type;
+    const normCode = normalizeShiftCode(rawType);
+    if (isWorkingShift(normCode)) {
       myWorkDays++;
       const hrs = shift.actual_hours !== undefined ? shift.actual_hours : shift.work_hours || 8;
       myTotalHours += hrs;
       // 動態讀取班別定義，不再寫死 SHIFT_TYPES
-      myShiftsList.push({ day: d, shift, shiftInfo: effectiveShiftTypes[shift.shift_type] || SHIFT_TYPES[shift.shift_type] });
-    } else if (shift?.shift_type) {
+      myShiftsList.push({ day: d, shift, shiftInfo: effectiveShiftTypes[normCode] || SHIFT_TYPES[normCode] });
+    } else if (normCode) {
       myOffDays++;
     }
   }
@@ -430,8 +432,9 @@ export default function MyDashboard({
               {/* 每日出勤格 */}
               {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
                 const shift = mySchedule[day];
-                const shiftType = shift?.shift_type;
-                const shiftInfo = effectiveShiftTypes[shiftType] || SHIFT_TYPES[shiftType];
+                const rawShiftType = shift?.shift_type;
+                const effectiveCode = normalizeShiftCode(rawShiftType);
+                const shiftInfo = effectiveShiftTypes[effectiveCode] || SHIFT_TYPES[effectiveCode];
                 const dateObj = new Date(calYear, calMonth - 1, day);
                 const dayOfWeek = dateObj.getDay();
                 const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -439,13 +442,21 @@ export default function MyDashboard({
                 const fullDateStr = `${yearMonth}-${dayStr}`;
                 const holidayObj = isStatutoryHoliday(fullDateStr);
 
-                // 精準假別判定 (徹底解決抹平為例休之問題)
-                const isRegOff = shiftType === 'REG_OFF';
-                const isHolidayOff = shiftType === 'HOLIDAY_OFF';
-                const isRestOff = shiftType === 'REST_OFF' || (shiftType === 'OFF' && !isRegOff && !isHolidayOff);
-                const isLeaveShift = ['AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'].includes(shiftType);
-                const isPreHire = shiftType === 'PRE_HIRE_OFF';
-                const isOff = isRegOff || isRestOff || isHolidayOff || isLeaveShift || isPreHire || !shiftType;
+                // 精準假別判定 (徹底解決抹平為例休之問題，支援 14 大假別與全稱別名)
+                const isRegOff = effectiveCode === 'REG_OFF';
+                const isHolidayOff = effectiveCode === 'HOLIDAY_OFF';
+                const isFuneralLeave = effectiveCode === 'FL';
+                const isAnnualLeave = effectiveCode === 'AL';
+                const isCompLeave = effectiveCode === 'CT';
+                const isSickLeave = effectiveCode === 'SL';
+                const isPersonalLeave = effectiveCode === 'PL';
+                const isMarriageLeave = effectiveCode === 'ML';
+                const isMaternityLeave = effectiveCode === 'MAT';
+                const isOfficialLeave = effectiveCode === 'CL';
+                const isRestOff = effectiveCode === 'REST_OFF' || (effectiveCode === 'OFF' && !isRegOff && !isHolidayOff);
+                const isLeaveShift = ['AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'].includes(effectiveCode);
+                const isPreHire = effectiveCode === 'PRE_HIRE_OFF';
+                const isOff = isRegOff || isRestOff || isHolidayOff || isLeaveShift || isPreHire || !effectiveCode;
                 
                 // PT 國定假日調整放假當日出勤雙薪判定 (逢六日原日不計，以調整放假當日為準)
                 const isPtHolidayDuty = isPt && ptDoublePayDaysSet.has(day);
@@ -463,6 +474,38 @@ export default function MyDashboard({
                   badgeLabel = '國';
                   titleLabel = shift?.holidayName ? `${shift.holidayName}調移` : '國定假日';
                   cellBgClass = 'bg-red-50 border-red-300 text-red-900 font-black';
+                } else if (isFuneralLeave) {
+                  badgeLabel = '喪';
+                  titleLabel = '喪假';
+                  cellBgClass = 'bg-stone-100 border-stone-300 text-stone-800 font-bold';
+                } else if (isAnnualLeave) {
+                  badgeLabel = '特';
+                  titleLabel = '特休';
+                  cellBgClass = 'bg-amber-100 border-amber-300 text-amber-800 font-bold';
+                } else if (isCompLeave) {
+                  badgeLabel = '補';
+                  titleLabel = '補休';
+                  cellBgClass = 'bg-purple-100 border-purple-300 text-purple-800 font-bold';
+                } else if (isSickLeave) {
+                  badgeLabel = '病';
+                  titleLabel = '病假';
+                  cellBgClass = 'bg-orange-100 border-orange-300 text-orange-800 font-bold';
+                } else if (isPersonalLeave) {
+                  badgeLabel = '事';
+                  titleLabel = '事假';
+                  cellBgClass = 'bg-slate-200 border-slate-300 text-slate-800 font-bold';
+                } else if (isMarriageLeave) {
+                  badgeLabel = '婚';
+                  titleLabel = '婚假';
+                  cellBgClass = 'bg-pink-100 border-pink-300 text-pink-700 font-bold';
+                } else if (isMaternityLeave) {
+                  badgeLabel = '產';
+                  titleLabel = '產假/陪產假';
+                  cellBgClass = 'bg-fuchsia-100 border-fuchsia-300 text-fuchsia-800 font-bold';
+                } else if (isOfficialLeave) {
+                  badgeLabel = '公';
+                  titleLabel = '公假';
+                  cellBgClass = 'bg-teal-100 border-teal-300 text-teal-800 font-bold';
                 } else if (isRestOff) {
                   badgeLabel = '休';
                   titleLabel = '休息日';
@@ -476,7 +519,7 @@ export default function MyDashboard({
                   titleLabel = '未到職';
                   cellBgClass = 'bg-slate-100 border-slate-200 text-slate-400';
                 } else if (shiftInfo) {
-                  badgeLabel = shiftType;
+                  badgeLabel = effectiveCode;
                   titleLabel = shiftInfo.name;
                   cellBgClass = `${shiftInfo.color} border shadow-2xs`;
                 }
@@ -495,6 +538,22 @@ export default function MyDashboard({
                           ? 'bg-rose-600 text-white font-black' 
                           : isHolidayOff 
                           ? 'bg-red-600 text-white font-black' 
+                          : isFuneralLeave
+                          ? 'bg-stone-600 text-white font-black'
+                          : isAnnualLeave
+                          ? 'bg-amber-600 text-white font-bold'
+                          : isCompLeave
+                          ? 'bg-purple-600 text-white font-bold'
+                          : isSickLeave
+                          ? 'bg-orange-600 text-white font-bold'
+                          : isPersonalLeave
+                          ? 'bg-slate-600 text-white font-bold'
+                          : isMarriageLeave
+                          ? 'bg-pink-600 text-white font-bold'
+                          : isMaternityLeave
+                          ? 'bg-fuchsia-600 text-white font-bold'
+                          : isOfficialLeave
+                          ? 'bg-teal-600 text-white font-bold'
                           : isRestOff 
                           ? 'bg-rose-200 text-rose-800 font-bold' 
                           : 'opacity-75'
@@ -508,7 +567,7 @@ export default function MyDashboard({
                     </div>
 
                     <div className="text-[9px] truncate opacity-90 font-medium">
-                      {isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}
+                      {isOff ? '' : (stationMap[shift?.station_id] || shift?.station_id || '')}
                     </div>
 
                     {/* PT 國假出勤雙薪特別徽章 */}

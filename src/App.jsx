@@ -396,20 +396,21 @@ export default function App() {
 
     // 若為 Manager 調整，直接覆寫套用入班表（月份分區，防跨月污染）
     if (adj.status === 'APPROVED_DIRECT') {
-      setScheduleOverrides(prev => ({
-        ...prev,
-        [currentMonth]: {
-          ...(prev[currentMonth] || {}),
-          [adj.emp_id]: {
-            ...((prev[currentMonth] || {})[adj.emp_id] || {}),
-            [adj.day]: {
-              shift_type: adj.new_shift,
-              station_id: adj.primary_station,
-              note: adj.reason
-            }
-          }
+      setScheduleOverrides(prev => {
+        const monthMap = { ...(prev[currentMonth] || {}) };
+        const empMap = { ...(monthMap[adj.emp_id] || {}) };
+        if (adj.new_shift === null || adj.new_shift === '') {
+          delete empMap[adj.day];
+        } else {
+          empMap[adj.day] = {
+            shift_type: adj.new_shift,
+            station_id: adj.primary_station,
+            note: adj.reason
+          };
         }
-      }));
+        monthMap[adj.emp_id] = empMap;
+        return { ...prev, [currentMonth]: monthMap };
+      });
 
       // 若為特休 (AL) 或補休 (CT)，自動在存摺追加事前扣抵流水記錄
       if (adj.new_shift === 'AL' || adj.new_shift === 'CT') {
@@ -933,6 +934,7 @@ export default function App() {
         }
       };
     }));
+    alert(isApproved ? '組長初審通過！已呈交營運主管 (Manager) 進行第二階終審。' : '已駁回該調班申請單。');
   }, []);
 
   // 第二階終審核決（核准時自動執行對調，並生成前後雙快照 Audit Log）
@@ -1059,6 +1061,8 @@ export default function App() {
         console.warn('[雲端同步] 調班審核更新失敗:', e);
       });
     }
+
+    alert(isApproved ? `【二階核決完成】調班單號 ${swapId} 已由營運高管終審放行，雙方班表已同步生效換班！` : `【調班已駁回】單號 ${swapId} 已由高管駁回。`);
   }, [swapRequests, effectiveScheduleMap, scheduleOverrides, currentUser]);
 
   // 主管實勤微調覆核 (HOURS_OVERRIDE 稽核快照與補休/特休連動，支援高管違規強制核實)

@@ -1,5 +1,5 @@
 // src/data/holidayTransferStore.js
-import { isWorkingShift, isOffShift } from '../types/scheduler.js';
+import { isWorkingShift, isOffShift, normalizeShiftCode } from '../types/scheduler.js';
 
 /**
  * 全年度國定假日專案調移與平帳管理模組 (Holiday Transfer & Balance Store)
@@ -158,7 +158,7 @@ export function isStatutoryHoliday(dateStr) {
  * @param {Object} params.consentsMap - 已簽署同意紀錄
  * @returns {Object} { required: boolean, holidays: Array, pendingCount: number }
  */
-export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', scheduleMap = {}, consentsMap = {}, isPt = false }) {
+export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', scheduleMap = {}, consentsMap = {}, isPt = false, isManager = false }) {
   // 勞基法核心原則：PT 計時人員不適用國定假日調移免雙薪協議 (凡出勤依法直接計給雙薪)
   if (isPt) {
     return { required: false, holidays: [], pendingCount: 0 };
@@ -175,7 +175,13 @@ export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', sche
 
   monthHolidays.forEach(h => {
     const shift = empSchedule[h.day];
-    const shiftType = typeof shift === 'object' ? shift?.shift_type : shift;
+    const shiftType = normalizeShiftCode(typeof shift === 'object' ? shift?.shift_type : shift);
+
+    // 依主管指示：高管自主填寫若當日空白/未排定出勤班別，不列入調移簽認名冊，等自行排定後再秀
+    if (isManager && (!shiftType || !isWorkingShift(shiftType))) {
+      return;
+    }
+
     // 若該國定假日排定出勤班別（非休假且非空）
     if (shiftType && isWorkingShift(shiftType)) {
       const consentKey = `${yearMonth}_${h.day}_${empId}`;
@@ -199,7 +205,7 @@ export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', sche
         for (let d = 1; d <= 31; d++) {
           if (usedOffDays.has(d) || d === h.day) continue;
           const dayShift = empSchedule[d];
-          const dType = typeof dayShift === 'object' ? dayShift?.shift_type : dayShift;
+          const dType = normalizeShiftCode(typeof dayShift === 'object' ? dayShift?.shift_type : dayShift);
           if (dType === 'HOLIDAY_OFF') {
             suggestedOffDay = d;
             break;
@@ -213,7 +219,7 @@ export function checkEmployeeHolidayConsent({ empId, yearMonth = '2026-09', sche
         for (let d = 1; d <= 31; d++) {
           if (usedOffDays.has(d) || d === h.day) continue;
           const dayShift = empSchedule[d];
-          const dType = typeof dayShift === 'object' ? dayShift?.shift_type : dayShift;
+          const dType = normalizeShiftCode(typeof dayShift === 'object' ? dayShift?.shift_type : dayShift);
           if (!dType || isOffShift(dType)) {
             candidates.push(d);
           }

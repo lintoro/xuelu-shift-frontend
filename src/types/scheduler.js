@@ -207,10 +207,140 @@ export const SHIFT_TYPES = DEFAULT_SHIFT_TYPES;
 export const NON_WORKING_CODES = ['OFF', 'TERM_OFF', 'PRE_HIRE_OFF', 'AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL', 'REG_OFF', 'REST_OFF', 'HOLIDAY_OFF'];
 
 /**
+ * 全域假別與班別代碼正規化網關 (Shift & Leave Code Normalizer SSOT)
+ * 作用：將所有英文全稱別名、中文假別字串、試算表舊值或高管留白物件，統一標準化為系統官方規範之代碼。
+ */
+export function normalizeShiftCode(val) {
+  if (val === null || val === undefined) return '';
+
+  // 若傳入物件 (例如 { shift_type: 'FL' })
+  if (typeof val === 'object') {
+    if (val.shift_type !== undefined) return normalizeShiftCode(val.shift_type);
+    if (val.code !== undefined) return normalizeShiftCode(val.code);
+    return '';
+  }
+
+  const str = String(val).trim();
+  if (!str) return '';
+
+  // 攔截高階主管自主填寫或試算表字串化之物件殘留
+  if (str.includes('高階主管自主填寫') || str.includes('work_hours=') || str.startsWith('{') || str.startsWith('(')) {
+    return '';
+  }
+
+  const upper = str.toUpperCase();
+
+  // 映射表 (涵蓋 14 大假別之英文全稱、中文別名與縮寫)
+  const MAP = {
+    // 喪假
+    'FUNERAL_LEAVE': 'FL',
+    'FL': 'FL',
+    '喪': 'FL',
+    '喪假': 'FL',
+
+    // 特別休假
+    'ANNUAL_LEAVE': 'AL',
+    'AL': 'AL',
+    '特': 'AL',
+    '特休': 'AL',
+    '特別休假': 'AL',
+
+    // 補休
+    'COMP_TIME': 'CT',
+    'COMPENSATION_TIME': 'CT',
+    'CT': 'CT',
+    '補': 'CT',
+    '補休': 'CT',
+
+    // 病假
+    'SICK_LEAVE': 'SL',
+    'SL': 'SL',
+    '病': 'SL',
+    '病假': 'SL',
+    '傷病假': 'SL',
+
+    // 事假
+    'PERSONAL_LEAVE': 'PL',
+    'PL': 'PL',
+    '事': 'PL',
+    '事假': 'PL',
+
+    // 婚假
+    'MARRIAGE_LEAVE': 'ML',
+    'ML': 'ML',
+    '婚': 'ML',
+    '婚假': 'ML',
+
+    // 產假/陪產假
+    'MATERNITY_LEAVE': 'MAT',
+    'PATERNITY_LEAVE': 'MAT',
+    'MAT': 'MAT',
+    '產': 'MAT',
+    '產假': 'MAT',
+    '陪產假': 'MAT',
+
+    // 公假
+    'CIVIL_LEAVE': 'CL',
+    'PUBLIC_LEAVE': 'CL',
+    'OFFICIAL_LEAVE': 'CL',
+    'CL': 'CL',
+    '公': 'CL',
+    '公假': 'CL',
+
+    // 法定例假
+    'REGULAR_OFF': 'REG_OFF',
+    'REG_OFF': 'REG_OFF',
+    '例': 'REG_OFF',
+    '例假': 'REG_OFF',
+    '法定例假': 'REG_OFF',
+
+    // 休息日
+    'REST_DAY': 'REST_OFF',
+    'REST_OFF': 'REST_OFF',
+    '休息日': 'REST_OFF',
+
+    // 常態休假
+    'OFF': 'OFF',
+    '休': 'OFF',
+    '常態休': 'OFF',
+
+    // 國定假日
+    'NATIONAL_HOLIDAY': 'HOLIDAY_OFF',
+    'HOLIDAY_OFF': 'HOLIDAY_OFF',
+    '國': 'HOLIDAY_OFF',
+    '國假': 'HOLIDAY_OFF',
+    '國定假日': 'HOLIDAY_OFF',
+
+    // 未到職真空
+    'PRE_HIRE': 'PRE_HIRE_OFF',
+    'PRE_HIRE_OFF': 'PRE_HIRE_OFF',
+    '未': 'PRE_HIRE_OFF',
+    '未到職': 'PRE_HIRE_OFF',
+
+    // 離退真空
+    'TERMINATION_OFF': 'TERM_OFF',
+    'TERM_OFF': 'TERM_OFF',
+    '空': 'TERM_OFF',
+    '離退': 'TERM_OFF',
+
+    // 常見出勤班別
+    'A': 'A',
+    'B': 'B',
+    'C': 'C',
+    'D': 'D'
+  };
+
+  if (MAP[upper]) return MAP[upper];
+  if (MAP[str]) return MAP[str];
+
+  return upper;
+}
+
+/**
  * 判定該班別是否為實際到班出勤 (非休假、非真空、非特休/補休/病假/事假等)
  */
 export function isWorkingShift(shiftType) {
-  const code = typeof shiftType === 'object' ? shiftType?.code : shiftType;
+  const code = normalizeShiftCode(shiftType);
   return !!code && !NON_WORKING_CODES.includes(code);
 }
 
@@ -218,7 +348,7 @@ export function isWorkingShift(shiftType) {
  * 判定該班別是否為各類休假或特定非出勤 (含例休、特休、補休、病假、事假、離職真空等)
  */
 export function isOffShift(shiftType) {
-  const code = typeof shiftType === 'object' ? shiftType?.code : shiftType;
+  const code = normalizeShiftCode(shiftType);
   return !code || NON_WORKING_CODES.includes(code);
 }
 

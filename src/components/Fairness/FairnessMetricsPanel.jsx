@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BarChart3, Sparkles, TrendingUp, Award, CheckCircle2, ShieldAlert, Cpu } from 'lucide-react';
-import { isWorkingShift } from '../../types/scheduler.js';
+import { isWorkingShift, normalizeShiftCode } from '../../types/scheduler.js';
 import { sortEmployees } from '../../utils/employeeSortUtils.js';
 
 export default function FairnessMetricsPanel({
@@ -35,31 +35,32 @@ export default function FairnessMetricsPanel({
       const dateObj = new Date(2026, 8, d);
       const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
       const shift = scheduleMap[emp.emp_id]?.[d];
-      const shiftCode = shift?.shift_type;
+      const rawShiftCode = shift?.shift_type;
+      const normalizedCode = normalizeShiftCode(rawShiftCode);
 
-      if (!shiftCode) continue;
+      if (!normalizedCode) continue;
 
       if (isWeekend) {
-        if (isWorkingShift(shiftCode)) {
+        if (isWorkingShift(normalizedCode)) {
           weekendWorkCount++;
         } else {
           weekendOffCount++;
         }
       }
 
-      // 全班別統計
-      if (isWorkingShift(shiftCode)) {
-        shiftCounts[shiftCode] = (shiftCounts[shiftCode] || 0) + 1;
+      // 全班別統計 (只統計實際到班出勤班別，排除所有休假與法定請假)
+      if (isWorkingShift(normalizedCode)) {
+        shiftCounts[normalizedCode] = (shiftCounts[normalizedCode] || 0) + 1;
       }
 
       // 特休 (AL - 8h)
-      if (shiftCode === 'AL') {
+      if (normalizedCode === 'AL') {
         alHours += 8;
-      } else if (shiftCode === 'CT') {
+      } else if (normalizedCode === 'CT') {
         // 補休 (CT - 8h)
         ctHours += 8;
-      } else if (['PL', 'SL', 'ML', 'FL', 'MAT', 'CL', 'PERSONAL_LEAVE', 'SICK_LEAVE'].includes(shiftCode)) {
-        // 其它假別
+      } else if (['PL', 'SL', 'ML', 'FL', 'MAT', 'CL'].includes(normalizedCode)) {
+        // 其它法定假別 (含事假、病假、婚假、喪假、產假/陪產假、公假)
         otherLeaveHours += 8;
       }
 

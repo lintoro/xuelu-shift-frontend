@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm test && vite build",
     "preview": "vite preview",
-    "test": "node scratch/detect_undeclared_variables.mjs && node scratch/check_lucide_imports.mjs && node scratch/verify_all_components_ssr.mjs && node scratch/test_v355_statutory_leaves_and_one_off_one_rest.mjs && node scratch/test_v356_save_stations_persistence.mjs && node scratch/test_v357_data_consistency_and_normalization.mjs && node scratch/test_october_shift_readiness.mjs && node scratch/test_holiday_patch.mjs",
+    "test": "node scratch/detect_undeclared_variables.mjs && node scratch/check_lucide_imports.mjs && node scratch/verify_all_components_ssr.mjs && node scratch/test_v355_statutory_leaves_and_one_off_one_rest.mjs && node scratch/test_v356_save_stations_persistence.mjs && node scratch/test_v357_data_consistency_and_normalization.mjs && node scratch/test_october_shift_readiness.mjs && node scratch/test_holiday_patch.mjs && node scratch/test_leave_normalization_and_fixes.mjs",
     "sync": "git pull origin main && npm install",
     "gas:push": "clasp push",
     "gas:deploy": "clasp push && clasp deploy -i AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ -d \"IDE一鍵發布\""

@@ -19,7 +19,7 @@ export const STATIONS = [
   {
     station_id: 'ST_SERVICE',
     station_name: '服務台',
-    leader_emp_id: 'B112001', // 李俐旻
+    leader_emp_id: null, // 回歸資料庫真相：由 Google Sheets Stations 表或主管介面設定
     min_staff_weekday: 3,
     min_staff_weekend: 5,
     requires_solo_staff: true,
@@ -31,7 +31,7 @@ export const STATIONS = [
   {
     station_id: 'ST_EXPERIENCE',
     station_name: '極限組',
-    leader_emp_id: 'B112002', // 吳泓邑
+    leader_emp_id: null,
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
@@ -43,7 +43,7 @@ export const STATIONS = [
   {
     station_id: 'ST_MSS',
     station_name: 'MSS',
-    leader_emp_id: 'B112003', // 陳哲胤
+    leader_emp_id: null,
     min_staff_weekday: 2,
     min_staff_weekend: 4,
     requires_solo_staff: true,
@@ -55,7 +55,7 @@ export const STATIONS = [
   {
     station_id: 'ST_MAIN_SHOP',
     station_name: '本鋪',
-    leader_emp_id: 'B112004', // 柯又溱
+    leader_emp_id: null,
     min_staff_weekday: 2,
     min_staff_weekend: 3,
     requires_solo_staff: true,
@@ -67,7 +67,7 @@ export const STATIONS = [
   {
     station_id: 'ST_SUB_SHOP',
     station_name: '小鋪',
-    leader_emp_id: 'B112005', // 陳凱婷
+    leader_emp_id: null,
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
@@ -79,7 +79,7 @@ export const STATIONS = [
   {
     station_id: 'ST_CLEAN',
     station_name: '清潔',
-    leader_emp_id: 'B112006', // 林美鳳
+    leader_emp_id: null, // 清潔組若未指派組長則為 null，不預塞假人
     min_staff_weekday: 2,
     min_staff_weekend: 3,
     requires_solo_staff: false,
@@ -91,7 +91,7 @@ export const STATIONS = [
   {
     station_id: 'ST_DINING',
     station_name: '餐飲',
-    leader_emp_id: 'B112007', // 王鳳珠
+    leader_emp_id: null,
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,
@@ -103,7 +103,7 @@ export const STATIONS = [
   {
     station_id: 'ST_Gagoo',
     station_name: 'Gagoo',
-    leader_emp_id: 'B113106', // 曾月薇
+    leader_emp_id: null,
     min_staff_weekday: 1,
     min_staff_weekend: 2,
     requires_solo_staff: true,

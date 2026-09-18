@@ -20,3 +20,25 @@ export function formatShiftTime(val) {
   }
   return s;
 }
+
+/**
+ * 台灣時區日期時間格式化函式 (Asia/Taipei GMT+8)
+ * 接收 Date 物件、時間戳或 ISO 字串 (如 '2026-09-18T17:13:00.000Z')
+ * 精準輸出：YYYY-MM-DD HH:mm (例如 '2026-09-19 01:13')
+ */
+export function formatTaiwanDateTime(dateInput = new Date()) {
+  if (!dateInput) return '-';
+  const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return String(dateInput);
+
+  const formatter = new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  return formatter.format(d).replace(/\//g, '-');
+}
