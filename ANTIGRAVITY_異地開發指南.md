@@ -159,14 +159,18 @@ git pull origin main
 
 ## ❓ 常見問題與排解指引 (FAQ)
 
-### Q1：新電腦上的環境變數 `.env` 是否需要手動複製？
-**不需要！** 本專案的 `.env` 與 `.env.production`（內含 Google Apps Script Web App 呼叫網址）已納入版本控制並推送到 GitHub 倉庫，`git clone` 下來時就已經包含在內，開箱即用。
+### Q1：新電腦上的環境變數 `.env.local` 如何設定？
+為落實最高等級資安防護（防範 GitHub 洩漏試算表位址與金鑰），`.env.local` 已被 `.gitignore` 隔離保護。
+**新電腦設定方式**：在新電腦專案根目錄建立 `.env.local`，填入與目前相同的兩行設定即可：
+```ini
+VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ/exec
+VITE_API_SECRET=adfiowpgjsljdpjkljfwpojfsjfpsjp49845498adfhsifhs4f4s3a54f8ds764f548wa45g98sa489
+```
 
 ### Q2：如果在另一台電腦修改了 Google Apps Script 後端代碼 (`src/backend/Code.gs`)？
-記得依照本專案既定規範：
-1. 複製更新後的 `src/backend/Code.gs`。
-2. 前往 Google 試算表 ➜「擴充功能」➜「Apps Script」貼上覆蓋。
-3. 點擊「部署」➜「管理部署作業」➜「編輯」➜ 版本選擇「新版本」➜「部署」。
+**由 AI 全自動一鍵發布，嚴禁手動複製貼上！**
+- 依照本專案《AGENTS.md》第 7 條鐵律，AI 必須在終端機自主執行 `npm run gas:deploy`，自動完成「代碼推送 + 部署版本更新」。
+- 新電腦僅需確保已登入過一次 clasp（`npx clasp login`）。
 
 ### Q3：如果在兩台電腦同時修改了同一個檔案，導致 `git pull` 提示衝突 (Conflict) 怎麼辦？
 只要在 Antigravity 側邊欄對話框輸入：
@@ -179,18 +183,19 @@ Antigravity 即會自動分析衝突標記（`<<<<<<< HEAD`），保留雙方的
   - `config/rules/`（全域規則）
   - `config/skills/`（全域技能）
 - 如有特殊全域技能，可直接將該資料夾透過隨身碟或雲端硬碟拷貝至新電腦的 `C:\Users\<新使用者名稱>\.gemini\` 下即可。
-（註：本專案本身使用的規則已內建於 `.agents/rules/`，即使不複製全域資料夾也能正常運作）。
+（註：本專案本身使用的規則已內建於 `.agents/rules/` 與 `AGENTS.md`，即使不複製全域資料夾也能正常運作）。
 
-### Q5：升級至 Antigravity 2.0 介面，若新電腦執行工具遇到 PreToolUse Hook 錯誤？
-若在新電腦上 AI 執行讀檔或終端指令時，遇到 `jsonhook__googlecloudtools.datacloud_telemetry_PreToolUse_0_0 failed: Cannot find module` 錯誤，是 Windows 下外掛路徑引號問題。
-**解法**：在 PowerShell 貼上以下指令清空設定檔，即可永久根治：
+### Q5：若新電腦執行 AI 工具時遇到 PreToolUse Hook 錯誤？
+若在新電腦上 AI 執行工具時遇到 `jsonhook__googlecloudtools.datacloud_telemetry_PreToolUse_0_0 failed` 錯誤：
+**解法**：在 PowerShell 貼上以下指令強制清除外掛資料夾即可：
 ```powershell
-Get-ChildItem -Recurse "$env:USERPROFILE\.gemini\config\plugins\googlecloudtools.datacloud_telemetry" -Filter "*.json" | ForEach-Object { Set-Content $_.FullName "{}" }
+Remove-Item -Path "$env:USERPROFILE\.gemini\config\plugins\googlecloudtools.datacloud_telemetry" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
-### Q6：換機後若需要 AI 自動部署 Apps Script，如何設定 Clasp？
-在新電腦開啟終端機執行：
+### Q6：換機後若需要 AI 自動部署 Apps Script，如何確認 Clasp？
+在新電腦開啟終端機執行一次：
 ```powershell
 npx @google/clasp login
 ```
-瀏覽器會自動彈出 Google 帳號授權頁面，點選允許即可。
+瀏覽器會自動彈出 Google 帳號授權頁面，點選允許即可完成永久綁定。
+
