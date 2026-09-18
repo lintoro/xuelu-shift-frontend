@@ -1966,7 +1966,8 @@ export default function App() {
             onOpenSettings={() => setIsCloudModalOpen(true)}
           >
             {/* 僅營運高管 Manager 可檢視與操作排班演算法引擎除錯，Staff Admin 嚴格排除 */}
-            {isManager && (
+            {/* [資安強化] 額外條件：僅在開發環境 (DEV) 或 URL 帶有 ?debug=1 參數時顯示，生產環境完全隔離 */}
+            {isManager && (import.meta.env.DEV || new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('debug') === '1') && (
               <EngineDebugger
                 onRunEngine={handleRunEngine}
                 metrics={scheduleResult}

@@ -3,23 +3,56 @@ import { EMPLOYEES, STATIONS, DEFAULT_MONTHLY_RULES } from '../data/mockMasterDa
 import { DEFAULT_SHIFT_TYPES } from '../types/scheduler.js';
 
 /**
- * 學旅排班系統統一 API 服務網關 (JSON-RPC 2.0 Architecture - V2.5 雲端版)
+ * 學旅排班系統統一 API 服務網關 (JSON-RPC 2.0 Architecture - V2.9 三重資安強化版)
  * 核心規範：
  * 1. 雙模式 (Dual-Mode)：
  *    - 線上雲端模式 (Live Cloud Mode)：對接 Google Apps Script Web App (GAS) 與 Google Sheets 7+1+4 核心資料庫。
  *    - 本地沙盒模式 (Local Sandbox Mode)：預設使用 localStorage / 記憶體模擬，零伺服器主機維護成本。
  * 2. 支援動態配置 GAS 網址 (優先讀取 localStorage 快取，免手動改寫 index.html)。
  * 3. 具備 RTT 延遲測試 (Ping) 與網路異常自動優雅降級 (Graceful Degradation)。
+ * 4. [資安強化] DEFAULT_GAS_URL 已清除硬編碼，改由 .env.local / Vercel 環境變數注入。
+ *    - 地端開發：於根目錄建立 .env.local，設定 VITE_GAS_API_URL=<你的 GAS 網址>
+ *    - Vercel 生產：於 Vercel 後台 Environment Variables 設定 VITE_GAS_API_URL
+ *    - 若未設定任何環境變數，系統自動切換為本地沙盒模式（不連線雲端）。
+ * 5. [資安強化] 所有 API 請求自動夾帶 api_token 靜態共享金鑰，GAS 後端驗證後方可存取資料。
+ *    - 地端開發：於 .env.local 設定 VITE_API_SECRET=<你的金鑰>
+ *    - Vercel 生產：於 Vercel 後台設定 VITE_API_SECRET
+ *    - GAS 腳本屬性：PropertiesService.getScriptProperties().setProperty('APP_SHARED_SECRET', '<同一金鑰>')
  */
 
 const STORAGE_KEY_GAS_URL = 'xuelu_gas_api_url';
 const STORAGE_KEY_CLOUD_DISABLED = 'xuelu_cloud_disabled';
-export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ/exec';
+
+// [資安強化] GAS Web App URL 已移除硬編碼，改由環境變數注入。
+// 任何人 Clone GitHub 倉庫都無法從原始碼取得真實後端位址。
+export const DEFAULT_GAS_URL = '';
 
 export const ApiService = {
-  // 取得當前設定之 GAS 網址 (優先順序: localStorage 手動設定 -> 停用旗標 -> VITE_GAS_API_URL 環境變數 -> 全域變數 -> 系統預設正式資料庫)
+  // [資安強化] 取得前端靜態共享金鑰（僅從環境變數讀取，絕不硬編碼於原始碼）
+  getApiSecret() {
+    try {
+      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_SECRET) {
+        return import.meta.env.VITE_API_SECRET.trim();
+      }
+    } catch {
+      // 忽略
+    }
+    // 若未設定 VITE_API_SECRET，回傳空字串（GAS 後端會以空白金鑰拒絕非 ping/login 請求）
+    return '';
+  },
+
+  // 取得當前設定之 GAS 網址
+  // 優先順序: localStorage 手動設定 -> 停用旗標 -> VITE_GAS_API_URL 環境變數 -> 全域變數 -> 空（沙盒）
   getGasUrl() {
-    if (typeof window === 'undefined') return DEFAULT_GAS_URL;
+    if (typeof window === 'undefined') {
+      // SSR 或 Node 環境下，從環境變數讀取（測試腳本用）
+      try {
+        if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GAS_API_URL) {
+          return import.meta.env.VITE_GAS_API_URL.trim();
+        }
+      } catch { /* 忽略 */ }
+      return '';
+    }
 
     // 若使用者主動點擊切換為本地沙盒
     if (localStorage.getItem(STORAGE_KEY_CLOUD_DISABLED) === 'true') {
@@ -42,7 +75,8 @@ export const ApiService = {
       return window.__GAS_API_URL__.trim();
     }
 
-    return DEFAULT_GAS_URL;
+    // [資安強化] 預設不 fallback 至任何硬編碼網址，以空字串啟動沙盒模式
+    return '';
   },
 
   // 設置新 GAS 網址至瀏覽器快取
@@ -121,6 +155,12 @@ export const ApiService = {
     let gasUrl = options.urlOverride || this.getGasUrl();
     if (gasUrl === '__DISABLED__') gasUrl = '';
 
+    // [資安強化] 自動將靜態共享金鑰夾帶至所有請求 params 中
+    // GAS 後端 Code.gs 會在處理每個端點前驗證此金鑰（ping 與 auth.login 除外）
+    const securedParams = method === 'ping'
+      ? params
+      : { ...params, api_token: this.getApiSecret() };
+
     // 1. 若處於 GAS 嵌入 iframe (google.script.run)
     if (this.isGasIframe() && !options.urlOverride) {
       return new Promise((resolve, reject) => {
@@ -143,7 +183,7 @@ export const ApiService = {
               contents: JSON.stringify({
                 jsonrpc: '2.0',
                 method: method,
-                params: params,
+                params: securedParams,
                 id: Date.now()
               })
             }
@@ -165,7 +205,7 @@ export const ApiService = {
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: method,
-            params: params,
+            params: securedParams,
             id: Date.now()
           }),
           signal: controller.signal

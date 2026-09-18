@@ -18,7 +18,7 @@ const STANDARD_GLOBALS = new Set([
   'performance', 'URL', 'Blob', 'File', 'FileReader', 'FormData', 'Headers',
   'Request', 'Response', 'CustomEvent', 'Event', 'MutationObserver',
   'IntersectionObserver', 'ResizeObserver', 'crypto', 'btoa', 'atob',
-  'AbortController', 'TextEncoder', 'TextDecoder',
+  'AbortController', 'TextEncoder', 'TextDecoder', 'URLSearchParams',
   'React', 'globalThis', 'self', 'Intl', 'Infinity', 'NaN', 'undefined'
 ]);
 

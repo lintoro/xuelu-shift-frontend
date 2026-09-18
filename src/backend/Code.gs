@@ -63,12 +63,38 @@ function doPost(e) {
     var params = request.params || {};
     var result = null;
 
+    // ===================================================================
+    // [資安強化] API 靜態共享金鑰驗證閘道 (API Token Gate)
+    // 說明：ping 與 auth.login 為公開端點（免 Token）。
+    //       其餘所有端點，前端必須在 params.api_token 夾帶正確金鑰，
+    //       金鑰儲存於 GAS 腳本屬性（PropertiesService），絕不硬編碼。
+    // 設定方式：在 GAS 編輯器中點選「專案設定」→「指令碼屬性」，
+    //           新增屬性名稱 APP_SHARED_SECRET，值對應 .env.local 的 VITE_API_SECRET。
+    // ===================================================================
+    var WHITE_LIST_METHODS = ['ping', 'auth.login'];
+    if (WHITE_LIST_METHODS.indexOf(method) === -1) {
+      var scriptProps = PropertiesService.getScriptProperties();
+      var appSecret = scriptProps.getProperty('APP_SHARED_SECRET') || '';
+      var requestToken = params.api_token || '';
+      if (!appSecret || requestToken !== appSecret) {
+        return ContentService.createTextOutput(JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32001,
+            message: '401 Unauthorized: API Token 驗證失敗，拒絕存取。請確認前端 VITE_API_SECRET 與 GAS 腳本屬性 APP_SHARED_SECRET 設定一致。'
+          },
+          id: request.id || null
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    // ===================================================================
+
     switch (method) {
       // 0. 伺服器健康檢測 (免 Token)
       case 'ping':
         result = {
           success: true,
-          version: 'v2.5.0-gas-cloud',
+          version: 'v2.9.2-token-gated',
           timestamp: new Date().toISOString(),
           server: 'Google Apps Script / Google Sheets Engine (Xuelu Ops)'
         };
