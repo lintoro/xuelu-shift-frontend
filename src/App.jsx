@@ -38,7 +38,7 @@ import {
 } from './data/leaveStore.js';
 import { INITIAL_SWAP_REQUESTS, INITIAL_AUDIT_LOGS } from './data/swapStore.js';
 
-import { generateSeedSchedule } from './engine/schedulerEngine.js';
+import { generateSeedSchedule, categorizeStatutoryLeaves } from './engine/schedulerEngine.js';
 import { validateScheduleCompliance } from './engine/complianceValidator.js';
 import { exportEmployeeToIcs, exportScheduleToCsv } from './utils/calendarExport.js';
 import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
@@ -725,8 +725,17 @@ export default function App() {
         };
       });
     });
+
+    // 依《勞基法》第 36/37/39 條自動補齊全員「一例一休一國」三階法定假別定性與出勤一對一調移
+    categorizeStatutoryLeaves({
+      scheduleMap: merged,
+      totalDays: currentRules.days_in_month || 30,
+      yearMonth: currentMonth,
+      employees: allEmployees
+    });
+
     return merged;
-  }, [baseScheduleResult.scheduleMap, scheduleOverrides, currentMonth]);
+  }, [baseScheduleResult.scheduleMap, scheduleOverrides, currentMonth, currentRules.days_in_month, allEmployees]);
 
 
   const scheduleResult = useMemo(() => ({

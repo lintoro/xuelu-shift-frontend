@@ -1,5 +1,6 @@
 // src/engine/schedulerEngine.js
-import { SHIFT_TYPES, isOffShift } from '../types/scheduler.js';
+import { SHIFT_TYPES, isOffShift, isWorkingShift } from '../types/scheduler.js';
+import { getHolidaysInMonth } from '../data/holidayTransferStore.js';
 
 /**
  * 確定性啟發式排班種子引擎 (Staggered Rotation Heuristic Seed Engine - V2.3 增強版)
@@ -553,42 +554,18 @@ export function generateSeedSchedule({
     }
   });
 
-  // 8. 勞基法第 36 條「一例一休」法定假別自動定性程序 (Statutory Leave Categorization)
-  // 核心原則：每 7 日週期內指定 1 天為剛性法定例假 (REG_OFF 例)，其餘排休為休息日 (REST_OFF 休)
-  // 同仁若已申請 AL(特休)、CT(補休)、SL(病假)、PL(事假) 等，保留該特定假別
-  employees.forEach(emp => {
-    if (emp.is_self_scheduled) return; // 高管自主排班不覆寫
-    const empMap = scheduleMap[emp.emp_id];
-    if (!empMap) return;
-
-    for (let cycleStart = 1; cycleStart <= totalDays; cycleStart += 7) {
-      const cycleEnd = Math.min(cycleStart + 6, totalDays);
-      let hasRegOff = false;
-
-      // 檢查當週是否已有指定之法定例假
-      for (let d = cycleStart; d <= cycleEnd; d++) {
-        if (empMap[d]?.shift_type === 'REG_OFF') {
-          hasRegOff = true;
-          break;
-        }
-      }
-
-      // 當週尚未有例假時，將首個常態休假定性為法定例假 REG_OFF (例)
-      // 當週其餘常態休假定性為休息日輪休 REST_OFF (休)
-      for (let d = cycleStart; d <= cycleEnd; d++) {
-        const item = empMap[d];
-        if (item && item.shift_type === 'OFF') {
-          if (!hasRegOff) {
-            item.shift_type = 'REG_OFF';
-            item.note = '勞基法第36條法定例假 (例)';
-            hasRegOff = true;
-          } else {
-            item.shift_type = 'REST_OFF';
-            item.note = '勞基法第36條休息日輪休 (休)';
-          }
-        }
-      }
-    }
+  // 8. 勞基法第 36/37/39 條「一例一休一國」法定假別自動定性與調移程序 (Statutory Leave Categorization)
+  // 核心原則：
+  // 1. 每 7 日週期內指定 1 天為剛性法定例假 (REG_OFF 例)。
+  // 2. 其餘常態休假定為休息日 (REST_OFF 休)。
+  // 3. 當月適逢國定假日 (HOLIDAY_OFF 國)：
+  //    - 當日排休者：直接定性為 HOLIDAY_OFF (國)。
+  //    - 當日出勤者：依法於當月 REST_OFF 中一對一獨佔指派一天休假轉化為 HOLIDAY_OFF (國)，標記調移來源。
+  categorizeStatutoryLeaves({
+    scheduleMap,
+    totalDays,
+    yearMonth,
+    employees
   });
 
   const durationMs = (performance.now() - startTime).toFixed(2);
@@ -686,4 +663,140 @@ function selectShiftForStation({
   // 假日其餘人力一律以 D 班排定（需要 B 班由主管手動排）
   return 'D';
 }
+
+/**
+ * 勞基法第 36/37/39 條「一例一休一國」法定假別自動定性與調移程序
+ * @param {Object} params
+ * @param {Object} params.scheduleMap - 排班矩陣
+ * @param {number} params.totalDays - 當月天數 (如 30 或 31)
+ * @param {string} params.yearMonth - '2026-09'
+ * @param {Array} params.employees - 員工陣列
+ */
+export function categorizeStatutoryLeaves({
+  scheduleMap = {},
+  totalDays = 30,
+  yearMonth = '2026-09',
+  employees = []
+}) {
+  const monthHolidays = getHolidaysInMonth(yearMonth);
+
+  employees.forEach(emp => {
+    const empMap = scheduleMap[emp.emp_id];
+    if (!empMap) return;
+
+    // 1. 每 7 日週期內指定 1 天為剛性法定例假 REG_OFF (例)
+    for (let cycleStart = 1; cycleStart <= totalDays; cycleStart += 7) {
+      const cycleEnd = Math.min(cycleStart + 6, totalDays);
+      let hasRegOff = false;
+
+      for (let d = cycleStart; d <= cycleEnd; d++) {
+        const item = empMap[d];
+        const shiftType = typeof item === 'object' ? item?.shift_type : item;
+        if (shiftType === 'REG_OFF') {
+          hasRegOff = true;
+          break;
+        }
+      }
+
+      for (let d = cycleStart; d <= cycleEnd; d++) {
+        let item = empMap[d];
+        if (!item) continue;
+        const shiftType = typeof item === 'object' ? item?.shift_type : item;
+        if (shiftType === 'OFF') {
+          if (!hasRegOff) {
+            if (typeof item === 'object') {
+              item.shift_type = 'REG_OFF';
+              item.note = '勞基法第36條法定例假 (例)';
+            } else {
+              empMap[d] = { shift_type: 'REG_OFF', station_id: emp.primary_station, note: '勞基法第36條法定例假 (例)' };
+            }
+            hasRegOff = true;
+          } else {
+            if (typeof item === 'object') {
+              item.shift_type = 'REST_OFF';
+              item.note = '勞基法第36條休息日輪休 (休)';
+            } else {
+              empMap[d] = { shift_type: 'REST_OFF', station_id: emp.primary_station, note: '勞基法第36條休息日輪休 (休)' };
+            }
+          }
+        }
+      }
+    }
+
+    // 2. 國定假日排定與一對一調移定性 (HOLIDAY_OFF 國)
+    // 勞基法原則：PT 計時人員不適用國定假日調移免雙薪協議，其逢國假出勤由雙薪時數獨立試算
+    if (emp.role === 'PT') return;
+
+    if (monthHolidays.length > 0) {
+      const usedTransferredDays = new Set();
+
+      monthHolidays.forEach(h => {
+        const holidayDay = h.day;
+        const holidayShift = empMap[holidayDay];
+        const holidayShiftType = typeof holidayShift === 'object' ? holidayShift?.shift_type : holidayShift;
+
+        // 若國假當天本來就是排休 (非出勤班別)
+        if (isOffShift(holidayShiftType) || !holidayShiftType) {
+          if (typeof holidayShift === 'object') {
+            holidayShift.shift_type = 'HOLIDAY_OFF';
+            holidayShift.note = `${h.name} (國)`;
+            holidayShift.holidayName = h.name;
+          } else {
+            empMap[holidayDay] = {
+              shift_type: 'HOLIDAY_OFF',
+              station_id: emp.primary_station,
+              note: `${h.name} (國)`,
+              holidayName: h.name
+            };
+          }
+        } else if (isWorkingShift(holidayShiftType)) {
+          // 若國假當天排定出勤，則依法於當月其餘休息日中，一對一獨佔指派一天調移休假 (定性為 HOLIDAY_OFF)
+          let targetOffDay = null;
+
+          // 候選日期：排除國假當日、排除已調移使用過的日期
+          const candidateDays = [];
+          for (let d = 1; d <= totalDays; d++) {
+            if (d === holidayDay || usedTransferredDays.has(d)) continue;
+            const dayShift = empMap[d];
+            const dayShiftType = typeof dayShift === 'object' ? dayShift?.shift_type : dayShift;
+            // 優先選擇 REST_OFF (休) 或一般 OFF
+            if (dayShiftType === 'REST_OFF' || dayShiftType === 'OFF') {
+              candidateDays.push(d);
+            }
+          }
+
+          if (candidateDays.length > 0) {
+            // 依距離該國定假日最近排序，使調移合乎作息常理
+            candidateDays.sort((a, b) => Math.abs(a - holidayDay) - Math.abs(b - holidayDay));
+            targetOffDay = candidateDays[0];
+          }
+
+          if (targetOffDay) {
+            usedTransferredDays.add(targetOffDay);
+            const targetItem = empMap[targetOffDay];
+            if (typeof targetItem === 'object') {
+              targetItem.shift_type = 'HOLIDAY_OFF';
+              targetItem.note = `${h.name}調移 (國)`;
+              targetItem.transferredFromDay = holidayDay;
+              targetItem.transferredFrom = h.date;
+              targetItem.holidayName = h.name;
+            } else {
+              empMap[targetOffDay] = {
+                shift_type: 'HOLIDAY_OFF',
+                station_id: emp.primary_station,
+                note: `${h.name}調移 (國)`,
+                transferredFromDay: holidayDay,
+                transferredFrom: h.date,
+                holidayName: h.name
+              };
+            }
+          }
+        }
+      });
+    }
+  });
+
+  return scheduleMap;
+}
+
 

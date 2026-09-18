@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Award, Clock, ArrowLeftRight, Download, CheckCircle, CheckCircle2, ShieldAlert, Sparkles, User, BookOpen, FileCheck2, AlertCircle, FileText, Check } from 'lucide-react';
 import { SHIFT_TYPES, isWorkingShift, isOffShift } from '../../types/scheduler.js';
-import { checkEmployeeHolidayConsent } from '../../data/holidayTransferStore.js';
+import { checkEmployeeHolidayConsent, calculatePtHolidayDoublePay, isStatutoryHoliday } from '../../data/holidayTransferStore.js';
 import LeavePassbookModal from './LeavePassbookModal.jsx';
 import LeaveApplicationModal from './LeaveApplicationModal.jsx';
 
@@ -32,6 +32,7 @@ export default function MyDashboard({
   const balance = leaveBalances[currentUser.emp_id] || { annualLeaveDays: 0, compTimeHours: 0 };
 
   const mySchedule = scheduleMap[currentUser.emp_id] || {};
+  const isPt = currentUser.role === 'PT';
 
   // 統計個人本月數據
   let myWorkDays = 0;
@@ -63,13 +64,31 @@ export default function MyDashboard({
   const isSigned = !!signOffList[currentUser.emp_id];
   const mySignInfo = signOffList[currentUser.emp_id];
 
-  // 國定假日出勤調移同意檢核
+  // 國定假日出勤調移同意檢核 (PT 排除免雙薪協議，其依法直接計給加倍工資)
   const holidayConsentInfo = checkEmployeeHolidayConsent({
     empId: currentUser.emp_id,
     yearMonth,
     scheduleMap,
-    consentsMap: holidayConsents
+    consentsMap: holidayConsents,
+    isPt
   });
+
+  // PT 計時同仁國定假日出勤雙薪獨立試算
+  const ptDoublePayInfo = React.useMemo(() => {
+    if (!isPt) return null;
+    const res = calculatePtHolidayDoublePay({
+      ptEmployees: [currentUser],
+      yearMonth,
+      scheduleMap
+    });
+    return res[0] || null;
+  }, [isPt, currentUser, yearMonth, scheduleMap]);
+
+  // PT 生效雙薪出勤日快取集合 (以調整放假當日為唯一依歸)
+  const ptDoublePayDaysSet = React.useMemo(() => {
+    if (!ptDoublePayInfo || !ptDoublePayInfo.dutyDates) return new Set();
+    return new Set(ptDoublePayInfo.dutyDates.map(d => d.day));
+  }, [ptDoublePayInfo]);
 
   return (
     <div className="space-y-6 mb-8">
@@ -136,8 +155,8 @@ export default function MyDashboard({
         </div>
       </div>
 
-      {/* 國定假日調移出勤同意簽認卡片 (服務業免雙薪法律閉環) */}
-      {holidayConsentInfo.required && (
+      {/* 國定假日調移出勤同意簽認卡片 (服務業正職/主管免雙薪法律閉環，PT 嚴格排除) */}
+      {!isPt && holidayConsentInfo.required && (
         <div className={`rounded-2xl border p-5 shadow-sm transition-all ${
           holidayConsentInfo.pendingCount === 0
             ? 'bg-emerald-50/80 border-emerald-300'
@@ -166,7 +185,7 @@ export default function MyDashboard({
                     <div key={h.date} className="p-2.5 rounded-xl bg-white/80 border border-slate-200/80">
                       <p>
                         依《勞動基準法》第 37、39 條及勞雇雙方約定，本月份適逢法定國定假日【<strong className="text-rose-700">{h.name} ({h.date})</strong>】，排定出勤【<strong className="text-indigo-700">{h.shiftCode} 班</strong>】。
-                        經雙方事前協商合意，該國定假日調移至【<strong className="text-emerald-700">{yearMonth}-{h.suggestedOffDay < 10 ? '0' + h.suggestedOffDay : h.suggestedOffDay} (OFF)</strong>】休假。
+                        經雙方事前協商合意，該國定假日調移至【<strong className="text-emerald-700">{yearMonth}-{h.suggestedOffDay < 10 ? '0' + h.suggestedOffDay : h.suggestedOffDay} (國)</strong>】休假。
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">
                         • 同意要旨：本人同意於原國定假日依班表出勤，並配合調移休假，出勤日按正常工時給付工資（免另計加倍工資/雙薪）。
@@ -331,19 +350,41 @@ export default function MyDashboard({
             </div>
           </>
         ) : (
-          <div className="col-span-2 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-bold mb-1">PT 時薪工時存摺</div>
-              <div className="text-2xl font-black text-amber-600">{myTotalHours} 小時</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">發放當月時薪對帳基準</div>
+          <>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-500 font-bold mb-1">PT 時薪工時存摺</div>
+                <div className="text-2xl font-black text-amber-600">
+                  {myTotalHours} <span className="text-xs font-normal text-slate-500">小時</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">發放當月時薪對帳基準</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab && onNavigateTab('LEAVE_PORTAL')}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold cursor-pointer transition-all shadow-2xs"
+              >
+                意向日曆 →
+              </button>
             </div>
-            <button
-              onClick={() => onNavigateTab('LEAVE_PORTAL')}
-              className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold cursor-pointer"
-            >
-              填報意向日曆 →
-            </button>
-          </div>
+
+            <div className="bg-white p-4 rounded-xl border border-rose-200 bg-gradient-to-br from-white to-rose-50/30 shadow-2xs">
+              <div className="text-xs text-rose-800 font-bold mb-1 flex items-center justify-between">
+                <span>國定假日雙薪時數</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-black shadow-2xs">
+                  法定 100% 加給
+                </span>
+              </div>
+              <div className="text-2xl font-black text-rose-600">
+                {ptDoublePayInfo?.doublePayHours || 0} <span className="text-xs font-normal text-slate-500">小時</span>
+              </div>
+              <div className="text-[10px] text-rose-700/80 mt-1 truncate" title="PT 逢國定假日出勤依法直接計給雙倍工資（僅供參考，不代表最後數字）">
+                {ptDoublePayInfo?.dutyDates?.length > 0 
+                  ? `出勤 ${ptDoublePayInfo.dutyDates.length} 天（${ptDoublePayInfo.dutyDates.map(d => `${d.day}日`).join('、')}）· 僅供參考` 
+                  : '本月國假未排定出勤 · 僅供參考'}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -389,35 +430,95 @@ export default function MyDashboard({
               {/* 每日出勤格 */}
               {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
                 const shift = mySchedule[day];
-                const isOff = !shift || isOffShift(shift.shift_type);
-                const shiftInfo = effectiveShiftTypes[shift?.shift_type] || SHIFT_TYPES[shift?.shift_type];
+                const shiftType = shift?.shift_type;
+                const shiftInfo = effectiveShiftTypes[shiftType] || SHIFT_TYPES[shiftType];
                 const dateObj = new Date(calYear, calMonth - 1, day);
                 const dayOfWeek = dateObj.getDay();
                 const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const dayStr = day < 10 ? '0' + day : '' + day;
+                const fullDateStr = `${yearMonth}-${dayStr}`;
+                const holidayObj = isStatutoryHoliday(fullDateStr);
+
+                // 精準假別判定 (徹底解決抹平為例休之問題)
+                const isRegOff = shiftType === 'REG_OFF';
+                const isHolidayOff = shiftType === 'HOLIDAY_OFF';
+                const isRestOff = shiftType === 'REST_OFF' || (shiftType === 'OFF' && !isRegOff && !isHolidayOff);
+                const isLeaveShift = ['AL', 'CT', 'SL', 'PL', 'ML', 'FL', 'MAT', 'CL'].includes(shiftType);
+                const isPreHire = shiftType === 'PRE_HIRE_OFF';
+                const isOff = isRegOff || isRestOff || isHolidayOff || isLeaveShift || isPreHire || !shiftType;
+                
+                // PT 國定假日調整放假當日出勤雙薪判定 (逢六日原日不計，以調整放假當日為準)
+                const isPtHolidayDuty = isPt && ptDoublePayDaysSet.has(day);
+
+                // 動態決定標籤文字、角標與背景樣式
+                let badgeLabel = '休';
+                let titleLabel = '休息日';
+                let cellBgClass = 'bg-rose-50/50 border-rose-200 text-rose-700';
+
+                if (isRegOff) {
+                  badgeLabel = '例';
+                  titleLabel = '法定例假';
+                  cellBgClass = 'bg-rose-100 border-rose-300 text-rose-900 font-bold';
+                } else if (isHolidayOff) {
+                  badgeLabel = '國';
+                  titleLabel = shift?.holidayName ? `${shift.holidayName}調移` : '國定假日';
+                  cellBgClass = 'bg-red-50 border-red-300 text-red-900 font-black';
+                } else if (isRestOff) {
+                  badgeLabel = '休';
+                  titleLabel = '休息日';
+                  cellBgClass = 'bg-rose-50/70 border-rose-200 text-rose-700 font-medium';
+                } else if (isLeaveShift) {
+                  badgeLabel = shiftInfo?.name?.slice(0, 1) || '假';
+                  titleLabel = shiftInfo?.name || '請假';
+                  cellBgClass = `${shiftInfo?.color || 'bg-amber-50 text-amber-800 border-amber-200'} font-bold`;
+                } else if (isPreHire) {
+                  badgeLabel = '未';
+                  titleLabel = '未到職';
+                  cellBgClass = 'bg-slate-100 border-slate-200 text-slate-400';
+                } else if (shiftInfo) {
+                  badgeLabel = shiftType;
+                  titleLabel = shiftInfo.name;
+                  cellBgClass = `${shiftInfo.color} border shadow-2xs`;
+                }
 
                 return (
                   <div
                     key={day}
-                    className={`p-2.5 rounded-xl border text-center flex flex-col justify-between min-h-[80px] transition-all hover:shadow-xs ${
-                      isOff 
-                        ? 'bg-rose-50/50 border-rose-200 text-rose-700' 
-                        : shiftInfo 
-                        ? `${shiftInfo.color} border shadow-2xs` 
-                        : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
+                    className={`p-2.5 rounded-xl border text-center flex flex-col justify-between min-h-[80px] transition-all hover:shadow-xs ${cellBgClass}`}
                   >
                     <div className="flex justify-between items-center text-[10px] font-bold">
-                      <span className={isWeekend ? 'text-rose-600' : 'text-slate-600'}>{day} 日</span>
-                      <span className="text-[9px] opacity-75">{isOff ? '休' : shift?.shift_type}</span>
+                      <span className={holidayObj ? 'text-rose-600 font-black' : isWeekend ? 'text-rose-600' : 'text-slate-600'}>
+                        {day} 日 {holidayObj && <span className="text-[8px] bg-rose-200 text-rose-900 px-1 rounded ml-0.5">國</span>}
+                      </span>
+                      <span className={`text-[9px] px-1 py-0.2 rounded ${
+                        isRegOff 
+                          ? 'bg-rose-600 text-white font-black' 
+                          : isHolidayOff 
+                          ? 'bg-red-600 text-white font-black' 
+                          : isRestOff 
+                          ? 'bg-rose-200 text-rose-800 font-bold' 
+                          : 'opacity-75'
+                      }`}>
+                        {badgeLabel}
+                      </span>
                     </div>
 
-                    <div className="my-1 font-black text-xs">
-                      {isOff ? '例休' : shiftInfo?.name || shift?.shift_type}
+                    <div className="my-1 font-black text-xs truncate" title={titleLabel}>
+                      {titleLabel}
                     </div>
 
                     <div className="text-[9px] truncate opacity-90 font-medium">
                       {isOff ? '0h' : stationMap[shift?.station_id] || shift?.station_id}
                     </div>
+
+                    {/* PT 國假出勤雙薪特別徽章 */}
+                    {isPtHolidayDuty && (
+                      <div className="mt-1">
+                        <span className="px-1 py-0.5 rounded bg-amber-500 text-white font-black text-[8px] block shadow-2xs">
+                          🔥 國假雙薪 {shift?.actual_hours || 8}h
+                        </span>
+                      </div>
+                    )}
 
                     {shift?.is_labor_violation_override && (
                       <div className="mt-1">
