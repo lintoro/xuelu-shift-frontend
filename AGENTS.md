@@ -80,3 +80,8 @@
 - **鐵律**：修改 `src/backend/Code.gs` 後，**嚴禁直接發布未經驗證的程式碼**。
 - **防錯規範**：
   - 每次執行 `npm run gas:deploy` 前，必須先執行地端 AST 語法檢驗（例如以 `@babel/parser` 解析），確保所有花括號 `{}` 成對閉合、無語法中斷錯誤後，方可執行部署。
+
+### 7. Google Apps Script 雲端發布全自動執行鐵律 (Zero-Manual GAS Deployment)
+- **鐵律**：凡修改 `src/backend/Code.gs` 或後端邏輯，**AI 必須自主執行 `npm run gas:deploy` 一鍵完成「代碼推送 + 部署版本更新」**。
+- **嚴禁行為**：**絕對禁止指示使用者打開網頁瀏覽器手動複製貼上程式碼或手動點擊部署版本！**
+- **自動化流水線機制**：專案已綁定 `clasp push && clasp deploy -i AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ -d "IDE一鍵發布"`，必須由 AI 全程自動發布並自動進行四段 API 驗證。
