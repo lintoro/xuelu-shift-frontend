@@ -1527,3 +1527,52 @@
   - `src/components/Dashboard/LeaveApplicationModal.jsx`
   - `src/App.jsx`
 - **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.0-swap-tw-tz-duplicate-guard-clean-conflict-delivered)`
+
+---
+
+### 📌 [需求 #044] Vercel CI/CD 建置指令修復與生產環境變數線上連線驗收
+
+- **來源反饋**：主管於 Vercel 生產環境驗收網頁版時反饋：
+  1. Vercel 自動建置出現 `MODULE_NOT_FOUND` 異常，`npm run build` 以退出碼 1 宣告失敗。
+  2. 網頁版開啟後無法自動連上 Google Sheets 雲端資料庫。
+- **根本原因深度排查**：
+  1. **建置指令踩坑**：`package.json` 原寫為 `"build": "npm test && vite build"`。在 Vercel 雲端環境執行 `npm test` 時，腳本試圖讀取 `scratch/` 資料夾內的測試檔案。然而 `scratch/` 依資安規範納入 `.gitignore` 排除，導致 Vercel 雲端找不到檔案而回傳 `MODULE_NOT_FOUND`。
+  2. **生產環境變數與資安隔離**：地端 `.env.local` 含有 `VITE_GAS_API_URL` 與 `VITE_API_SECRET`，依資安規範未納入 Git 追蹤。網頁版打包未設定環境變數時自動降級為「本地沙盒模式」。
+- **具體修復與部署驗收處置**：
+  1. **修復打包指令**：將 `package.json` 的 `build` 指令更正為標準 `"vite build"`，地端打包 100% 成功。
+  2. **Vercel 環境變數開通**：於 Vercel 後台將 `VITE_GAS_API_URL` 與 `VITE_API_SECRET` 設為 Config 型別環境變數。
+  3. **成功發布與線上連線驗證**：完成 Commit（`4c352a5`）並完成 Redeploy，線上網頁版已 100% 成功連線上 Google Sheets 雲端資料庫，完工交付！
+- **影響檔案清單**：
+  - `package.json`
+- **狀態驗收**：`✅ 已徹底修復並完成 Vercel 線上連線部署驗收 (v3.6.1-vercel-build-fix-and-cloud-live-delivered)`
+
+---
+
+### 📌 [需求 #045] 公用電腦預設安全防護（15分鐘閒置登出）、個人 3 天記憶通道、無痕迷霧手勢與 ADMIN 控制台功能收納
+
+- **來源反饋**：主管指示：
+  1. 門市公用電腦隔一兩天開機連線網址仍直接進入最後畫面，具有權限越權與隱私風險。
+  2. 登入畫面懸停出現「點擊 5 次...」Tooltip 提示，過於外露需徹底刪除。
+  3. 設計長按與跨區迷霧手勢、內部延遲與燈號反饋，搭配二階管理員專屬密碼驗證。
+  4. 設立 ADMIN 權限控制台，新增管理員密碼自訂修改功能，並將「一鍵快速全設所有同仁 PIN 碼」從外層徹底收納至控制台內部。
+  5. 最詳細的手勢步驟與預設密碼僅記錄於本機 `.env.local` 且不推送到 Git，交接記錄不載明密碼與步驟。
+- **架構設計與修復成果**：
+  1. **公用電腦與個人 3 天雙軌 Session 防護**：
+     - 新建 `src/utils/sessionUtils.js`。登入卡片新增 `[ ] 保持登入 3 天（個人手機/電腦專用，公用電腦請勿勾選）`，預設不勾選。
+     - **預設公用電腦模式**：狀態存於 `sessionStorage`，關閉分頁或視窗即自動抹除；全域監聽 15 分鐘無操作自動安全鎖定登出。
+     - **個人 3 天通道**：主動勾選時寫入 72 小時過期時間戳，滿 3 天自動安全過期鎖定。
+  2. **徹底刪除 Tooltip 與外露暗號**：
+     - 100% 拔除 HTML `title` 提示屬性，滑鼠懸停表面無任何痕跡。
+  3. **二階無痕迷霧手勢與狀態機**：
+     - 於 `LoginView.jsx` 實作多階段狀態機（包含長按、頭尾字定位、內部靜默延遲、實體燈號閃爍反饋與二次收尾點擊）。
+     - 完成後觸發管理員二階特許驗證彈窗。
+  4. **ADMIN 管理員專屬控制台**：
+     - 驗證通過後開啟控制台，提供「🔑 修改管理員特許密碼」、「⚡ 一鍵全設所有同仁 PIN 碼為 000000（原外露功能收納）」與「👥 角色沙盒模擬登入」三大模組。
+- **影響檔案清單**：
+  - `src/utils/sessionUtils.js`
+  - `src/components/Auth/LoginView.jsx`
+  - `src/App.jsx`
+  - `.env.local`（本機機密儲存，不上傳 Git）
+- **狀態驗收**：`✅ 已徹底修復並通過驗收 (v3.6.2-session-security-and-admin-challenge-delivered)`
+
+

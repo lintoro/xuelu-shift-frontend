@@ -1,11 +1,12 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統
 ## 專案開發工作交接與架構演進報告 (HANDOVER.md)
 
-- **最新更新日期**：2026-09-15 22:45 (GMT+8)
-- **當前核心版本**：`v2.9.1-monthly-rules-sync-and-leader-scheduler` (跨月動態化、規則資料庫雙向寫入與組長一鍵排班下放版)
+- **最新更新日期**：2026-09-19 12:25 (GMT+8)
+- **當前核心版本**：`v3.6.2-session-security-and-admin-challenge` (公用電腦防護、3天個人通道、無痕迷霧手勢、ADMIN控制台與Vercel全連線版)
 - **前端部署網址 (Vercel)**：已連動 GitHub 倉庫，支援手機 PWA / 桌面瀏覽器 24 小時免開電腦在線運作
 - **GitHub 儲存庫**：`https://github.com/lintoro/xuelu-shift-frontend.git`
 - **後端資料庫**：Google Sheets 13 大表體系 (7+1 核心表 + 5 擴充表) + Google Apps Script (GAS) 原生 JSON-RPC 2.0 微服務
+- **專案對話與決策歷程記錄**：請參閱 [`docs/PROJECT_CONVERSATION_HISTORY.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/docs/PROJECT_CONVERSATION_HISTORY.md)（含需求討論、架構決策與除錯歷程）
 
 ---
 

@@ -45,15 +45,16 @@ import { DEFAULT_PIN_HASH, DEFAULT_SALT } from './utils/cryptoUtils.js';
 import { SCHEDULE_WORKFLOW_STAGES, canAdvanceWorkflowStage } from './engine/schedulingTimelineEngine.js';
 import { getMonthActualOffDays } from './data/holidayTransferStore.js';
 import { sortEmployees } from './utils/employeeSortUtils.js';
+import { saveUserSession, loadValidUserSession, clearUserSession, isRemember3DaysActive } from './utils/sessionUtils.js';
 
 export default function App() {
-  // 當前登入同仁 (支援 localStorage 本機持久化，F5 重整保留登入狀態)
+  // 當前登入同仁 (支援公用電腦安全模式與個人裝置 3 天保持通道)
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const savedUser = localStorage.getItem('xuelu_auth_user_v1');
-      if (savedUser) {
-        return JSON.parse(savedUser);
-      }
+      const validSessionUser = loadValidUserSession();
+      if (validSessionUser) return validSessionUser;
+      // 清理舊永久快取，防範公用電腦歷史越權殘留
+      localStorage.removeItem('xuelu_auth_user_v1');
     } catch (e) {
       console.warn('載入登入狀態快取失敗:', e);
     }
@@ -1735,13 +1736,11 @@ export default function App() {
     setAuditLogs(prev => [rollbackLog, ...prev]);
   }, [auditLogs, effectiveScheduleMap, currentUser]);
 
-  // 登入認證回呼 (寫入 localStorage，確保 F5 重整不掉登入態)
-  const handleLoginSuccess = useCallback((emp) => {
+  // 登入認證回呼 (依據是否勾選 3 天，寫入 sessionStorage 或 localStorage)
+  const handleLoginSuccess = useCallback((emp, remember3Days = false) => {
     setCurrentUser(emp);
     setCurrentEmpId(emp.emp_id);
-    try {
-      localStorage.setItem('xuelu_auth_user_v1', JSON.stringify(emp));
-    } catch (e) {}
+    saveUserSession(emp, remember3Days);
 
     setActiveTab(prev => {
       const targetTab = prev || 'MY_DASHBOARD';
@@ -1757,11 +1756,11 @@ export default function App() {
     }
   }, []);
 
-  // 登出回呼 (清除本機登入快取)
+  // 登出回呼 (清除所有 Session 快取)
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
+    clearUserSession();
     try {
-      localStorage.removeItem('xuelu_auth_user_v1');
       localStorage.removeItem('xuelu_active_tab_v1');
     } catch (e) {}
     setActiveTab('SCHEDULE');
@@ -1776,18 +1775,19 @@ export default function App() {
     }
   }, [activeTab, currentUser]);
 
-  // 資安防護：門市現場公用平板 15 分鐘無操作自動登出 (Idle Timeout Guard)
+  // 資安防護：門市現場公用電腦 15 分鐘無操作自動登出 (Idle Timeout Guard)
+  // 若個人裝置主動勾選「保持登入 3 天」，則尊重個人設定，不強制 15 分鐘中斷
   React.useEffect(() => {
     if (!currentUser) return;
+    if (isRemember3DaysActive()) return;
 
     let timeoutId;
     const resetTimer = () => {
       clearTimeout(timeoutId);
       // 15 分鐘 = 900,000 毫秒
       timeoutId = setTimeout(() => {
-        alert('【資安防護通知】系統已閒置超過 15 分鐘，為維護門市資料與帳號安全，已為您自動登出。');
-        setCurrentUser(null);
-        setActiveTab('SCHEDULE');
+        alert('【公用電腦安全防護】系統已閒置超過 15 分鐘，為維護門市資料與帳號安全，已自動為您安全登出。');
+        handleLogout();
       }, 15 * 60 * 1000);
     };
 
@@ -1799,7 +1799,7 @@ export default function App() {
       clearTimeout(timeoutId);
       events.forEach(event => window.removeEventListener(event, resetTimer));
     };
-  }, [currentUser]);
+  }, [currentUser, handleLogout]);
 
   // 修改 6 碼 PIN 密碼成功回呼 (加鹽雜湊存儲，徹底移除明文 pin_code)
   const handleChangePinSuccess = useCallback((empId, newPinHash, newSalt) => {
