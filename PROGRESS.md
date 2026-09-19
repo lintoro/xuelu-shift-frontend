@@ -1,9 +1,9 @@
 # 學旅營運處多站點智慧排班與勞基法合規審查系統 (Xuelu Shift System)
 
-> **專案版本**：V2.9.1 跨月動態排班與 Google Sheets 規則雙向同步版  
-> **更新日期**：2026-09-15  
+> **專案版本**：V3.6.2 公用電腦防護、無痕手勢、ADMIN控制台、14大假別正規化與Vercel全連線完工版  
+> **更新日期**：2026-09-19  
 > **系統定位**：維持「零主機維護成本（$0 Serverless）」、以 Google Workspace (Google Sheets + GAS) 為資料核心，結合確定性啟發式演算法與 Google Gemini 語意平衡的內部智慧排班與勞基法合規審查系統。
-> **維運交接與資料庫指南**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)、[`DATABASE_SCHEMA_MAPPING.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/DATABASE_SCHEMA_MAPPING.md) 與 [`OCTOBER_UAT_TEST_SCRIPT.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/OCTOBER_UAT_TEST_SCRIPT.md)。
+> **維運交接與資料庫指南**：請參閱專案根目錄之 [`HANDOVER.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/HANDOVER.md)、[`DATABASE_SCHEMA_MAPPING.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/DATABASE_SCHEMA_MAPPING.md)、[`ANTIGRAVITY_異地開發指南.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/ANTIGRAVITY_%E7%95%B0%E5%9C%B0%E9%96%8B%E7%99%BC%E6%8C%87%E5%8D%97.md) 與 [`OCTOBER_UAT_TEST_SCRIPT.md`](file:///c:/Github/ReactApp/xuelu-shift-frontend/OCTOBER_UAT_TEST_SCRIPT.md)。
 
 ---
 
@@ -24,7 +24,10 @@
 ### 1. 認證、資安與角色權限 (Auth & Security) — 100%
 - [x] **加鹽 SHA-256 密碼雜湊**：前端與後端徹底移除 6 位數明文密碼，支援本機與試算表加密存儲。
 - [x] **初次登入強制改密**：預設密碼 `000000` 登入後強制彈窗要求變更 PIN 碼。
-- [x] **門市現場閒置防護**：公用平板 15 分鐘無操作自動登出機制。
+- [x] **門市公用電腦 15 分鐘閒置安全防護 (`sessionUtils.js`)**：公用平板預設使用 `sessionStorage`，關閉視窗即清空；偵測無操作 15 分鐘自動登出保護門市資安。
+- [x] **個人裝置 3 天免重複登入通道**：勾選「記住我的登入（3天）」啟用 72 小時有效過期時間戳校驗。
+- [x] **無痕迷霧五步暗號手勢狀態機 (`LoginView.jsx`)**：徹底移除介面提示，以「長按2s ➔ 首字 ➔ 尾字 ➔ 靜默延遲 ➔ Logo閃爍 ➔ 再點Logo」狀態機觸發。
+- [x] **ADMIN 二階管理控制台**：暗號輸入後跳出專屬密碼輸入框，支援自訂管理員密碼、一鍵全體重設 PIN 碼為 000000 及沙盒切換。
 - [x] **權限雙軌解耦**：業務角色（`Staff` / `Leader` / `Manager`）與系統管理權限（`is_admin`）徹底解耦。
 
 ### 2. 核心排班與法規檢核模組 (Scheduling & Compliance) — 100%

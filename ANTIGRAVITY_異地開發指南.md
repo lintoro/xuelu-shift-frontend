@@ -160,11 +160,21 @@ git pull origin main
 ## ❓ 常見問題與排解指引 (FAQ)
 
 ### Q1：新電腦上的環境變數 `.env.local` 如何設定？
-為落實最高等級資安防護（防範 GitHub 洩漏試算表位址與金鑰），`.env.local` 已被 `.gitignore` 隔離保護。
-**新電腦設定方式**：在新電腦專案根目錄建立 `.env.local`，填入與目前相同的兩行設定即可：
+為落實最高等級資安防護（防範 GitHub 洩漏試算表位址與金鑰），`.env.local` 已被 `.gitignore` 隔離保護，**不會也嚴禁上傳至 GitHub**。
+**新電腦設定方式**：在新電腦專案根目錄手動建立 `.env.local` 檔案，填入以下設定：
 ```ini
 VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycby9XuPnF1F3U3Sb0ZUlLgjjj1z0waj4CGjyQSFBM0FZTWFEIZdgpWil1AhV6r0icbzJ/exec
 VITE_API_SECRET=adfiowpgjsljdpjkljfwpojfsjfpsjp49845498adfhsifhs4f4s3a54f8ds764f548wa45g98sa489
+
+# ==============================================================================
+# 【機密】營運處排班系統 - ADMIN 管理員除錯面板開啟手勢與驗證密鑰 (不上傳 GIT)
+# ==============================================================================
+# 預設二階解鎖密碼: <請向系統管理員索取或查看離線密鑰手冊，嚴禁寫入版控>
+# 
+# 登入頁開啟手勢序列：
+# 請參閱管理者專用離線手冊，依「長按Logo ➔ 首字 ➔ 尾字 ➔ 延遲混淆 ➔ Logo閃爍 ➔ 點擊Logo」
+# 之無痕五步狀態機喚出二階密碼框，輸入管理者密碼解鎖 ADMIN 控制台。
+# ==============================================================================
 ```
 
 ### Q2：如果在另一台電腦修改了 Google Apps Script 後端代碼 (`src/backend/Code.gs`)？
@@ -198,4 +208,21 @@ Remove-Item -Path "$env:USERPROFILE\.gemini\config\plugins\googlecloudtools.data
 npx @google/clasp login
 ```
 瀏覽器會自動彈出 Google 帳號授權頁面，點選允許即可完成永久綁定。
+
+### Q7：Vercel 線上正式站環境變數如何確認？
+若在 Vercel 重新綁定儲存庫或建立新環境，請務必至 **Vercel Dashboard ➜ Settings ➜ Environment Variables** 確認以下兩項環境變數是否已加入 Production 與 Preview：
+1. `VITE_GAS_API_URL`：填入 Google Apps Script Web App 之 `exec` 網址。
+2. `VITE_API_SECRET`：填入前後端通訊密鑰。
+若未配置，線上站點會退回本地 Mock 沙盒模式。
+
+### Q8：Antigravity 專案歸類、開啟新對話與「子代理 (Subagent)」協同之防踩坑指南
+1. **專案對話歸納原則**：
+   - 請一律在 Antigravity 頂部專案下拉選單中，確認當前聚焦在 `xuelu-shift-frontend` 專案下開展對話，確保讀取到本專案之專屬守則（`AGENTS.md`、`.agents/rules/`）。
+2. **開新對話 vs 子代理 (Subagent) 的差異與最佳實踐**：
+   - **開新對話 (New Chat / Task)**：當進行不同主題（例如：排班演算法除錯 vs 前端介面排版調校 vs 交接手冊更新）時，開新對話能確保對話上下文（Context Window）乾淨，避免長對話導致 AI 記憶疲勞或遺忘專案規則。
+   - **子代理 (Subagent)**：當單一任務龐大、需要同時進行「深層程式碼探勘 (research)」或「前後端獨立試驗」時，主代理可自動衍生子代理並行工作。
+   - **防重複修改與防踩坑鐵律**：
+     - **切忌同時在兩個不同對話修改同一支關鍵程式碼**（例如同時在對話 A 與對話 B 改動 `App.jsx` 或 `schedulerEngine.js`），否則會造成檔案覆寫或邏輯打架。
+     - **分工邊界清晰**：對話 A 專注前端 UI / CSS；對話 B 專注後端 GAS / API 測試。跨模組聯調前，先確認前一對話已完成驗證並在本地穩定後，再啟動下一階段。
+
 
