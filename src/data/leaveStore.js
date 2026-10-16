@@ -1,0 +1,194 @@
+// src/data/leaveStore.js
+import { EMPLOYEES } from './mockMasterData.js';
+
+// 特休與補休存摺資料（落實週年制整數與補休小時制）
+export const INITIAL_LEAVE_BALANCES = {
+  // 正職組長
+  'EMP101': { annualLeaveDays: 7, compTimeHours: 16 }, // 李組長
+  'EMP102': { annualLeaveDays: 10, compTimeHours: 8 },  // 吳組長
+  'EMP103': { annualLeaveDays: 10, compTimeHours: 24 }, // 陳組長
+  'EMP104': { annualLeaveDays: 7, compTimeHours: 12 },  // 柯組長
+  'EMP105': { annualLeaveDays: 7, compTimeHours: 0 },   // 陳組長
+  'EMP106': { annualLeaveDays: 14, compTimeHours: 32 }, // 林組長
+  'EMP108': { annualLeaveDays: 7, compTimeHours: 6 },   // 王同仁
+  'EMP107': { annualLeaveDays: 3, compTimeHours: 4 },   // 曾組長
+  // 正職同仁
+  'EMP003': { annualLeaveDays: 3, compTimeHours: 8 },   // 張主管
+  'EMP007': { annualLeaveDays: 3, compTimeHours: 0 },   // 林主管
+  'EMP005': { annualLeaveDays: 3, compTimeHours: 14 },  // 劉主管
+  'EMP004': { annualLeaveDays: 3, compTimeHours: 0 },   // 白主管
+  'EMP001': { annualLeaveDays: 10, compTimeHours: 18 }, // 陳主管
+  'EMP210': { annualLeaveDays: 3, compTimeHours: 2 },   // 林同仁
+  'EMP224': { annualLeaveDays: 3, compTimeHours: 0 },   // 許同仁
+  'EMP220': { annualLeaveDays: 3, compTimeHours: 8 },   // 郭佩珊
+  'EMP222': { annualLeaveDays: 3, compTimeHours: 0 },   // 趙子齊
+  'EMP223': { annualLeaveDays: 3, compTimeHours: 0 },   // 黃怡靜
+  // 高管
+  'EMP002': { annualLeaveDays: 15, compTimeHours: 40 }  // 林主管
+};
+
+// 每日配額覆蓋（Daily_Quotas，由雲端 Rules 或主管於介面設定，預設為空，不硬編碼特定月份假資料）
+export const INITIAL_DAILY_QUOTAS = {};
+
+// 初始劃休志願序（回歸 100% 資料庫真實數據，預設為純淨空陣列，杜絕假同仁假行程污染）
+export const INITIAL_PREFERENCES = [];
+
+// PT 計時同仁出勤意向
+export const INITIAL_PT_AVAILABILITY = {
+  // 陳同仁(PT): 週末均登記可上班
+  'PT010': {
+    5: 'AVAILABLE',
+    6: 'AVAILABLE',
+    12: 'AVAILABLE',
+    13: 'AVAILABLE',
+    19: 'AVAILABLE',
+    20: 'AVAILABLE',
+    26: 'AVAILABLE',
+    27: 'AVAILABLE',
+    15: 'AVAILABLE', // 盤點日正向報班
+    8: 'UNAVAILABLE'  // 不可排班日
+  },
+  'PT011': {
+    5: 'AVAILABLE',
+    6: 'AVAILABLE',
+    15: 'AVAILABLE',
+    19: 'UNAVAILABLE'
+  }
+};
+
+// 個人化特休與補休存摺明細流水帳 (Leave & Comp Passbook Ledger)
+// 規範：純時數/天數管理，不涉薪資折金；補休12/31歸零不跨年，特休週年制純整數
+export const INITIAL_PASSBOOK_TRANSACTIONS = [
+  // 李組長 (EMP101) 流水帳
+  {
+    tx_id: 'TX_20260515_01',
+    emp_id: 'EMP101',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-05-15',
+    action: 'INCREASE',
+    title: '到職滿週年特休給定 (週年制第5年)',
+    amount: 10,
+    unit: '天',
+    balance_after: 10,
+    ref_no: 'SYS_ANNUAL_2026',
+    notes: '到職日 2021-05-15，年資滿5年給定 10 天整，效期至 2027-05-14'
+  },
+  {
+    tx_id: 'TX_20260710_02',
+    emp_id: 'EMP101',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-07-10',
+    action: 'DEDUCT',
+    title: '排班劃休核扣特休',
+    amount: -3,
+    unit: '天',
+    balance_after: 7,
+    ref_no: 'SCH_202607',
+    notes: '7月份排班自選特休劃假 3 天'
+  },
+  {
+    tx_id: 'TX_20260808_03',
+    emp_id: 'EMP101',
+    category: 'COMP_TIME',
+    date: '2026-08-08',
+    action: 'INCREASE',
+    title: '父親節檔期現場突發客流延長工時 (依意願轉補休)',
+    amount: 4,
+    unit: '小時',
+    balance_after: 20,
+    ref_no: 'OT_20260808_01',
+    notes: '同仁自主意願申請將現場加班 4 小時轉入補休存摺，12/31 結算歸零'
+  },
+  {
+    tx_id: 'TX_20260822_04',
+    emp_id: 'EMP101',
+    category: 'COMP_TIME',
+    date: '2026-08-22',
+    action: 'DEDUCT',
+    title: '排班抵用補休',
+    amount: -4,
+    unit: '小時',
+    balance_after: 16,
+    ref_no: 'SCH_202608',
+    notes: '8/22 彈性排休抵用補休 4 小時'
+  },
+
+  // 林主管 (EMP002)
+  {
+    tx_id: 'TX_20260301_01',
+    emp_id: 'EMP002',
+    category: 'ANNUAL_LEAVE',
+    date: '2026-03-01',
+    action: 'INCREASE',
+    title: '到職滿週年特休給定 (週年制第6年)',
+    amount: 15,
+    unit: '天',
+    balance_after: 15,
+    ref_no: 'SYS_ANNUAL_2026',
+    notes: '到職日 2020-03-01，滿 6 年給定 15 天整，效期至 2027-02-28'
+  },
+  {
+    tx_id: 'TX_20260815_02',
+    emp_id: 'EMP002',
+    category: 'COMP_TIME',
+    date: '2026-08-15',
+    action: 'INCREASE',
+    title: '假日全館專案輪替支援加班',
+    amount: 8,
+    unit: '小時',
+    balance_after: 40,
+    ref_no: 'OT_20260815_02',
+    notes: '全日專案輪替支援，經同仁意願選擇轉補休，效期至 2026/12/31'
+  }
+];
+
+// 線上請假申請單初始資料池（事前請假、限當月未來日子、二重核可制）
+export const INITIAL_LEAVE_APPLICATIONS = [
+  {
+    app_id: 'LA-202609-001',
+    emp_id: 'EMP003', // 張主管
+    emp_name: '張主管',
+    station_id: 'ST_MAIN_SHOP',
+    date: '2026-09-24', // 當月未來臨的排班日
+    leave_type: 'AL',   // 特休假
+    hours: 8,
+    days: 1,
+    reason: '家中有重要親友婚慶需返鄉',
+    status: 'PENDING_LEADER', // 待組長初審
+    first_reviewer_id: null,
+    first_review_time: null,
+    first_review_notes: '',
+    final_reviewer_id: null,
+    final_review_time: null,
+    final_review_notes: '',
+    created_at: '2026-09-11 14:20'
+  },
+  {
+    app_id: 'LA-202609-002',
+    emp_id: 'EMP005', // 劉主管
+    emp_name: '劉主管',
+    station_id: 'ST_SERVICE',
+    date: '2026-09-28',
+    leave_type: 'CT',   // 補休假
+    hours: 8,
+    days: 1,
+    reason: '補休使用',
+    status: 'PENDING_MANAGER', // 已過組長初審，待主管終審
+    first_reviewer_id: 'EMP101', // 李組長核准
+    first_review_time: '2026-09-11 15:30',
+    first_review_notes: '當日本組服務台人力充足，同意上呈',
+    final_reviewer_id: null,
+    final_review_time: null,
+    final_review_notes: '',
+    created_at: '2026-09-11 10:15'
+  }
+];
+
+export const LEAVE_TYPE_LABELS = {
+  AL: { label: '特休假 (AL)', unit: '天', deductCategory: 'ANNUAL_LEAVE', color: 'bg-purple-100 text-purple-700 border-purple-300' },
+  CT: { label: '補休假 (CT)', unit: '小時', deductCategory: 'COMP_TIME', color: 'bg-amber-100 text-amber-700 border-amber-300' },
+  PERSONAL: { label: '事假 (扣全薪)', unit: '天', deductCategory: 'PERSONAL_LEAVE', color: 'bg-rose-100 text-rose-700 border-rose-300' },
+  SICK: { label: '病假 (扣半薪)', unit: '天', deductCategory: 'SICK_LEAVE', color: 'bg-blue-100 text-blue-700 border-blue-300' }
+};
+
+

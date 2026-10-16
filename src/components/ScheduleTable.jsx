@@ -1,0 +1,1060 @@
+// src/components/ScheduleTable.jsx
+import React, { useState } from 'react';
+import { SHIFT_TYPES, isWorkingShift, isOffShift, normalizeShiftCode, NON_WORKING_CODES } from '../types/scheduler.js';
+import { User, Sparkles, AlertCircle, Calendar, Filter, Clock, CheckCircle2, AlertTriangle, Cloud, FileSpreadsheet, Edit3, Send, Check, X, Sliders, ChevronRight, RotateCcw } from 'lucide-react';
+import { getTimelineStatus } from '../engine/schedulingTimelineEngine.js';
+import { isStatutoryHoliday } from '../data/holidayTransferStore.js';
+import { formatShiftTime } from '../utils/timeFormatUtils.js';
+import { STATION_STYLE_MAP } from './StationStatusOverview.jsx';
+import { sortEmployees } from '../utils/employeeSortUtils.js';
+
+export default function ScheduleTable({
+  scheduleResult,
+  validation,
+  employees,
+  stations,
+  rules,
+  selectedDay,
+  onSelectDay,
+  onExportIcs,
+  onExportCsv,
+  onRunEngine,
+  onSaveToCloud,
+  currentUser,
+  shiftTypes = SHIFT_TYPES,
+  currentSimulatedDate,
+  holidayConsents = {},
+  pendingAdjustments = [],
+  onSaveAdjustment,
+  onBatchApproveAdjustments,
+  onRejectAdjustment,
+  onSubmitAdjustmentsToManager,
+  leaveBalances = {},
+  // 工作流狀態控制
+  workflowStage = 'PREFERENCE_FILL',
+  onAdvanceWorkflowStage
+}) {
+  const statusInfo = getTimelineStatus(currentSimulatedDate || '2026-09-10');
+  const simDay = statusInfo.day;
+  const isManager = currentUser?.role === 'Manager' || currentUser?.is_admin;
+  const isLeader = currentUser?.role === 'Leader' && !isManager;
+  const myLeaderStation = isLeader 
+    ? (stations.find(s => s.leader_emp_id === currentUser?.emp_id) || 
+       stations.find(s => s.station_id === currentUser?.primary_station)) 
+    : null;
+
+  const [filterRole, setFilterRole] = useState('ALL'); // ALL, Leader, Staff, PT, Manager
+  // 組長鎖定本組站點，高管可自由篩選
+  const [filterStation, setFilterStation] = useState(myLeaderStation ? myLeaderStation.station_id : 'ALL');
+
+  // 若切換使用者為組長，自動鎖定本組站點
+  React.useEffect(() => {
+    if (isLeader && myLeaderStation) {
+      setFilterStation(myLeaderStation.station_id);
+    }
+  }, [isLeader, myLeaderStation]);
+
+  // 微調編輯彈窗狀態
+  const [editingCell, setEditingCell] = useState(null); // { emp, day, currentShift }
+  const [newShiftCode, setNewShiftCode] = useState('A');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState('');
+
+  // 取得平假日資訊與國定假日
+  const [year, month] = (rules.target_year_month || '2026-09').split('-').map(Number);
+  const daysInCurrentMonth = new Date(year, month, 0).getDate();
+  const totalDays = scheduleResult?.totalDays || rules?.total_days || daysInCurrentMonth;
+  const scheduleMap = scheduleResult?.scheduleMap || {};
+
+  const stationNameMap = Object.fromEntries(stations.map(s => [s.station_id, s.station_name]));
+  const effectiveShiftDefs = shiftTypes || SHIFT_TYPES;
+  const monthStr = month < 10 ? '0' + month : '' + month;
+  const dayHeaders = [];
+  for (let d = 1; d <= totalDays; d++) {
+    const dateObj = new Date(year, month - 1, d);
+    const dayOfWeek = dateObj.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const weekDayStr = ['日', '一', '二', '三', '四', '五', '六'][dayOfWeek];
+    const dayStr = d < 10 ? '0' + d : '' + d;
+    const fullDate = `${year}-${monthStr}-${dayStr}`;
+    const holidayObj = isStatutoryHoliday(fullDate);
+    dayHeaders.push({ day: d, isWeekend, weekDayStr, holidayObj, fullDate });
+  }
+
+  // 雙重篩選與全域統一排序人員 (部門 ➔ 級職 ➔ 到職日)
+  const filteredEmployees = sortEmployees(employees.filter(emp => {
+    // 排除離退、留停、長期病假等非在勤同仁，排班大表僅呈現 Active 在勤同仁
+    const status = emp.status || 'Active';
+    if (status !== 'Active') return false;
+
+    if (filterRole !== 'ALL') {
+      if (filterRole === 'Manager') {
+        if (!emp.is_self_scheduled) return false;
+      } else if (emp.role !== filterRole) {
+        return false;
+      }
+    }
+    if (filterStation !== 'ALL') {
+      if (emp.primary_station !== filterStation) return false;
+    }
+    return true;
+  }));
+
+  // 判定是否為當月新進同仁 (到職日落在當月)
+  const isNewHireInCurrentMonth = (emp) => {
+    if (!emp?.hire_date) return false;
+    const targetYearMonth = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+    return String(emp.hire_date).startsWith(targetYearMonth);
+  };
+
+  // 判定當前登入者是否可以微調該同仁特定日期的格子
+  const canEditEmployeeCell = (emp, day = null) => {
+    // 狀態 4: 已發布封存
+    if (workflowStage === 'PUBLISHED_LOCKED') {
+      // 專屬通道：營運主管可為當月新進同仁在到職日當天及之後安排班表
+      if (isManager && isNewHireInCurrentMonth(emp)) {
+        if (!day) return true; // row 層級允許亮起編輯提示
+        const targetYearMonth = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+        const dayStr = day < 10 ? '0' + day : '' + day;
+        const cellDateStr = `${targetYearMonth}-${dayStr}`;
+        // 僅到職日當天及之後允許主管排定勤務
+        return cellDateStr >= emp.hire_date;
+      }
+      return false; // 非當月新人或非主管，全員嚴格唯讀鎖定
+    }
+
+    // Manager 自排同仁：僅 Manager 具備編輯權限（任何未發布階段皆可填寫）
+    if (emp.is_self_scheduled) return isManager;
+
+    // Manager: 在階段 1, 2, 3 均具備全館調整權限（階段 4 唯讀鎖定）
+    if (isManager) return true;
+
+    // Leader: 僅在階段 2 (組長排班中) 或預設情況下可編輯本組人員；階段 3 (高管審查中) 進入唯讀送審狀態
+    if (isLeader && myLeaderStation) {
+      if (workflowStage === 'MANAGER_FINAL_REVIEW') return false; // 已經上呈高管審核，組長進入鎖定
+      return emp.primary_station === myLeaderStation.station_id || (emp.supported_stations || []).includes(myLeaderStation.station_id);
+    }
+    return false;
+  };
+
+  // 取得特定同仁特定日期的微調記錄
+  const getCellAdjustment = (empId, day) => {
+    return (pendingAdjustments || []).find(a => a.emp_id === empId && a.day === day && a.status !== 'REJECTED');
+  };
+
+  // 點擊格子開啟微調（防呆規則：已發生日期禁止調動班表，僅供覆核；僅能改動未發生日期）
+  const handleCellClick = (emp, day, currentShift) => {
+    const targetYearMonth = rules?.target_year_month || '2026-09';
+    const dayStr = day < 10 ? '0' + day : '' + day;
+    const cellDateStr = `${targetYearMonth}-${dayStr}`;
+    const simDateStr = currentSimulatedDate || '2026-09-15';
+
+    // 新進人員到職日前真空防呆：嚴禁在到職日前排班
+    if (emp.hire_date && cellDateStr < emp.hire_date) {
+      alert(`⚠️【未到職真空 (PRE_HIRE_OFF)】\n同仁【${emp.name}】到職日為 ${emp.hire_date}。\n${month}月${day}日尚未到職報到，屬於到職前真空期（標記「未」），不計工時與休假，不可排定勤務！`);
+      return;
+    }
+
+    if (!canEditEmployeeCell(emp, day)) {
+      if (workflowStage === 'PUBLISHED_LOCKED') {
+        alert('🔒【班表已發布鎖定】\n當前班表已正式發布並固定。全體人員進入唯讀鎖定，後續勤務異動請走【調班審核】或【假勤覆核】流程！');
+      }
+      return;
+    }
+
+    if (cellDateStr < simDateStr) {
+      alert(`⚠️【歷史排班鎖定】\n${month}月${day}日勤務已經發生，無法直接調動班表！\n若實際出勤工時或班別與原排定不符，請至上方【實勤覆核 (HOURS_OVERRIDE)】進行覆核記錄。`);
+      return;
+    }
+
+    const existingAdj = getCellAdjustment(emp.emp_id, day);
+    const initialCode = existingAdj ? existingAdj.new_shift : (currentShift?.shift_type || 'OFF');
+    setEditingCell({
+      emp,
+      day,
+      currentShift,
+      existingAdj
+    });
+    setNewShiftCode(initialCode);
+    const defaultReason = isNewHireInCurrentMonth(emp)
+      ? '新進同仁到職排班'
+      : (isManager ? '主管職權調整' : '因應人流動態調度');
+    setAdjustmentReason(existingAdj ? existingAdj.reason : defaultReason);
+  };
+
+
+  // 送出單格微調暫存
+  const handleSaveAdjustmentSubmit = (e) => {
+    e.preventDefault();
+    if (!editingCell) return;
+    const { emp, day, currentShift } = editingCell;
+
+    // 若選定特休或補休，進行額度警示防呆
+    const empBalance = leaveBalances[emp.emp_id] || { annualLeaveDays: 0, compTimeHours: 0 };
+    if (newShiftCode === 'AL' && empBalance.annualLeaveDays <= 0) {
+      if (!window.confirm(`同仁【${emp.name}】目前可用特休天數為 0 天，確定仍要排定特休嗎？`)) {
+        return;
+      }
+    }
+    if (newShiftCode === 'CT' && empBalance.compTimeHours < 8) {
+      if (!window.confirm(`同仁【${emp.name}】目前可用補休為 ${empBalance.compTimeHours} 小時（不足 8 小時），確定仍要排定補休嗎？`)) {
+        return;
+      }
+    }
+
+    const adjEntry = {
+      adj_id: editingCell.existingAdj?.adj_id || `ADJ_${Date.now()}_${emp.emp_id}_${day}`,
+      emp_id: emp.emp_id,
+      emp_name: emp.name,
+      primary_station: emp.primary_station,
+      day: day,
+      original_shift: currentShift?.shift_type || 'OFF',
+      new_shift: newShiftCode,
+      reason: adjustmentReason || (isLeader ? '組長站點微調' : '主管排班調整'),
+      proposed_by_id: currentUser?.emp_id || 'SYS',
+      proposed_by_name: currentUser?.name || '系統',
+      proposed_role: currentUser?.role || 'Leader',
+      status: isManager ? 'APPROVED_DIRECT' : 'DRAFT_LEADER', // Manager 直接核定或 Leader 暫存
+      created_at: new Date().toISOString()
+    };
+
+    if (onSaveAdjustment) {
+      onSaveAdjustment(adjEntry);
+    }
+    setEditingCell(null);
+    setFeedbackMsg(`已成功暫存【${emp.name}】${month}月${day}日班別微調 (${adjEntry.original_shift} → ${adjEntry.new_shift})！`);
+    setTimeout(() => setFeedbackMsg(''), 3000);
+  };
+
+  // 組長上呈待審清單（僅限本組未上呈之 DRAFT）
+  const myStationDraftCount = (pendingAdjustments || []).filter(a => 
+    a.status === 'DRAFT_LEADER' && 
+    (isManager || a.primary_station === myLeaderStation?.station_id)
+  ).length;
+
+  // 待 Manager 終審之清單（包含 SUBMITTED 與 DRAFT_LEADER）
+  const pendingForManager = (pendingAdjustments || []).filter(a => a.status === 'SUBMITTED' || a.status === 'DRAFT_LEADER');
+
+  // 營運支援空班缺工警示
+  const adminDeficitIssues = (validation?.issues || []).filter(i => i.type === 'ADMIN_SHIFT_DEFICIT');
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+      {/* 排班時限階段專屬提示 (Issue #016 & #029) */}
+      {simDay >= 19 && simDay <= 20 && (
+        <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+            <span className="font-bold">【階段 4/8 · 營運高管初審期 (每月 19~20 日)】全場排班調度進行中</span>
+          </div>
+          <span className="text-[11px] font-semibold text-amber-800">
+            請 Manager 於 20 日前覆核組長微調並產出班表以供 21 日全員簽回
+          </span>
+        </div>
+      )}
+
+      {/* 工作流狀態推進提示條 (四階段單向流) */}
+      <div className="px-4 py-2 bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
+        <div className="flex items-center space-x-2">
+          <span className="font-bold text-amber-400">當前排班進程：</span>
+          <span className={`px-2 py-0.5 rounded font-black text-[11px] ${
+            workflowStage === 'PREFERENCE_FILL' ? 'bg-blue-600 text-white' :
+            workflowStage === 'LEADER_SCHEDULING' ? 'bg-indigo-600 text-white' :
+            workflowStage === 'MANAGER_FINAL_REVIEW' ? 'bg-amber-600 text-white' :
+            'bg-emerald-600 text-white'
+          }`}>
+            {workflowStage === 'PREFERENCE_FILL' ? '階段 1: 員工/PT劃班預休中' :
+             workflowStage === 'LEADER_SCHEDULING' ? '階段 2: Leader 智能排班中' :
+             workflowStage === 'MANAGER_FINAL_REVIEW' ? '階段 3: Manager 總審中' :
+             '階段 4: 正式發布固定 (唯讀)'}
+          </span>
+          <span className="text-slate-300 text-[11px] hidden sm:inline">
+            {workflowStage === 'PREFERENCE_FILL' && '（同仁填寫預休與報班中）'}
+            {workflowStage === 'LEADER_SCHEDULING' && '（同仁劃休已截稿，Leader 微調中）'}
+            {workflowStage === 'MANAGER_FINAL_REVIEW' && '（Leader 排班已送審，Manager 總審中）'}
+            {workflowStage === 'PUBLISHED_LOCKED' && '（大表已固定發布，異動請走調班後審）'}
+          </span>
+        </div>
+
+        {/* 階段切換操作按鈕 */}
+        <div className="flex items-center space-x-2">
+          {/* 組長在階段 2 完成微調送審 */}
+          {isLeader && workflowStage === 'LEADER_SCHEDULING' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定本組班表已確認無誤，要正式「一鍵送交 Manager 審核」嗎？\n送審後本組班表將進入鎖定唯讀狀態。')) {
+                  if (onSubmitAdjustmentsToManager) onSubmitAdjustmentsToManager(myLeaderStation?.station_id);
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
+                }
+              }}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>本組確認無誤 · 送 Manager 審核</span>
+            </button>
+          )}
+
+          {/* 高管在階段 1 推進至階段 2 截止劃休 */}
+          {isManager && workflowStage === 'PREFERENCE_FILL' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要截止同仁劃休，推進至【階段 2: Leader 排班中】嗎？\n推進後一般同仁將無法再新增或修改劃休。')) {
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('LEADER_SCHEDULING');
+                }
+              }}
+              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              截止同仁劃休 ➔ 啟動 Leader 排班
+            </button>
+          )}
+
+          {/* 高管在階段 2 直接切換至階段 3 */}
+          {isManager && workflowStage === 'LEADER_SCHEDULING' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要進入【階段 3: Manager 總審】嗎？\n進入後各站 Leader 將停止微調權限，由 Manager 統一覆核與補位。')) {
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('MANAGER_FINAL_REVIEW');
+                }
+              }}
+              className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              結束 Leader 排班 ➔ 進入 Manager 總審
+            </button>
+          )}
+
+          {/* 高管在階段 3 發布大表並鎖定 */}
+          {isManager && workflowStage === 'MANAGER_FINAL_REVIEW' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('確定要發布並固定大表嗎？\n發布後全館班表將進入【階段 4: 正式發布固定】，全員鎖定不可任意更動，後續異動將走調班/請假後審機制！')) {
+                  if (onSaveToCloud) onSaveToCloud();
+                  if (onAdvanceWorkflowStage) onAdvanceWorkflowStage('PUBLISHED_LOCKED');
+                }
+              }}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-xs active:scale-95"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>🔒 固定生成大表 · 正式發布</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 微調作業操作提示橫幅 (Leader 暫存上呈 / Manager 覆核) */}
+      {isLeader && myStationDraftCount > 0 && workflowStage === 'LEADER_SCHEDULING' && (
+        <div className="px-4 py-2 bg-indigo-50 border-b border-indigo-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-2 text-indigo-900 font-bold">
+            <Edit3 className="w-4 h-4 text-indigo-600" />
+            <span>本組有 {myStationDraftCount} 筆排班微調暫存中（點擊格子可微調）：</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (onSubmitAdjustmentsToManager) {
+                onSubmitAdjustmentsToManager(myLeaderStation?.station_id);
+              }
+            }}
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>暫存微調上呈</span>
+          </button>
+        </div>
+      )}
+
+      {isManager && pendingForManager.length > 0 && workflowStage !== 'PUBLISHED_LOCKED' && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-2 text-amber-900 font-bold">
+            <AlertCircle className="w-4 h-4 text-amber-600 animate-bounce" />
+            <span>🔔 收到 Leader 上呈之班表微調申請 (共 {pendingForManager.length} 筆待覆核)：</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsReviewModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>審核 Leader 微調清單 ({pendingForManager.length})</span>
+          </button>
+        </div>
+      )}
+
+
+      {feedbackMsg && (
+        <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-xs font-bold flex items-center space-x-2 animate-fadeIn">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{feedbackMsg}</span>
+        </div>
+      )}
+
+      {/* 控制工具列 */}
+      <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+        {/* 左側：身分過濾與站點/組別過濾 */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 角色過濾 (去職稱化) */}
+          <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-1 text-xs shadow-2xs">
+            <Filter className="w-3.5 h-3.5 text-slate-400 ml-1" />
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="bg-transparent text-slate-700 font-bold focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="ALL">全部身分 ({employees.length}人)</option>
+              <option value="Leader">🛡️ Leader</option>
+              <option value="Staff">👤 Staff</option>
+              <option value="PT">⏱️ PT</option>
+              <option value="Manager">👑 Manager</option>
+            </select>
+          </div>
+
+          {/* 站點/組別過濾 (組長鎖定本組，高管拉選) */}
+          <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-1 text-xs shadow-2xs">
+            <span className="text-[11px] font-bold text-indigo-600 ml-1">組別:</span>
+            {isLeader && myLeaderStation ? (
+              <div className="flex items-center space-x-1 px-2 py-0.5 font-bold text-indigo-700 bg-indigo-50 rounded text-xs">
+                <span>🔒 本組鎖定: {myLeaderStation.station_name}</span>
+              </div>
+            ) : (
+              <select
+                value={filterStation}
+                onChange={(e) => setFilterStation(e.target.value)}
+                className="bg-transparent text-slate-700 font-bold focus:outline-none cursor-pointer pr-1"
+              >
+                <option value="ALL">全館 9 大營業站點</option>
+                {stations.map(st => (
+                  <option key={st.station_id} value={st.station_id}>
+                    {st.station_name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <span className="text-xs text-slate-500 font-medium">
+            呈現 {filteredEmployees.length} 位同仁
+          </span>
+        </div>
+
+        {/* 右側：組長/主管智慧排班、發布雲端、匯出 */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* 組長與經理專屬：一鍵啟動演算法智慧排班 (已發布封存除外) */}
+          {(isManager || isLeader) && workflowStage !== 'PUBLISHED_LOCKED' && (
+            <button
+              onClick={() => onRunEngine && onRunEngine()}
+              title="重新啟動排班引擎進行智慧排班計算"
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>啟動智慧排班</span>
+            </button>
+          )}
+
+          {isManager && (
+            <>
+              {/* Manager 快速填報本人班表快捷鍵 */}
+              {workflowStage !== 'PUBLISHED_LOCKED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const managerEmp = employees.find(e => e.is_self_scheduled && e.emp_id === currentUser?.emp_id) || employees.find(e => e.is_self_scheduled);
+                    if (!managerEmp) {
+                      alert('未找到主管帳號資料！');
+                      return;
+                    }
+                    const fillChoice = window.prompt(
+                      `【主管自主排班快速通道】\n請輸入快捷代碼批次排定本人（${managerEmp.name}）整月班表：\n1: 週一至週五 A班，週六休假 (REST_OFF)，週日例休 (REST_OFF)\n2: 整月常規班 (A班)\n3: 清空本人班表 (重設為留白)\n\n注意：今日以前的歷史日期不會被覆寫。`,
+                      '1'
+                    );
+                    if (!fillChoice) return;
+
+                    const totalD = scheduleResult?.totalDays || 30;
+                    const targetYM = rules?.target_year_month || `${year}-${String(month).padStart(2, '0')}`;
+                    const simDateStr = currentSimulatedDate || `${year}-${String(month).padStart(2, '0')}-01`;
+                    for (let d = 1; d <= totalD; d++) {
+                      // 歷史日期防呆：已發生的日期不覆寫
+                      const dayStr = d < 10 ? '0' + d : '' + d;
+                      const cellDateStr = `${targetYM}-${dayStr}`;
+                      if (cellDateStr < simDateStr) continue;
+
+                      const dateObj = new Date(year, month - 1, d);
+                      const dow = dateObj.getDay();
+                      const isSunday = dow === 0;
+                      const isSaturday = dow === 6;
+                      let assignedCode = 'A';
+                      if (fillChoice === '1') {
+                        assignedCode = (isSunday || isSaturday) ? 'REST_OFF' : 'A';
+                      } else if (fillChoice === '2') {
+                        assignedCode = 'A';
+                      } else if (fillChoice === '3') {
+                        assignedCode = null;
+                      }
+
+                      if (onSaveAdjustment) {
+                        onSaveAdjustment({
+                          adj_id: `ADJ_MGR_${Date.now()}_${managerEmp.emp_id}_${d}`,
+                          emp_id: managerEmp.emp_id,
+                          emp_name: managerEmp.name,
+                          primary_station: managerEmp.primary_station || 'ST_ADMIN',
+                          day: d,
+                          original_shift: 'OFF',
+                          new_shift: assignedCode,
+                          reason: fillChoice === '3' ? '主管清空個人班表 (重設為留白)' : '主管自主輸入排定個人班表',
+                          proposed_by_id: currentUser?.emp_id || 'MGR',
+                          proposed_by_name: currentUser?.name || '主管',
+                          proposed_role: 'Manager',
+                          status: 'APPROVED_DIRECT',
+                          created_at: new Date().toISOString()
+                        });
+                      }
+                    }
+                    setFeedbackMsg(fillChoice === '3' ? `已成功清空主管【${managerEmp.name}】全月班表，重設為初始留白狀態！` : `已成功完成主管【${managerEmp.name}】全月班表自主排定！`);
+                    setTimeout(() => setFeedbackMsg(''), 3000);
+                  }}
+                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+                  title="高管不劃班，在此一鍵快速輸入本人全月班表"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>自填本人班表</span>
+                </button>
+              )}
+
+              {pendingAdjustments && pendingAdjustments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`確定要清除當前本機暫存的 ${pendingAdjustments.length} 筆微調記錄，還原為雲端資料庫真實班表嗎？`)) {
+                      try {
+                        localStorage.removeItem('xuelu_schedule_adjustments_v1');
+                        localStorage.removeItem('xuelu_schedule_overrides_v1');
+                      } catch (e) {}
+                      window.location.reload();
+                    }
+                  }}
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+                  title="清除本機殘留的微調覆寫，徹底還原雲端試算表真實資料"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                  <span>清除微調 ({pendingAdjustments.length})</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => onSaveToCloud && onSaveToCloud()}
+                title="將當前排班結果發布並持久化儲存至 Google 試算表"
+                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors active:scale-95"
+              >
+                <Cloud className="w-3.5 h-3.5" />
+                <span>儲存至Google試算表</span>
+              </button>
+            </>
+          )}
+
+          <div className="flex items-center space-x-1.5 pl-1 border-l border-slate-200">
+            <button
+              onClick={() => onExportIcs && onExportIcs()}
+              title="下載我的專屬手機日曆 (.ics)，支援 iPhone 與 Google Calendar"
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span>匯出我的 .ics</span>
+            </button>
+
+            <button
+              onClick={() => onExportCsv && onExportCsv()}
+              title="匯出全館美化班表 Excel / CSV (含例休與休假註記)"
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+              <span>匯出全館 CSV</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 排班矩陣大表 Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {/* 人員固定欄 */}
+              <th className="p-2.5 font-bold text-slate-700 border-r border-slate-200 sticky left-0 z-20 bg-slate-50 min-w-[140px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.05)]">
+                同仁 / 站點
+              </th>
+
+              {/* 1 ~ 30 日表頭 */}
+              {dayHeaders.map(({ day, isWeekend, weekDayStr, holidayObj }) => {
+                const isSelected = selectedDay === day;
+                return (
+                  <th
+                    key={day}
+                    id={`schedule-day-col-${day}`}
+                    onClick={() => onSelectDay(day)}
+                    className={`p-1.5 text-center border-r border-slate-200 min-w-[34px] cursor-pointer transition-colors select-none relative ${
+                      isSelected 
+                        ? 'bg-indigo-600 text-white font-extrabold shadow-inner' 
+                        : holidayObj
+                        ? 'bg-rose-100/70 text-rose-900 hover:bg-rose-200/70'
+                        : isWeekend 
+                        ? 'bg-rose-50/70 text-rose-700 hover:bg-rose-100/70' 
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    title={holidayObj ? `法定國定假日：${holidayObj.name}` : `點擊檢視 ${month}月${day}日 (${weekDayStr}) 站點合規燈號`}
+                  >
+                    {holidayObj && (
+                      <div className="text-[8px] leading-tight font-black text-rose-600 bg-white/90 rounded px-0.5 mb-0.5 truncate">
+                        {holidayObj.name.includes('中秋') ? '中秋' : holidayObj.name.includes('國慶') ? '國慶' : '國假'}
+                      </div>
+                    )}
+                    <div className="text-[11px] font-bold leading-none">{day}</div>
+                    <div className={`text-[9px] mt-0.5 ${isSelected ? 'text-indigo-100' : isWeekend ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>
+                      {weekDayStr}
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-200 bg-white">
+            {filteredEmployees.length === 0 ? (
+              <tr>
+                <td colSpan={totalDays + 1} className="p-8 text-center text-slate-400 text-xs">
+                  目前篩選條件下無符合條件之同仁。
+                </td>
+              </tr>
+            ) : (
+              filteredEmployees.map((emp) => {
+                const isEmpManager = emp.is_self_scheduled;
+                const canEditThisEmp = canEditEmployeeCell(emp);
+
+                return (
+                  <tr key={emp.emp_id} className="hover:bg-slate-50/80 transition-colors">
+                    {/* 同仁名稱與標籤欄 */}
+                    <td className="p-2.5 border-r border-slate-200 sticky left-0 z-10 bg-white shadow-[2px_0_4px_-2px_rgba(0,0,0,0.05)]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 truncate max-w-[85px]">{emp.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                          isEmpManager 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : emp.role === 'Leader'
+                            ? 'bg-blue-100 text-blue-800'
+                            : emp.role === 'PT'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-800'
+                        }`}>
+                          {isEmpManager ? 'Manager' : emp.role === 'Leader' ? 'Leader' : emp.role === 'PT' ? 'PT' : 'Staff'}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1 mt-1 truncate">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black border truncate ${
+                          STATION_STYLE_MAP[emp.primary_station]?.badge || 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>
+                          {stationNameMap[emp.primary_station] || emp.primary_station}
+                        </span>
+                        {emp.can_solo && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 shrink-0">
+                            Solo
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 1 ~ 30 日班別格 */}
+                    {dayHeaders.map(({ day, isWeekend, holidayObj }) => {
+                      const shift = scheduleMap[emp.emp_id]?.[day];
+                      const shiftCode = shift?.shift_type;
+                      const cellAdj = getCellAdjustment(emp.emp_id, day);
+                      const targetYearMonth = rules?.target_year_month || '2026-09';
+                      const dayStr = day < 10 ? '0' + day : '' + day;
+                      const cellDateStr = `${targetYearMonth}-${dayStr}`;
+                      const isPreHire = !!emp.hire_date && cellDateStr < emp.hire_date;
+                      // 若到職日前，固定為 PRE_HIRE_OFF；若有暫存微調，視覺優先展示微調擬改班別
+                      const rawEffective = isPreHire ? 'PRE_HIRE_OFF' : (cellAdj ? cellAdj.new_shift : shiftCode);
+                      const effectiveCode = normalizeShiftCode(rawEffective);
+                      const shiftDef = effectiveShiftDefs[effectiveCode];
+                      const canEditThisCell = canEditEmployeeCell(emp, day);
+
+                      let cellBg = isWeekend ? 'bg-rose-50/20' : '';
+                      if (holidayObj) cellBg = 'bg-rose-50/40';
+                      let pillStyle = 'text-slate-300';
+                      let label = '-';
+
+                      if (effectiveCode === 'PRE_HIRE_OFF') {
+                        pillStyle = 'bg-slate-100 text-slate-400 font-bold border border-dashed border-slate-300 shadow-2xs';
+                        label = '未';
+                      } else if (isEmpManager && !effectiveCode) {
+                        pillStyle = 'text-slate-300 font-light';
+                        label = '留白';
+                      } else if (effectiveCode === 'REG_OFF') {
+                        pillStyle = 'bg-rose-600 text-white font-black border border-rose-700 shadow-2xs';
+                        label = '例';
+                      } else if (effectiveCode === 'OFF' || effectiveCode === 'REST_OFF') {
+                        pillStyle = 'bg-rose-100 text-rose-700 font-bold border border-rose-200';
+                        label = '休';
+                      } else if (effectiveCode === 'AL') {
+                        pillStyle = 'bg-amber-100 text-amber-800 font-bold border border-amber-300';
+                        label = '特';
+                      } else if (effectiveCode === 'CT') {
+                        pillStyle = 'bg-purple-100 text-purple-800 font-bold border border-purple-300';
+                        label = '補';
+                      } else if (effectiveCode === 'SL') {
+                        pillStyle = 'bg-orange-100 text-orange-800 font-bold border border-orange-300';
+                        label = '病';
+                      } else if (effectiveCode === 'PL') {
+                        pillStyle = 'bg-slate-200 text-slate-800 font-bold border border-slate-300';
+                        label = '事';
+                      } else if (effectiveCode === 'ML') {
+                        pillStyle = 'bg-pink-100 text-pink-700 font-bold border border-pink-300';
+                        label = '婚';
+                      } else if (effectiveCode === 'FL') {
+                        pillStyle = 'bg-stone-200 text-stone-800 font-bold border border-stone-300';
+                        label = '喪';
+                      } else if (effectiveCode === 'MAT') {
+                        pillStyle = 'bg-fuchsia-100 text-fuchsia-800 font-bold border border-fuchsia-300';
+                        label = '產';
+                      } else if (effectiveCode === 'CL') {
+                        pillStyle = 'bg-cyan-100 text-cyan-800 font-bold border border-cyan-300';
+                        label = '公';
+                      } else if (effectiveCode === 'TERM_OFF') {
+                        pillStyle = 'bg-slate-200 text-slate-500 font-semibold';
+                        label = '空';
+                      } else if (effectiveCode === 'HOLIDAY_OFF') {
+                        pillStyle = 'bg-red-500 text-white font-black border border-red-600 shadow-2xs';
+                        label = '國';
+                      } else if (shiftDef) {
+                        label = effectiveCode;
+                        pillStyle = `${shiftDef.color || 'bg-indigo-100 text-indigo-800'} font-bold border shadow-2xs`;
+                      }
+
+                      // 國定假日出勤調移簽認狀態檢核 (僅實際出勤且非高管者需檢核)
+                      const isHolidayDuty = holidayObj && effectiveCode && isWorkingShift(effectiveCode) && !isEmpManager;
+                      const consentKey = `${rules.target_year_month || '2026-09'}_${day}_${emp.emp_id}`;
+                      const isConsented = isHolidayDuty ? !!holidayConsents[consentKey] : false;
+
+                      let holidayTooltip = '';
+                      if (isHolidayDuty) {
+                        holidayTooltip = isConsented 
+                          ? `\n[國假調移: ${emp.name} 已同意出勤免雙薪]` 
+                          : `\n[⚠️ 國假調移: 待同仁同意簽署 (服務業免雙薪要件)]`;
+                      }
+
+                      const adjTooltip = cellAdj ? `\n[微調提案: 原 ${cellAdj.original_shift} 擬改為 ${cellAdj.new_shift} (${cellAdj.reason}) - 待審核]` : '';
+
+                      return (
+                        <td
+                          key={day}
+                          onClick={() => handleCellClick(emp, day, shift)}
+                          className={`p-1 text-center border-r border-slate-100 relative ${cellBg} ${
+                            selectedDay === day ? 'bg-indigo-50/50' : ''
+                          } ${canEditThisCell ? 'cursor-pointer hover:ring-1 hover:ring-indigo-400' : ''}`}
+                          title={
+                            shift || cellAdj
+                              ? `${emp.name} | ${day}日: ${effectiveCode || '留白'} (${stationNameMap[shift?.station_id || emp.primary_station] || '-'}) - ${shiftDef?.name || ''}${holidayTooltip}${adjTooltip}`
+                              : ''
+                          }
+                        >
+                          <div
+                            className={`w-6 h-6 mx-auto rounded flex items-center justify-center text-[11px] transition-transform relative ${pillStyle}`}
+                          >
+                            {label}
+
+                            {/* 微調待審標記（琥珀色指示點） */}
+                            {cellAdj && (
+                              <span 
+                                title={`微調提案中: ${cellAdj.original_shift} → ${cellAdj.new_shift}`}
+                                className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white flex items-center justify-center text-[7px] text-white font-black"
+                              >
+                                改
+                              </span>
+                            )}
+
+                            {isHolidayDuty && (
+                              <span 
+                                className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-white ${
+                                  isConsented ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'
+                                }`} 
+                              />
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 底部班別圖例說明（修復時間格式與一例一休標籤） */}
+      <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-bold text-slate-700">圖例說明：</span>
+
+          {/* 法定一例一休與請假標章 */}
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-black flex items-center justify-center bg-rose-600 text-white">例</span>
+            <span className="font-semibold text-rose-800">法定例休</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-rose-100 text-rose-700 border border-rose-200">休</span>
+            <span>一般休假</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-black flex items-center justify-center bg-red-500 text-white shadow-2xs">國</span>
+            <span className="font-semibold text-red-800">國定假日</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-slate-100 text-slate-400 border border-dashed border-slate-300">未</span>
+            <span>未到職</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-amber-100 text-amber-800 border border-amber-300">特</span>
+            <span>排定特休</span>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-purple-100 text-purple-800 border border-purple-300">補</span>
+            <span>排定補休</span>
+          </div>
+
+          {/* 各出勤班別：使用 NON_WORKING_CODES 常數，包含全量法定假別，不再寫死部分項目 */}
+          {Object.values(effectiveShiftDefs).filter(s => !NON_WORKING_CODES.includes(s.code)).map(s => {
+            const timeDisplay = s.startTime && s.startTime !== '-' 
+              ? ` (${formatShiftTime(s.startTime)}~${formatShiftTime(s.endTime)})` 
+              : '';
+            return (
+              <div key={s.code} className="flex items-center space-x-1">
+                <span className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${s.color || 'bg-slate-200 text-slate-700'}`}>
+                  {s.code}
+                </span>
+                <span>{s.name}{timeDisplay}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="text-slate-400">
+          ★ Leader 可微調本組同仁格子並一鍵上呈；Manager 可點選全館覆核定稿
+        </div>
+      </div>
+
+      {/* 彈窗 1: 格子快速微調抽屜/彈窗 (Quick Shift Adjuster) */}
+      {editingCell && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <form onSubmit={handleSaveAdjustmentSubmit} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[90vh] flex flex-col my-auto overflow-hidden border border-slate-200 animate-scaleUp">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
+              <div className="flex items-center space-x-2">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                <h4 className="text-xs font-bold text-slate-900">
+                  排班微調: {editingCell.emp.name} ({month}月{editingCell.day}日)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCell(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs flex-1 overflow-y-auto">
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-center text-[11px] mb-1">
+                  <span className="text-slate-500">原排定班別:</span>
+                  <span className="font-bold text-slate-800">{editingCell.currentShift?.shift_type || '留白/休'}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500">主屬站點:</span>
+                  <span className="font-semibold text-slate-700">{stationNameMap[editingCell.emp.primary_station] || editingCell.emp.primary_station}</span>
+                </div>
+              </div>
+
+              {/* 選擇新擬班別 */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">新擬排定班別 / 請假</label>
+                <select
+                  value={newShiftCode}
+                  onChange={(e) => setNewShiftCode(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-bold text-xs focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <optgroup label="🏢 營業出勤班別">
+                    {Object.values(effectiveShiftDefs).filter(s => isWorkingShift(s.code)).map(s => (
+                      <option key={s.code} value={s.code}>
+                        {s.code} {s.name} ({formatShiftTime(s.startTime)}~{formatShiftTime(s.endTime)})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="⚖️ 法定休假 (一例一休)">
+                    <option value="REG_OFF">🟥 例 法定例假 (剛性不可出勤)</option>
+                    <option value="REST_OFF">⬜ 休 休息日 (一般常態輪休)</option>
+                  </optgroup>
+                  <optgroup label="📋 假勤存摺請假 (排定扣抵存摺)">
+                    <option value="AL">🟨 特 特別休假 (可用: {leaveBalances[editingCell.emp.emp_id]?.annualLeaveDays || 0} 天)</option>
+                    <option value="CT">🟪 補 彈性補休 (可用: {leaveBalances[editingCell.emp.emp_id]?.compTimeHours || 0} 小時)</option>
+                  </optgroup>
+                  <optgroup label="🏥 各類法定與差勤請假">
+                    <option value="SL">🟧 病 普通傷病假 (半薪)</option>
+                    <option value="PL">⬛ 事 事假 (無薪)</option>
+                    <option value="ML">🌸 婚 婚假 (8天有薪)</option>
+                    <option value="FL">🪦 喪 喪假 (依親屬等別有薪)</option>
+                    <option value="MAT">🍼 產 產假 / 陪產檢及陪產假</option>
+                    <option value="CL">🏛️ 公 法定公假 (兵役/出庭)</option>
+                    <option value="PRE_HIRE_OFF">⬜ 未 未到職真空 (新人到職前)</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* 微調原因 (快捷下拉選單 + 預設載入，非剛性必填) */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  微調原因 / 說明 (可由下拉快速帶入或手動輸入)
+                </label>
+                <div className="space-y-1.5">
+                  <select
+                    value={adjustmentReason}
+                    onChange={(e) => {
+                      if (e.target.value === 'CUSTOM') {
+                        setAdjustmentReason('');
+                      } else {
+                        setAdjustmentReason(e.target.value);
+                      }
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-slate-50 font-medium"
+                  >
+                    <option value="主管職權調整">🎯 主管職權調整 (預設)</option>
+                    <option value="新進同仁到職排班">🆕 新進同仁到職排班</option>
+                    <option value="因應人流動態調度">👥 因應人流動態調度</option>
+                    <option value="站點人力平衡支援">⚖️ 站點人力平衡支援</option>
+                    <option value="現場臨時營運需求">⚡ 現場臨時營運需求</option>
+                    <option value="同仁事前請假轉換">📝 同仁事前請假轉換 (特休/補休)</option>
+                    <option value="專長/Solo配置微調">⭐ 專長/Solo配置微調</option>
+                    <option value="CUSTOM">✏️ 其他（手動輸入理由）</option>
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="若選「其他」或需補充，可在此輸入具體說明..."
+                    value={adjustmentReason}
+                    onChange={(e) => setAdjustmentReason(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setEditingCell(null)}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer active:scale-95"
+              >
+                {isManager ? '確認直接覆核套用' : '暫存微調 (待上呈)'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 彈窗 2: Manager 審核微調清單彈窗 (Approval Modal) */}
+      {isReviewModalOpen && isManager && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[88vh] flex flex-col my-auto overflow-hidden border border-slate-200 animate-scaleUp">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
+              <div className="flex items-center space-x-2">
+                <CheckCircle2 className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  站點組長上呈微調覆審中心 (共 {pendingForManager.length} 筆)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsReviewModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 divide-y divide-slate-100 text-xs">
+              {pendingForManager.map(adj => (
+                <div key={adj.adj_id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-slate-800">{adj.emp_name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({adj.emp_id})</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">
+                        {month}月{adj.day}日
+                      </span>
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        提案人: {adj.proposed_by_name}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center space-x-2 text-[11px]">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 font-bold text-slate-600">原: {adj.original_shift}</span>
+                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-black">新: {adj.new_shift}</span>
+                      <span className="text-slate-500 italic truncate max-w-xs">— {adj.reason}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onRejectAdjustment) onRejectAdjustment(adj.adj_id);
+                      }}
+                      className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] cursor-pointer"
+                    >
+                      駁回
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsReviewModalOpen(false)}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs cursor-pointer"
+              >
+                關閉
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBatchApproveAdjustments) {
+                    onBatchApproveAdjustments(pendingForManager);
+                  }
+                  setIsReviewModalOpen(false);
+                  setFeedbackMsg(`已成功全數核准 ${pendingForManager.length} 筆微調並套用入排班大表！`);
+                  setTimeout(() => setFeedbackMsg(''), 3000);
+                }}
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer"
+              >
+                一鍵全部核准並套入班表
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
